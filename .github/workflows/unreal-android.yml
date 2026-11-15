@@ -1,0 +1,44 @@
+name: Unreal Engine 5 Android APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [unreal5-prototype]
+    paths:
+      - 'unreal/**'
+      - '.github/workflows/unreal-android.yml'
+jobs:
+  package-android:
+    runs-on: [self-hosted, Windows, X64, unreal-5-5, android-sdk]
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Unreal and Android toolchain
+        shell: pwsh
+        run: |
+          $engine = if ($env:UE_ROOT) { $env:UE_ROOT } else { "C:\Program Files\Epic Games\UE_5.5" }
+          $uat = Join-Path $engine 'Engine\Build\BatchFiles\RunUAT.bat'
+          if (!(Test-Path $uat)) { throw "Unreal Engine 5.5 not found at $engine. Set UE_ROOT on the runner." }
+          if (!$env:ANDROID_HOME -and !$env:ANDROID_SDK_ROOT) { throw 'Android SDK environment not configured on runner.' }
+          "UE_ROOT=$engine" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Build and package Android APK
+        shell: pwsh
+        run: |
+          $uat = Join-Path $env:UE_ROOT 'Engine\Build\BatchFiles\RunUAT.bat'
+          $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\MindControl.uproject'
+          $output = Join-Path $env:GITHUB_WORKSPACE 'unreal\PackagedAndroid'
+          & $uat BuildCookRun -project="$project" -noP4 -platform=Android -clientconfig=Development -build -cook -stage -pak -package -archive -archivedirectory="$output" -utf8output
+          if ($LASTEXITCODE -ne 0) { throw "Unreal BuildCookRun failed with exit code $LASTEXITCODE" }
+      - name: Verify APK exists
+        shell: pwsh
+        run: |
+          $apks = @(Get-ChildItem -Path 'unreal\PackagedAndroid' -Filter '*.apk' -Recurse -ErrorAction SilentlyContinue)
+          if ($apks.Count -eq 0) { throw 'No APK was produced.' }
+          $apks | ForEach-Object { Write-Host $_.FullName }
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MindControl-Unreal-Android-APK
+          path: unreal/PackagedAndroid/**/*.apk
+          if-no-files-found: error
