@@ -48,6 +48,8 @@ jobs:
           cat ~/.config/godot/editor_settings-4.4.tres
       - name: Import project
         run: godot --headless --path godot --editor --import --quit
+      - name: Diagnose Android export configuration
+        run: godot --headless --path godot --editor --script res://diagnose_export.gd
       - name: Export APK
         run: |
           mkdir -p godot/build
