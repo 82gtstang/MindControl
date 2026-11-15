@@ -1,4 +1,4 @@
-name: Unreal Engine 5 Android APK
+name: Unreal Engine 5.7 Android APK
 on:
   workflow_dispatch:
   push:
@@ -8,26 +8,32 @@ on:
       - '.github/workflows/unreal-android.yml'
 jobs:
   package-android:
-    runs-on: [self-hosted, Windows, X64, unreal-5-5, android-sdk]
-    timeout-minutes: 180
+    runs-on: [self-hosted, Windows, X64, unreal-5-7, android-sdk]
+    timeout-minutes: 240
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - name: Verify Unreal and Android toolchain
+      - name: Verify Unreal 5.7 and Android toolchain
         shell: pwsh
         run: |
-          $engine = if ($env:UE_ROOT) { $env:UE_ROOT } else { "C:\Program Files\Epic Games\UE_5.5" }
+          $engine = if ($env:UE_ROOT) { $env:UE_ROOT } else { "C:\Program Files\Epic Games\UE_5.7" }
           $uat = Join-Path $engine 'Engine\Build\BatchFiles\RunUAT.bat'
-          if (!(Test-Path $uat)) { throw "Unreal Engine 5.5 not found at $engine. Set UE_ROOT on the runner." }
-          if (!$env:ANDROID_HOME -and !$env:ANDROID_SDK_ROOT) { throw 'Android SDK environment not configured on runner.' }
+          if (!(Test-Path $uat)) { throw "Unreal Engine not found at $engine. Set UE_ROOT as a system environment variable and restart the runner service." }
+          $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
+          if (!(Test-Path $sdk)) { throw "Android SDK not found at $sdk. Set ANDROID_HOME as a system environment variable accessible to the runner service." }
           "UE_ROOT=$engine" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "ANDROID_HOME=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "ANDROID_SDK_ROOT=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Unreal Engine: $engine"
+          Write-Host "Android SDK: $sdk"
       - name: Build and package Android APK
         shell: pwsh
         run: |
           $uat = Join-Path $env:UE_ROOT 'Engine\Build\BatchFiles\RunUAT.bat'
           $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\MindControl.uproject'
           $output = Join-Path $env:GITHUB_WORKSPACE 'unreal\PackagedAndroid'
+          if (!(Test-Path $project)) { throw "Unreal project not found: $project" }
           & $uat BuildCookRun -project="$project" -noP4 -platform=Android -clientconfig=Development -build -cook -stage -pak -package -archive -archivedirectory="$output" -utf8output
           if ($LASTEXITCODE -ne 0) { throw "Unreal BuildCookRun failed with exit code $LASTEXITCODE" }
       - name: Verify APK exists
