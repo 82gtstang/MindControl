@@ -110,7 +110,15 @@ func _create_lighting() -> void:
 
 func _create_ground() -> void:
 	var grass := material(Color(0.16, 0.29, 0.19))
-	box_mesh(self, Vector3(116, 0.4, 116), Vector3(0, -0.25, 0), grass)
+	var floor_body := StaticBody3D.new()
+	add_child(floor_body)
+	box_mesh(floor_body, Vector3(116, 0.4, 116), Vector3(0, -0.25, 0), grass)
+	var floor_shape := CollisionShape3D.new()
+	var floor_box := BoxShape3D.new()
+	floor_box.size = Vector3(116, 0.4, 116)
+	floor_shape.shape = floor_box
+	floor_shape.position = Vector3(0, -0.25, 0)
+	floor_body.add_child(floor_shape)
 	var stone := material(Color(0.36, 0.32, 0.29))
 	var dirt := material(Color(0.30, 0.24, 0.19))
 	for i in range(240):
@@ -328,9 +336,9 @@ func _physics_process(delta: float) -> void:
 	axis.x += Input.get_axis("ui_left", "ui_right")
 	axis.y += Input.get_axis("ui_up", "ui_down")
 	axis = axis.limit_length(1)
-	var forward := Vector3(-sin(yaw), 0, -cos(yaw))
+	var forward := Vector3(sin(yaw), 0, cos(yaw))
 	var right := Vector3(cos(yaw), 0, -sin(yaw))
-	var direction := right * axis.x - forward * axis.y
+	var direction := right * axis.x + forward * axis.y
 	if direction.length() > .1:
 		hero.velocity.x = direction.x * WALK_SPEED
 		hero.velocity.z = direction.z * WALK_SPEED
