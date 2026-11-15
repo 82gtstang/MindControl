@@ -5,6 +5,10 @@ const WALK_SPEED := 6.0
 const SPRINT_SPEED := 9.0
 const WORLD_SIZE := 56
 var hero: CharacterBody3D
+var hero_visual: Node3D
+var hero_animation: AnimationPlayer
+const HERO_MODEL := "res://assets/characters/hero.glb"
+const ENEMY_MODEL := "res://assets/characters/enemy.glb"
 var camera: Camera3D
 var pivot: Node3D
 var sword: Node3D
@@ -295,6 +299,60 @@ func _make_torch(pos: Vector3) -> void:
 	torch.add_child(light)
 	torches.append(torch)
 
+func _load_character_model(path: String, parent: Node3D, target_height: float) -> Node3D:
+	if not ResourceLoader.exists(path):
+		return null
+	var scene := load(path) as PackedScene
+	if scene == null:
+		push_warning("Character asset is not a valid GLB scene: " + path)
+		return null
+	var model := scene.instantiate() as Node3D
+	if model == null:
+		return null
+	parent.add_child(model)
+	var bounds := _model_bounds(model)
+	if bounds.size.y > .01:
+		model.scale = Vector3.ONE * (target_height / bounds.size.y)
+		model.position.y = -bounds.position.y * model.scale.y
+	return model
+
+func _model_bounds(root: Node3D) -> AABB:
+	var combined := AABB()
+	var found := false
+	for child in root.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := child as MeshInstance3D
+		if mesh_instance.mesh == null:
+			continue
+		var local_box := mesh_instance.get_aabb()
+		var relative := root.global_transform.affine_inverse() * mesh_instance.global_transform
+		var transformed := relative * local_box
+		if not found:
+			combined = transformed
+			found = true
+		else:
+			combined = combined.merge(transformed)
+	return combined
+
+func _find_animation_player(root: Node) -> AnimationPlayer:
+	if root is AnimationPlayer:
+		return root as AnimationPlayer
+	for child in root.get_children():
+		var found := _find_animation_player(child)
+		if found != null:
+			return found
+	return null
+
+func _play_character_animation(player: AnimationPlayer, keywords: Array[String]) -> void:
+	if player == null:
+		return
+	for name in player.get_animation_list():
+		var lower := String(name).to_lower()
+		for keyword in keywords:
+			if lower.contains(keyword):
+				if player.current_animation != name:
+					player.play(name, .15)
+				return
+
 func _create_hero() -> void:
 	hero = CharacterBody3D.new()
 	hero.name = "Knight"
@@ -309,6 +367,17 @@ func _create_hero() -> void:
 	hero.add_child(collider)
 	pivot = Node3D.new()
 	hero.add_child(pivot)
+	hero_visual = _load_character_model(HERO_MODEL, pivot, 2.15)
+	if hero_visual != null:
+		hero_animation = _find_animation_player(hero_visual)
+	else:
+		_create_placeholder_hero(pivot)
+	camera = Camera3D.new()
+	camera.current = true
+	camera.fov = 68
+	add_child(camera)
+
+func _create_placeholder_hero(parent: Node3D) -> void:
 	var armor := material(Color(.19, .32, .51), .5)
 	var metal := material(Color(.58, .64, .7), .25)
 	var leather := material(Color(.24, .12, .08))
@@ -328,10 +397,6 @@ func _create_hero() -> void:
 	pivot.add_child(sword)
 	box_mesh(sword, Vector3(.12, 1.25, .12), Vector3(0, .55, 0), metal)
 	box_mesh(sword, Vector3(.55, .11, .16), Vector3(0, -.07, 0), gold_material())
-	camera = Camera3D.new()
-	camera.current = true
-	camera.fov = 68
-	add_child(camera)
 
 func gold_material() -> Material:
 	return material(Color(.78, .53, .19), .3)
@@ -342,6 +407,12 @@ func _create_enemies() -> void:
 		var e := Node3D.new()
 		e.position = pos
 		add_child(e)
+		var imported_enemy := _load_character_model(ENEMY_MODEL, e, 1.9)
+		if imported_enemy != null:
+			var enemy_anim := _find_animation_player(imported_enemy)
+			_play_character_animation(enemy_anim, ["idle", "breath"])
+			enemies.append(e)
+			continue
 		var body := material(Color(.29, .12, .14))
 		var torso := sphere_mesh(e, .68, Vector3(0, 1.0, 0), body)
 		torso.scale = Vector3(.72, 1.05, .55)
@@ -427,11 +498,13 @@ func _physics_process(delta: float) -> void:
 		hero.velocity.x = direction.x * WALK_SPEED
 		hero.velocity.z = direction.z * WALK_SPEED
 		pivot.rotation.y = lerp_angle(pivot.rotation.y, atan2(-direction.x, -direction.z), delta * 9)
+		_play_character_animation(hero_animation, ["run", "walk", "locomotion"])
 		walk_phase += delta * 11
 		pivot.position.y = absf(sin(walk_phase)) * .055
 	else:
 		hero.velocity.x = move_toward(hero.velocity.x, 0, delta * 25)
 		hero.velocity.z = move_toward(hero.velocity.z, 0, delta * 25)
+		_play_character_animation(hero_animation, ["idle", "breath"])
 		pivot.position.y = lerpf(pivot.position.y, 0.0, delta * 5)
 	if not hero.is_on_floor():
 		hero.velocity.y -= 24 * delta
@@ -476,9 +549,12 @@ func _attack() -> void:
 	if attack_timer > 0:
 		return
 	attack_timer = .6
-	var tween := create_tween()
-	tween.tween_property(sword, "rotation:z", -1.1, .13)
-	tween.tween_property(sword, "rotation:z", 0.0, .25)
+	if hero_animation != null:
+		_play_character_animation(hero_animation, ["attack", "slash", "swing"])
+	elif sword != null:
+		var tween := create_tween()
+		tween.tween_property(sword, "rotation:z", -1.1, .13)
+		tween.tween_property(sword, "rotation:z", 0.0, .25)
 	for e in enemies.duplicate():
 		if hero.global_position.distance_to(e.global_position) < 3.2:
 			enemies.erase(e)
