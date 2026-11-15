@@ -1,0 +1,22 @@
+; Engine configuration file.
+; Mind Control: Ashenvale 3D prototype
+config_version=5
+
+[application]
+config/name="Mind Control: Ashenvale 3D"
+run/main_scene="res://world.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/default_filters/use_nearest_mipmap_filter=false
+environment/defaults/default_clear_color=Color(0.11, 0.13, 0.17, 1)
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+
+[physics]
+3d/default_gravity=24.0
