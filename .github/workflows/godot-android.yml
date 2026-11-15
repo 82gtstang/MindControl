@@ -52,6 +52,11 @@ jobs:
           ls -lah "$ANDROID_HOME/platform-tools" "$ANDROID_HOME/build-tools"
           ls -lah ~/.local/share/godot/export_templates/4.4.1.stable
           cat ~/.config/godot/editor_settings-4.4.tres
+      - name: Fetch CC0 character models
+        run: |
+          mkdir -p godot/assets/characters
+          curl -fL --retry 3 -o godot/assets/characters/hero.glb https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0/672074b73ba276876a19e8816ecdc5241817ab47/addons/kaykit_character_pack_adventures/Characters/gltf/Knight.glb
+          curl -fL --retry 3 -o godot/assets/characters/enemy.glb https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0/672074b73ba276876a19e8816ecdc5241817ab47/addons/kaykit_character_pack_adventures/Characters/gltf/Rogue_Hooded.glb
       - name: Import project
         run: godot --headless --path godot --editor --import --quit
       - name: Diagnose Android export configuration
