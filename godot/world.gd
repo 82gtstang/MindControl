@@ -216,7 +216,7 @@ func _create_nature_details() -> void:
 			basis = basis.scaled(Vector3(rng.randf_range(.7, 1.3), rng.randf_range(.7, 1.5), 1.0))
 			mm.set_instance_transform(i, Transform3D(basis, Vector3(x, .19, z)))
 		var instance := MultiMeshInstance3D.new()
-		instance.mesh = mm
+		instance.multimesh = mm
 		add_child(instance)
 	for i in range(70):
 		var x := rng.randf_range(-49.0, 49.0)
