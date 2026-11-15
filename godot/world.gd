@@ -26,6 +26,11 @@ const ENEMY_MODEL := "res://assets/characters/enemy.glb"
 var camera: Camera3D
 var pivot: Node3D
 var sword: Node3D
+var unarmored_visual: Node3D
+var armored_visual: Node3D
+var attack_pose: Node3D
+var attack_fx: Node3D
+var attack_combo := 0
 var enemies: Array[Node3D] = []
 var treasures: Array[Node3D] = []
 var torches: Array[Node3D] = []
@@ -385,35 +390,75 @@ func _create_hero() -> void:
 	pivot = Node3D.new()
 	hero.add_child(pivot)
 	hero_visual = _load_character_model(HERO_MODEL, pivot, 2.15)
-	if hero_visual != null:
-		hero_animation = _find_animation_player(hero_visual)
-	else:
-		_create_placeholder_hero(pivot)
+	armored_visual = hero_visual
+	_create_placeholder_hero(pivot)
+	_refresh_equipment_visuals()
 	camera = Camera3D.new()
 	camera.current = true
 	camera.fov = 68
 	add_child(camera)
 
 func _create_placeholder_hero(parent: Node3D) -> void:
-	var armor := material(Color(.19, .32, .51), .5)
-	var metal := material(Color(.58, .64, .7), .25)
-	var leather := material(Color(.24, .12, .08))
-	var chest_plate := sphere_mesh(pivot, .65, Vector3(0, 1.3, 0), armor)
-	chest_plate.scale = Vector3(.75, 1.0, .48)
-	sphere_mesh(pivot, .35, Vector3(0, 2.03, 0), metal)
-	var helm := sphere_mesh(pivot, .37, Vector3(0, 2.13, 0), metal)
-	helm.scale.y = .55
-	for x in [-.57, .57]:
-		sphere_mesh(pivot, .22, Vector3(x, 1.6, 0), metal)
-		var arm := cylinder_mesh(pivot, .14, .72, Vector3(x, 1.13, 0), armor)
-		arm.rotation.z = x * .18
+	unarmored_visual = Node3D.new()
+	unarmored_visual.name = "UnarmoredCharacter"
+	parent.add_child(unarmored_visual)
+	var cloth := material(Color(.25, .20, .17), .95)
+	var skin := material(Color(.57, .38, .28), .9)
+	var boots := material(Color(.16, .10, .07))
+	var torso := sphere_mesh(unarmored_visual, .57, Vector3(0, 1.25, 0), cloth)
+	torso.scale = Vector3(.78, 1.04, .52)
+	sphere_mesh(unarmored_visual, .29, Vector3(0, 2.03, 0), skin)
+	for x in [-.54, .54]:
+		cylinder_mesh(unarmored_visual, .13, .75, Vector3(x, 1.23, 0), skin)
 	for x in [-.25, .25]:
-		cylinder_mesh(pivot, .18, .75, Vector3(x, .45, 0), leather)
+		cylinder_mesh(unarmored_visual, .17, .8, Vector3(x, .43, 0), boots)
+	attack_pose = Node3D.new()
+	attack_pose.name = "WeaponHand"
+	attack_pose.position = Vector3(.65, 1.25, -.2)
+	parent.add_child(attack_pose)
 	sword = Node3D.new()
-	sword.position = Vector3(.78, 1.1, -.05)
-	pivot.add_child(sword)
-	box_mesh(sword, Vector3(.12, 1.25, .12), Vector3(0, .55, 0), metal)
-	box_mesh(sword, Vector3(.55, .11, .16), Vector3(0, -.07, 0), gold_material())
+	attack_pose.add_child(sword)
+	var blade := box_mesh(sword, Vector3(.12, 1.12, .10), Vector3(0, .63, 0), material(Color(.66, .69, .72), .22))
+	blade.name = "Blade"
+	box_mesh(sword, Vector3(.48, .10, .16), Vector3(0, .05, 0), gold_material())
+	attack_fx = Node3D.new()
+	parent.add_child(attack_fx)
+	attack_fx.visible = false
+	for i in range(7):
+		var angle := float(i) / 7.0 * TAU
+		var slash := sphere_mesh(attack_fx, .12, Vector3(cos(angle) * 1.55, 1.4, sin(angle) * 1.55), material(Color(.40, .75, 1), .2, Color(.07, .26, .7)))
+		slash.scale = Vector3(1.7, .32, .5)
+
+func _refresh_equipment_visuals() -> void:
+	var wearing_armor := equipped_armor != "Traveler Clothes"
+	if armored_visual != null:
+		armored_visual.visible = wearing_armor
+	if unarmored_visual != null:
+		unarmored_visual.visible = not wearing_armor or armored_visual == null
+	if sword != null:
+		sword.visible = equipped_weapon != "Fists"
+
+func _finish_attack_fx() -> void:
+	if attack_fx != null:
+		attack_fx.visible = false
+
+func _animate_strike(spinning: bool = false) -> void:
+	attack_combo = (attack_combo + 1) % 3
+	if attack_pose != null:
+		attack_pose.rotation = Vector3.ZERO
+		var t := create_tween()
+		t.set_trans(Tween.TRANS_SINE)
+		t.tween_property(attack_pose, "rotation", Vector3(-.9, .35, -1.3 if attack_combo % 2 == 0 else 1.3), .13)
+		t.tween_property(attack_pose, "rotation", Vector3(.4, -.5, .7 if attack_combo % 2 == 0 else -.7), .21)
+		t.tween_property(attack_pose, "rotation", Vector3.ZERO, .20)
+	if attack_fx != null:
+		attack_fx.visible = true
+		var tfx := create_tween()
+		attack_fx.scale = Vector3.ONE
+		tfx.tween_property(attack_fx, "scale", Vector3.ONE * (1.65 if spinning else 1.15), .26)
+		tfx.tween_callback(_finish_attack_fx)
+	var animation_keywords: Array[String] = ["spin", "attack"] if spinning else ["attack", "slash", "swing"]
+	_play_character_animation(hero_animation, animation_keywords)
 
 func gold_material() -> Material:
 	return material(Color(.78, .53, .19), .3)
@@ -535,6 +580,18 @@ func _create_ui() -> void:
 	equipment_panel.add_child(equipment_text)
 	equipment_panel.visible = false
 	_update_equipment()
+	var remove_weapon := Button.new()
+	remove_weapon.text = "REMOVE WEAPON"
+	remove_weapon.position = Vector2(740, 365)
+	remove_weapon.size = Vector2(160, 50)
+	remove_weapon.pressed.connect(_unequip_weapon)
+	layer.add_child(remove_weapon)
+	var remove_armor := Button.new()
+	remove_armor.text = "REMOVE ARMOR"
+	remove_armor.position = Vector2(910, 365)
+	remove_armor.size = Vector2(160, 50)
+	remove_armor.pressed.connect(_unequip_armor)
+	layer.add_child(remove_armor)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
@@ -637,12 +694,7 @@ func _attack() -> void:
 	if attack_timer > 0:
 		return
 	attack_timer = .6
-	if hero_animation != null:
-		_play_character_animation(hero_animation, ["attack", "slash", "swing"])
-	elif sword != null:
-		var tween := create_tween()
-		tween.tween_property(sword, "rotation:z", -1.1, .13)
-		tween.tween_property(sword, "rotation:z", 0.0, .25)
+	_animate_strike()
 	for e in enemies.duplicate():
 		if hero.global_position.distance_to(e.global_position) < 3.2:
 			enemies.erase(e)
@@ -671,7 +723,7 @@ func _spin_attack() -> void:
 	attack_timer = .7
 	var tween := create_tween()
 	tween.tween_property(pivot, "rotation:y", pivot.rotation.y + TAU, .52)
-	_play_character_animation(hero_animation, ["spin", "attack"])
+	_animate_strike(true)
 	for e in enemies.duplicate():
 		if is_instance_valid(e) and e.global_position.distance_to(hero.global_position) < 3.8:
 			enemies.erase(e)
@@ -679,6 +731,16 @@ func _spin_attack() -> void:
 			coins += 10
 	message = "Whirlwind strike!"
 	message_timer = 2.0
+
+func _unequip_weapon() -> void:
+	equipped_weapon = "Fists"
+	_refresh_equipment_visuals()
+	_update_equipment()
+
+func _unequip_armor() -> void:
+	equipped_armor = "Traveler Clothes"
+	_refresh_equipment_visuals()
+	_update_equipment()
 
 func _toggle_bag() -> void:
 	_update_bag()
@@ -706,6 +768,7 @@ func _equip_selected() -> void:
 		message = "That item cannot be equipped."
 		message_timer = 3.0
 		return
+	_refresh_equipment_visuals()
 	message = "Equipped " + item
 	message_timer = 3.0
 	_update_equipment()
