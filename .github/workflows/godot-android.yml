@@ -17,7 +17,7 @@ jobs:
           java-version: '17'
       - uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          packages: 'platform-tools platforms;android-35 platforms;android-34 build-tools;35.0.0 build-tools;34.0.0'
       - name: Install Godot and Android export templates
         run: |
           wget -q https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_linux.x86_64.zip
@@ -40,12 +40,18 @@ jobs:
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
           EOF
+      - name: Start Android tooling and verify export dependencies
+        run: |
+          "$ANDROID_HOME/platform-tools/adb" start-server
+          ls -lah "$ANDROID_HOME/platform-tools" "$ANDROID_HOME/build-tools"
+          ls -lah ~/.local/share/godot/export_templates/4.4.1.stable
+          cat ~/.config/godot/editor_settings-4.4.tres
       - name: Import project
         run: godot --headless --path godot --editor --import --quit
       - name: Export APK
         run: |
           mkdir -p godot/build
-          godot --headless --path godot --export-debug Android build/MindControl-3D.apk
+          godot --headless --verbose --path godot --export-debug Android build/MindControl-3D.apk
           test -s godot/build/MindControl-3D.apk
       - uses: actions/upload-artifact@v4
         with:
