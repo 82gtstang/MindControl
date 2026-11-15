@@ -492,7 +492,7 @@ func _create_ui() -> void:
 	throw_button.text = "THROW"
 	throw_button.position = Vector2(470, 555)
 	throw_button.size = Vector2(165, 65)
-	throw_button.pressed.connect(func(): if not inventory.is_empty(): _throw_item())
+	throw_button.pressed.connect(_throw_from_bag)
 	layer.add_child(throw_button)
 	inventory_panel = PanelContainer.new()
 	inventory_panel.position = Vector2(420, 80)
@@ -761,3 +761,7 @@ func _create_dungeon() -> void:
 	box_mesh(dungeon_root, Vector3(4, 1.0, 3), Vector3(0, .5, 34), stairs_mat)
 	var portal := sphere_mesh(dungeon_root, 1.2, Vector3(0, 2.0, 35), material(Color(.12, .29, .40), .25, Color(.06, .24, .39)))
 	portal.scale.z = .25
+
+func _throw_from_bag() -> void:
+	if not inventory.is_empty():
+		_throw_item()
