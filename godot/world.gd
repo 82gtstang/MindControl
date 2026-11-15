@@ -7,6 +7,14 @@ const WORLD_SIZE := 56
 var hero: CharacterBody3D
 var hero_visual: Node3D
 var hero_animation: AnimationPlayer
+var inventory: Array[String] = []
+var world_items: Array[Node3D] = []
+var inventory_panel: PanelContainer
+var inventory_text: Label
+var inside_dungeon := false
+var dungeon_root: Node3D
+var dungeon_entry := Vector3(13, 0, 11)
+var spin_cooldown := 0.0
 const HERO_MODEL := "res://assets/characters/hero.glb"
 const ENEMY_MODEL := "res://assets/characters/enemy.glb"
 var camera: Camera3D
@@ -43,6 +51,8 @@ func _ready() -> void:
 	_create_ruins()
 	_create_hero()
 	_create_enemies()
+	_create_dungeon()
+	_scatter_loot()
 	_create_ui()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
@@ -454,6 +464,38 @@ func _create_ui() -> void:
 	potion.size = Vector2(175, 60)
 	potion.pressed.connect(_heal)
 	layer.add_child(potion)
+	var jump := Button.new()
+	jump.text = "JUMP"
+	jump.position = Vector2(870, 630)
+	jump.size = Vector2(175, 60)
+	jump.pressed.connect(_jump)
+	layer.add_child(jump)
+	var spin := Button.new()
+	spin.text = "SPIN"
+	spin.position = Vector2(870, 555)
+	spin.size = Vector2(175, 65)
+	spin.pressed.connect(_spin_attack)
+	layer.add_child(spin)
+	var bag := Button.new()
+	bag.text = "BAG"
+	bag.position = Vector2(680, 630)
+	bag.size = Vector2(175, 60)
+	bag.pressed.connect(_toggle_bag)
+	layer.add_child(bag)
+	var interact := Button.new()
+	interact.text = "PICK UP / ENTER"
+	interact.position = Vector2(650, 555)
+	interact.size = Vector2(210, 65)
+	interact.pressed.connect(_interact)
+	layer.add_child(interact)
+	inventory_panel = PanelContainer.new()
+	inventory_panel.position = Vector2(420, 80)
+	inventory_panel.custom_minimum_size = Vector2(440, 380)
+	layer.add_child(inventory_panel)
+	inventory_text = Label.new()
+	inventory_panel.add_child(inventory_text)
+	inventory_panel.visible = false
+	_update_bag()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
@@ -487,6 +529,7 @@ func _physics_process(delta: float) -> void:
 	elapsed += delta
 	message_timer -= delta
 	attack_timer = maxf(0, attack_timer - delta)
+	spin_cooldown = maxf(0, spin_cooldown - delta)
 	var axis := move_axis
 	axis.x += Input.get_axis("ui_left", "ui_right")
 	axis.y += Input.get_axis("ui_up", "ui_down")
@@ -506,13 +549,19 @@ func _physics_process(delta: float) -> void:
 		hero.velocity.z = move_toward(hero.velocity.z, 0, delta * 25)
 		_play_character_animation(hero_animation, ["idle", "breath"])
 		pivot.position.y = lerpf(pivot.position.y, 0.0, delta * 5)
+	if Input.is_action_just_pressed("ui_accept"):
+		_jump()
 	if not hero.is_on_floor():
 		hero.velocity.y -= 24 * delta
 	else:
 		hero.velocity.y = 0
 	hero.move_and_slide()
-	hero.position.x = clampf(hero.position.x, -54, 54)
-	hero.position.z = clampf(hero.position.z, -54, 54)
+	if inside_dungeon:
+		hero.position.x = clampf(hero.position.x, -11, 11)
+		hero.position.z = clampf(hero.position.z, 70, 108)
+	else:
+		hero.position.x = clampf(hero.position.x, -54, 54)
+		hero.position.z = clampf(hero.position.z, -54, 54)
 	var look_target := hero.global_position + Vector3(0, 1.65, 0)
 	var desired := look_target + Vector3(sin(yaw) * 5.8, 2.8 - pitch * 4.0, cos(yaw) * 5.8)
 	camera.global_position = camera.global_position.lerp(desired, minf(delta * 7, 1))
@@ -570,3 +619,139 @@ func _heal() -> void:
 		health = mini(100, health + 40)
 		message = "Restored 40 health for 20 gold."
 		message_timer = 3
+
+func _jump() -> void:
+	if hero.is_on_floor() and health > 0:
+		hero.velocity.y = 9.5
+		_play_character_animation(hero_animation, ["jump"])
+
+func _spin_attack() -> void:
+	if spin_cooldown > 0.0 or health <= 0:
+		return
+	spin_cooldown = 2.0
+	attack_timer = .7
+	var tween := create_tween()
+	tween.tween_property(pivot, "rotation:y", pivot.rotation.y + TAU, .52)
+	_play_character_animation(hero_animation, ["spin", "attack"])
+	for e in enemies.duplicate():
+		if is_instance_valid(e) and e.global_position.distance_to(hero.global_position) < 3.8:
+			enemies.erase(e)
+			e.queue_free()
+			coins += 10
+	message = "Whirlwind strike!"
+	message_timer = 2.0
+
+func _toggle_bag() -> void:
+	_update_bag()
+	inventory_panel.visible = not inventory_panel.visible
+
+func _update_bag() -> void:
+	if inventory_text == null:
+		return
+	var lines := "TRAVELER'S BAG (%d / 200)\n\n" % inventory.size()
+	for i in range(mini(inventory.size(), 16)):
+		lines += "%d. %s\n" % [i + 1, inventory[i]]
+	lines += "\nTap THROW to drop the last item."
+	inventory_text.text = lines
+
+func _interact() -> void:
+	if inside_dungeon and hero.position.distance_to(Vector3(0, .2, 72)) < 4.0:
+		inside_dungeon = false
+		hero.position = dungeon_entry + Vector3(0, .3, 2)
+		message = "You emerge from the ancient crypt."
+		message_timer = 4
+		return
+	if not inside_dungeon and hero.position.distance_to(dungeon_entry) < 4.0:
+		inside_dungeon = true
+		hero.position = Vector3(0, .2, 73)
+		message = "You descend into the forgotten crypt."
+		message_timer = 5
+		return
+	for item in world_items.duplicate():
+		if is_instance_valid(item) and hero.global_position.distance_to(item.global_position) < 2.6:
+			if inventory.size() >= 200:
+				message = "Bag is full."
+				return
+			inventory.append(str(item.get_meta("item_name", "Unknown relic")))
+			world_items.erase(item)
+			item.queue_free()
+			_update_bag()
+			message = "Collected " + inventory.back()
+			message_timer = 3
+			return
+	if not inventory.is_empty():
+		_throw_item()
+
+func _throw_item() -> void:
+	var name := inventory.pop_back()
+	var forward := -pivot.global_transform.basis.z.normalized()
+	var drop := Node3D.new()
+	drop.position = hero.position + forward * 2.4 + Vector3(0, .35, 0)
+	drop.set_meta("item_name", name)
+	add_child(drop)
+	var shape := sphere_mesh(drop, .23, Vector3.ZERO, material(Color(.75, .52, .22), .4))
+	shape.scale.y = .7
+	world_items.append(drop)
+	_update_bag()
+	message = "Threw " + name
+	message_timer = 3
+
+func _scatter_loot() -> void:
+	var names := ["Iron Sword", "Silver Dagger", "Health Potion", "Mana Potion", "Old Coin", "Ancient Key", "Rope", "Torch", "Crystal", "Herbs", "Leather Boots", "Iron Shield", "Rune Stone", "Emerald", "Ruby", "Map Fragment", "Mushroom", "Ring", "Arrow Bundle", "Spell Scroll"]
+	var gold_mat := material(Color(.74, .52, .17), .4)
+	var crystal_mat := material(Color(.22, .65, .76), .25, Color(.02, .08, .12))
+	for i in range(320):
+		var dungeon_item := i >= 260
+		var x := rng.randf_range(-48, 48) if not dungeon_item else rng.randf_range(-8, 8)
+		var z := rng.randf_range(-48, 48) if not dungeon_item else rng.randf_range(76, 105)
+		if not dungeon_item and absf(x) < 3.0 and absf(z) < 10.0:
+			x += 5.0
+		var item := Node3D.new()
+		item.name = "Loot_%d" % i
+		item.position = Vector3(x, .22, z)
+		var item_name: String = names[i % names.size()]
+		item.set_meta("item_name", item_name)
+		add_child(item)
+		var mesh := sphere_mesh(item, .19, Vector3.ZERO, crystal_mat if i % 5 == 0 else gold_mat)
+		mesh.scale = Vector3(.8, 1.2, .8)
+		world_items.append(item)
+
+func _create_dungeon() -> void:
+	var stone := material(Color(.19, .20, .22))
+	var floor_mat := material(Color(.27, .25, .24))
+	var stairs_mat := material(Color(.33, .30, .26))
+	# Exterior entry arch and a visible descending stairwell.
+	var entrance := Node3D.new()
+	entrance.position = dungeon_entry
+	add_child(entrance)
+	for x in [-2.0, 2.0]:
+		cylinder_mesh(entrance, .46, 4.0, Vector3(x, 2.0, 0), stone)
+	box_mesh(entrance, Vector3(5.3, .7, 1.5), Vector3(0, 4.2, 0), stone)
+	for i in range(8):
+		box_mesh(entrance, Vector3(3.0, .2, 1.1), Vector3(0, -.12 - float(i) * .18, -float(i) * .9), stairs_mat)
+	dungeon_root = Node3D.new()
+	dungeon_root.position = Vector3(0, 0, 70)
+	add_child(dungeon_root)
+	# Dungeon occupies a separate section of the world to avoid overlap with the forest.
+	var body := StaticBody3D.new()
+	dungeon_root.add_child(body)
+	box_mesh(body, Vector3(24, .6, 42), Vector3(0, -.4, 19), floor_mat)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(24, .6, 42)
+	collision.shape = shape
+	collision.position = Vector3(0, -.4, 19)
+	body.add_child(collision)
+	for x in [-12.0, 12.0]:
+		box_mesh(dungeon_root, Vector3(1.0, 6.0, 42), Vector3(x, 2.7, 19), stone)
+	for z in [0.0, 40.0]:
+		box_mesh(dungeon_root, Vector3(24, 6.0, 1.0), Vector3(0, 2.7, z), stone)
+	for i in range(7):
+		var z := 5.0 + float(i) * 5.0
+		for x in [-8.0, 8.0]:
+			cylinder_mesh(dungeon_root, .48, 5.0, Vector3(x, 2.5, z), stone)
+		_make_torch(Vector3(-9.0, 0, 70 + z))
+		_make_torch(Vector3(9.0, 0, 70 + z))
+	box_mesh(dungeon_root, Vector3(4, 1.0, 3), Vector3(0, .5, 34), stairs_mat)
+	var portal := sphere_mesh(dungeon_root, 1.2, Vector3(0, 2.0, 35), material(Color(.12, .29, .40), .25, Color(.06, .24, .39)))
+	portal.scale.z = .25
