@@ -66,8 +66,8 @@ func sphere_mesh(parent: Node3D, radius: float, pos: Vector3, mat: Material) -> 
 	var mesh := SphereMesh.new()
 	mesh.radius = radius
 	mesh.height = radius * 2.0
-	mesh.radial_segments = 12
-	mesh.rings = 6
+	mesh.radial_segments = 24
+	mesh.rings = 12
 	mi.mesh = mesh
 	mi.position = pos
 	mi.material_override = mat
@@ -80,7 +80,7 @@ func cylinder_mesh(parent: Node3D, radius: float, height: float, pos: Vector3, m
 	mesh.top_radius = radius
 	mesh.bottom_radius = radius * 1.12
 	mesh.height = height
-	mesh.radial_segments = 8
+	mesh.radial_segments = 20
 	mi.mesh = mesh
 	mi.position = pos
 	mi.material_override = mat
@@ -126,7 +126,8 @@ func _create_ground() -> void:
 		var z := rng.randf_range(-53, 53)
 		if absf(x) < 7.0 or absf(z) < 3.0:
 			continue
-		var patch := box_mesh(self, Vector3(rng.randf_range(.3, 1.5), .03, rng.randf_range(.3, 1.5)), Vector3(x, 0.01, z), dirt)
+		var patch := sphere_mesh(self, rng.randf_range(.35, 1.0), Vector3(x, .006, z), dirt)
+		patch.scale = Vector3(1.5, .025, 1.0)
 		patch.rotation.y = rng.randf_range(0, 6.28)
 	for i in range(105):
 		var x := rng.randf_range(-51, 51)
@@ -139,10 +140,12 @@ func _create_ground() -> void:
 		var z := rng.randf_range(-48, 48)
 		if absf(x) < 7 or absf(z) < 3:
 			continue
-		var rock := box_mesh(self, Vector3(rng.randf_range(.2, 1.1), rng.randf_range(.15, .6), rng.randf_range(.3, 1.2)), Vector3(x, .16, z), stone)
+		var rock := sphere_mesh(self, rng.randf_range(.25, .7), Vector3(x, .16, z), stone)
+		rock.scale = Vector3(rng.randf_range(.8, 1.5), rng.randf_range(.35, .7), rng.randf_range(.8, 1.5))
 		rock.rotation.y = rng.randf_range(0, 6.28)
 	for i in range(-8, 9):
-		box_mesh(self, Vector3(3.5, .045, 2.8), Vector3(0, .035, i * 3.1), material(Color(0.35 + rng.randf_range(-.05, .05), .32, .29)))
+		var slab := cylinder_mesh(self, rng.randf_range(1.55, 1.9), .08, Vector3(rng.randf_range(-.12, .12), .035, i * 3.1), material(Color(0.35 + rng.randf_range(-.05, .05), .32, .29)))
+		slab.scale.z = .86
 	_make_water(Vector3(-20, 0, -14))
 
 func _make_tree(pos: Vector3, scale_factor: float) -> void:
@@ -150,10 +153,23 @@ func _make_tree(pos: Vector3, scale_factor: float) -> void:
 	tree.position = pos
 	tree.scale = Vector3.ONE * scale_factor
 	add_child(tree)
-	cylinder_mesh(tree, .28, 3.5, Vector3(0, 1.75, 0), material(Color(.25, .15, .09)))
-	var leaf := material(Color(rng.randf_range(.09, .18), rng.randf_range(.22, .35), .15))
-	for i in range(3):
-		sphere_mesh(tree, 1.45 - i * .17, Vector3(0, 3.0 + i * .75, 0), leaf)
+	var bark := material(Color(.23 + rng.randf_range(-.04, .04), .16, .105), 1.0)
+	var leaf := material(Color(rng.randf_range(.08, .16), rng.randf_range(.20, .34), rng.randf_range(.09, .16)))
+	var trunk := cylinder_mesh(tree, .23, 4.2, Vector3(0, 2.1, 0), bark)
+	trunk.rotation.z = rng.randf_range(-.09, .09)
+	for j in range(7):
+		var angle := float(j) * 2.39996
+		var height := 2.0 + float(j % 4) * .58
+		var branch := cylinder_mesh(tree, .085, 1.9, Vector3(cos(angle) * .65, height + .4, sin(angle) * .65), bark)
+		branch.rotation.z = sin(angle) * .75
+		branch.rotation.x = cos(angle) * .75
+	for j in range(11):
+		var angle := float(j) * 2.39996
+		var level := float(j % 4)
+		var canopy := sphere_mesh(tree, rng.randf_range(.85, 1.25), Vector3(cos(angle) * (1.0 + level * .13), 3.4 + level * .47, sin(angle) * (1.0 + level * .13)), leaf)
+		canopy.scale = Vector3(1.12, .68, 1.05)
+	var crown := sphere_mesh(tree, 1.35, Vector3(0, 5.0, 0), leaf)
+	crown.scale.y = .72
 
 func _make_water(pos: Vector3) -> void:
 	var water := Node3D.new()
@@ -232,14 +248,17 @@ func _create_hero() -> void:
 	var armor := material(Color(.19, .32, .51), .5)
 	var metal := material(Color(.58, .64, .7), .25)
 	var leather := material(Color(.24, .12, .08))
-	box_mesh(pivot, Vector3(.83, 1.0, .48), Vector3(0, 1.25, 0), armor)
+	var chest_plate := sphere_mesh(pivot, .65, Vector3(0, 1.3, 0), armor)
+	chest_plate.scale = Vector3(.75, 1.0, .48)
 	sphere_mesh(pivot, .35, Vector3(0, 2.03, 0), metal)
-	box_mesh(pivot, Vector3(.65, .18, .66), Vector3(0, 2.15, 0), metal)
+	var helm := sphere_mesh(pivot, .37, Vector3(0, 2.13, 0), metal)
+	helm.scale.y = .55
 	for x in [-.57, .57]:
 		sphere_mesh(pivot, .22, Vector3(x, 1.6, 0), metal)
-		box_mesh(pivot, Vector3(.22, .7, .24), Vector3(x, 1.13, 0), armor)
+		var arm := cylinder_mesh(pivot, .14, .72, Vector3(x, 1.13, 0), armor)
+		arm.rotation.z = x * .18
 	for x in [-.25, .25]:
-		box_mesh(pivot, Vector3(.3, .75, .3), Vector3(x, .45, 0), leather)
+		cylinder_mesh(pivot, .18, .75, Vector3(x, .45, 0), leather)
 	sword = Node3D.new()
 	sword.position = Vector3(.78, 1.1, -.05)
 	pivot.add_child(sword)
@@ -260,7 +279,8 @@ func _create_enemies() -> void:
 		e.position = pos
 		add_child(e)
 		var body := material(Color(.29, .12, .14))
-		box_mesh(e, Vector3(.9, 1.15, .58), Vector3(0, 1.0, 0), body)
+		var torso := sphere_mesh(e, .68, Vector3(0, 1.0, 0), body)
+		torso.scale = Vector3(.72, 1.05, .55)
 		sphere_mesh(e, .38, Vector3(0, 1.85, 0), material(Color(.19, .18, .19)))
 		for x in [-.18, .18]:
 			sphere_mesh(e, .075, Vector3(x, 1.9, -.33), material(Color(1, .18, .06), .3, Color(.8, .04, .01)))
