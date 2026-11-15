@@ -488,6 +488,12 @@ func _create_ui() -> void:
 	interact.size = Vector2(210, 65)
 	interact.pressed.connect(_interact)
 	layer.add_child(interact)
+	var throw_button := Button.new()
+	throw_button.text = "THROW"
+	throw_button.position = Vector2(470, 555)
+	throw_button.size = Vector2(165, 65)
+	throw_button.pressed.connect(func(): if not inventory.is_empty(): _throw_item())
+	layer.add_child(throw_button)
 	inventory_panel = PanelContainer.new()
 	inventory_panel.position = Vector2(420, 80)
 	inventory_panel.custom_minimum_size = Vector2(440, 380)
@@ -683,7 +689,7 @@ func _interact() -> void:
 		_throw_item()
 
 func _throw_item() -> void:
-	var name := inventory.pop_back()
+	var name: String = inventory.pop_back()
 	var forward := -pivot.global_transform.basis.z.normalized()
 	var drop := Node3D.new()
 	drop.position = hero.position + forward * 2.4 + Vector3(0, .35, 0)
