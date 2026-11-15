@@ -11,6 +11,12 @@ var inventory: Array[String] = []
 var world_items: Array[Node3D] = []
 var inventory_panel: PanelContainer
 var inventory_text: Label
+var equipment_panel: PanelContainer
+var equipment_text: Label
+var equipped_weapon := "Fists"
+var equipped_armor := "Traveler Clothes"
+var selected_inventory_index := -1
+var item_icons: Dictionary = {}
 var inside_dungeon := false
 var dungeon_root: Node3D
 var dungeon_entry := Vector3(13, 0, 11)
@@ -366,7 +372,8 @@ func _play_character_animation(player: AnimationPlayer, keywords: Array[String])
 func _create_hero() -> void:
 	hero = CharacterBody3D.new()
 	hero.name = "Knight"
-	hero.position = Vector3(0, .2, 8)
+	hero.position = Vector3(0, .08, 8)
+	hero.floor_snap_length = .25
 	add_child(hero)
 	var capsule := CapsuleShape3D.new()
 	capsule.radius = .42
@@ -502,6 +509,32 @@ func _create_ui() -> void:
 	inventory_panel.add_child(inventory_text)
 	inventory_panel.visible = false
 	_update_bag()
+	var next_button := Button.new()
+	next_button.text = "NEXT ITEM"
+	next_button.position = Vector2(430, 470)
+	next_button.size = Vector2(150, 55)
+	next_button.pressed.connect(_next_inventory_item)
+	layer.add_child(next_button)
+	var equip_button := Button.new()
+	equip_button.text = "EQUIP"
+	equip_button.position = Vector2(585, 470)
+	equip_button.size = Vector2(130, 55)
+	equip_button.pressed.connect(_equip_selected)
+	layer.add_child(equip_button)
+	var equipment_button := Button.new()
+	equipment_button.text = "EQUIPMENT"
+	equipment_button.position = Vector2(470, 630)
+	equipment_button.size = Vector2(200, 60)
+	equipment_button.pressed.connect(_toggle_equipment)
+	layer.add_child(equipment_button)
+	equipment_panel = PanelContainer.new()
+	equipment_panel.position = Vector2(740, 95)
+	equipment_panel.custom_minimum_size = Vector2(320, 260)
+	layer.add_child(equipment_panel)
+	equipment_text = Label.new()
+	equipment_panel.add_child(equipment_text)
+	equipment_panel.visible = false
+	_update_equipment()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
@@ -546,7 +579,7 @@ func _physics_process(delta: float) -> void:
 	if direction.length() > .1:
 		hero.velocity.x = direction.x * WALK_SPEED
 		hero.velocity.z = direction.z * WALK_SPEED
-		pivot.rotation.y = lerp_angle(pivot.rotation.y, atan2(-direction.x, -direction.z), delta * 9)
+		pivot.rotation.y = lerp_angle(pivot.rotation.y, atan2(-direction.x, -direction.z) + PI, delta * 9)
 		_play_character_animation(hero_animation, ["run", "walk", "locomotion"])
 		walk_phase += delta * 11
 		pivot.position.y = absf(sin(walk_phase)) * .055
@@ -559,8 +592,8 @@ func _physics_process(delta: float) -> void:
 		_jump()
 	if not hero.is_on_floor():
 		hero.velocity.y -= 24 * delta
-	else:
-		hero.velocity.y = 0
+	elif hero.velocity.y < 0.0:
+		hero.velocity.y = 0.0
 	hero.move_and_slide()
 	if inside_dungeon:
 		hero.position.x = clampf(hero.position.x, -11, 11)
@@ -627,8 +660,8 @@ func _heal() -> void:
 		message_timer = 3
 
 func _jump() -> void:
-	if hero.is_on_floor() and health > 0:
-		hero.velocity.y = 9.5
+	if (hero.is_on_floor() or hero.global_position.y <= .25) and health > 0:
+		hero.velocity.y = 11.0
 		_play_character_animation(hero_animation, ["jump"])
 
 func _spin_attack() -> void:
@@ -651,14 +684,52 @@ func _toggle_bag() -> void:
 	_update_bag()
 	inventory_panel.visible = not inventory_panel.visible
 
+func _toggle_equipment() -> void:
+	_update_equipment()
+	equipment_panel.visible = not equipment_panel.visible
+
+func _update_equipment() -> void:
+	if equipment_text != null:
+		equipment_text.text = "CHARACTER EQUIPMENT\n\nMain Hand: " + equipped_weapon + "\nArmor: " + equipped_armor + "\n\nChoose an item in your bag, then EQUIP."
+
+func _equip_selected() -> void:
+	if selected_inventory_index < 0 or selected_inventory_index >= inventory.size():
+		message = "Select an item from your bag first."
+		message_timer = 3.0
+		return
+	var item: String = inventory[selected_inventory_index]
+	if item.contains("Sword") or item.contains("Dagger"):
+		equipped_weapon = item
+	elif item.contains("Boots") or item.contains("Shield"):
+		equipped_armor = item
+	else:
+		message = "That item cannot be equipped."
+		message_timer = 3.0
+		return
+	message = "Equipped " + item
+	message_timer = 3.0
+	_update_equipment()
+	_update_bag()
+
+func _select_inventory_item(index: int) -> void:
+	selected_inventory_index = index
+	_update_bag()
+
 func _update_bag() -> void:
 	if inventory_text == null:
 		return
 	var lines := "TRAVELER'S BAG (%d / 200)\n\n" % inventory.size()
 	for i in range(mini(inventory.size(), 16)):
-		lines += "%d. %s\n" % [i + 1, inventory[i]]
-	lines += "\nTap THROW to drop the last item."
+		var marker := "> " if i == selected_inventory_index else "  "
+		lines += "%s%d. %s\n" % [marker, i + 1, inventory[i]]
+	lines += "\nUse NEXT to select, EQUIP to wear or wield."
 	inventory_text.text = lines
+
+func _next_inventory_item() -> void:
+	if inventory.is_empty():
+		return
+	selected_inventory_index = (selected_inventory_index + 1) % inventory.size()
+	_update_bag()
 
 func _interact() -> void:
 	if inside_dungeon and hero.position.distance_to(Vector3(0, .2, 72)) < 4.0:
@@ -679,6 +750,7 @@ func _interact() -> void:
 				message = "Bag is full."
 				return
 			inventory.append(str(item.get_meta("item_name", "Unknown relic")))
+			selected_inventory_index = inventory.size() - 1
 			world_items.erase(item)
 			item.queue_free()
 			_update_bag()
@@ -690,6 +762,7 @@ func _interact() -> void:
 
 func _throw_item() -> void:
 	var name: String = inventory.pop_back()
+	selected_inventory_index = mini(selected_inventory_index, inventory.size() - 1)
 	var forward := -pivot.global_transform.basis.z.normalized()
 	var drop := Node3D.new()
 	drop.position = hero.position + forward * 2.4 + Vector3(0, .35, 0)
