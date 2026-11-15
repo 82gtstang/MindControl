@@ -34,8 +34,30 @@ jobs:
           $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\MindControl.uproject'
           $output = Join-Path $env:GITHUB_WORKSPACE 'unreal\PackagedAndroid'
           if (!(Test-Path $project)) { throw "Unreal project not found: $project" }
-          & $uat BuildCookRun -project="$project" -noP4 -platform=Android -clientconfig=Development -build -cook -stage -pak -package -archive -archivedirectory="$output" -utf8output
+          & $uat BuildCookRun -project="$project" -noP4 -platform=Android -clientconfig=Development -nocompileeditor -unattended -build -cook -stage -pak -package -archive -archivedirectory="$output" -utf8output
           if ($LASTEXITCODE -ne 0) { throw "Unreal BuildCookRun failed with exit code $LASTEXITCODE" }
+      - name: Preserve Unreal build logs on failure
+        if: failure()
+        shell: powershell
+        run: |
+          $diagnostics = Join-Path $env:GITHUB_WORKSPACE 'unreal-build-diagnostics'
+          New-Item -ItemType Directory -Path $diagnostics -Force | Out-Null
+          $root = Join-Path $env:APPDATA 'Unreal Engine\AutomationTool\Logs'
+          if (Test-Path $root) {
+            Get-ChildItem -Path $root -File -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in @('.txt', '.log') } | ForEach-Object {
+              $relative = $_.FullName.Substring($root.Length).TrimStart('\')
+              $destination = Join-Path $diagnostics $relative
+              New-Item -ItemType Directory -Path (Split-Path $destination) -Force | Out-Null
+              Copy-Item $_.FullName $destination -Force -ErrorAction SilentlyContinue
+            }
+          }
+      - name: Upload Unreal diagnostic logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MindControl-Unreal-Build-Logs
+          path: unreal-build-diagnostics/**
+          if-no-files-found: warn
       - name: Verify APK exists
         shell: powershell
         run: |
