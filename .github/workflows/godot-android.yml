@@ -56,6 +56,21 @@ jobs:
         run: godot --headless --path godot --editor --import --quit
       - name: Diagnose Android export configuration
         run: godot --headless --path godot --editor --script res://diagnose_export.gd
+      - name: Check Android export validation details
+        run: |
+          echo "=== Godot Android build requirements ==="
+          ls -l "$ANDROID_HOME/build-tools/34.0.0/"{aapt,apksigner,zipalign} || true
+          ls -l "$ANDROID_HOME/build-tools/35.0.0/"{aapt,apksigner,zipalign} || true
+          ls -l "$ANDROID_HOME/platforms/android-34/android.jar" || true
+          ls -l "$ANDROID_HOME/platforms/android-35/android.jar" || true
+          echo "=== Java version ==="
+          java -version
+          echo "=== Keystore validity ==="
+          keytool -list -keystore /tmp/mindcontrol-debug.keystore -storepass android -alias androiddebugkey
+          echo "=== Godot export preset ==="
+          cat godot/export_presets.cfg
+          echo "=== Editor settings ==="
+          cat ~/.config/godot/editor_settings-4.4.tres
       - name: Export APK
         run: |
           mkdir -p godot/build
