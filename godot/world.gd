@@ -20,6 +20,9 @@ var item_icons: Dictionary = {}
 var inside_dungeon := false
 var dungeon_root: Node3D
 var dungeon_entry := Vector3(13, 0, 11)
+var dungeon_entries := [Vector3(13, 0, 11), Vector3(-31, 0, 19), Vector3(34, 0, -13)]
+var dungeon_names := ["Forgotten Crypt", "Ashen Catacombs", "Shadow Vault"]
+var active_dungeon := -1
 var spin_cooldown := 0.0
 const HERO_MODEL := "res://assets/characters/hero.glb"
 const ENEMY_MODEL := "res://assets/characters/enemy.glb"
@@ -63,6 +66,8 @@ func _ready() -> void:
 	_create_hero()
 	_create_enemies()
 	_create_dungeon()
+	_create_extra_dungeons()
+	_create_enemy_varieties()
 	_scatter_loot()
 	_create_ui()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
@@ -486,112 +491,78 @@ func _create_enemies() -> void:
 func _create_ui() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
-	var panel := ColorRect.new()
-	panel.color = Color(0.025, .035, .06, .75)
-	panel.position = Vector2(14, 12)
-	panel.size = Vector2(400, 95)
-	layer.add_child(panel)
+	var top := PanelContainer.new()
+	top.position = Vector2(12, 10)
+	top.custom_minimum_size = Vector2(420, 96)
+	layer.add_child(top)
+	var top_box := VBoxContainer.new()
+	top.add_child(top_box)
 	hud = Label.new()
-	hud.position = Vector2(27, 22)
-	hud.add_theme_font_size_override("font_size", 25)
-	layer.add_child(hud)
+	hud.add_theme_font_size_override("font_size", 23)
+	top_box.add_child(hud)
 	message_label = Label.new()
-	message_label.position = Vector2(27, 67)
-	message_label.add_theme_font_size_override("font_size", 18)
-	layer.add_child(message_label)
-	var hint := Label.new()
-	hint.text = "LEFT: MOVE     RIGHT: LOOK     ATTACK / POTION"
-	hint.position = Vector2(25, 665)
-	hint.add_theme_font_size_override("font_size", 18)
-	layer.add_child(hint)
-	var attack := Button.new()
-	attack.text = "ATTACK"
-	attack.position = Vector2(1060, 555)
-	attack.size = Vector2(175, 65)
-	attack.pressed.connect(_attack)
-	layer.add_child(attack)
-	var potion := Button.new()
-	potion.text = "HEAL"
-	potion.position = Vector2(1060, 630)
-	potion.size = Vector2(175, 60)
-	potion.pressed.connect(_heal)
-	layer.add_child(potion)
-	var jump := Button.new()
-	jump.text = "JUMP"
-	jump.position = Vector2(870, 630)
-	jump.size = Vector2(175, 60)
-	jump.pressed.connect(_jump)
-	layer.add_child(jump)
-	var spin := Button.new()
-	spin.text = "SPIN"
-	spin.position = Vector2(870, 555)
-	spin.size = Vector2(175, 65)
-	spin.pressed.connect(_spin_attack)
-	layer.add_child(spin)
-	var bag := Button.new()
-	bag.text = "BAG"
-	bag.position = Vector2(680, 630)
-	bag.size = Vector2(175, 60)
-	bag.pressed.connect(_toggle_bag)
-	layer.add_child(bag)
-	var interact := Button.new()
-	interact.text = "PICK UP / ENTER"
-	interact.position = Vector2(650, 555)
-	interact.size = Vector2(210, 65)
-	interact.pressed.connect(_interact)
-	layer.add_child(interact)
-	var throw_button := Button.new()
-	throw_button.text = "THROW"
-	throw_button.position = Vector2(470, 555)
-	throw_button.size = Vector2(165, 65)
-	throw_button.pressed.connect(_throw_from_bag)
-	layer.add_child(throw_button)
+	message_label.add_theme_font_size_override("font_size", 17)
+	top_box.add_child(message_label)
+	var dock := PanelContainer.new()
+	dock.name = "ActionDock"
+	dock.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	dock.anchor_left = 1.0
+	dock.anchor_right = 1.0
+	dock.anchor_top = .10
+	dock.anchor_bottom = .95
+	dock.offset_left = -176
+	dock.offset_right = -8
+	dock.offset_top = 0
+	dock.offset_bottom = 0
+	layer.add_child(dock)
+	var dock_column := VBoxContainer.new()
+	dock_column.add_theme_constant_override("separation", 5)
+	dock.add_child(dock_column)
+	var title := Label.new()
+	title.text = "⚔ ACTIONS"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	dock_column.add_child(title)
+	_dock_button(dock_column, "⚔ ATTACK", _attack)
+	_dock_button(dock_column, "✦ SPIN", _spin_attack)
+	_dock_button(dock_column, "↑ JUMP", _jump)
+	_dock_button(dock_column, "✋ PICK UP / ENTER", _interact)
+	_dock_button(dock_column, "✚ HEAL", _heal)
+	_dock_button(dock_column, "▣ BAG", _toggle_bag)
+	_dock_button(dock_column, "◇ EQUIPMENT", _toggle_equipment)
+	_dock_button(dock_column, "↗ THROW", _throw_from_bag)
 	inventory_panel = PanelContainer.new()
-	inventory_panel.position = Vector2(420, 80)
-	inventory_panel.custom_minimum_size = Vector2(440, 380)
+	inventory_panel.position = Vector2(390, 90)
+	inventory_panel.custom_minimum_size = Vector2(360, 350)
 	layer.add_child(inventory_panel)
+	var bag_column := VBoxContainer.new()
+	inventory_panel.add_child(bag_column)
 	inventory_text = Label.new()
-	inventory_panel.add_child(inventory_text)
+	bag_column.add_child(inventory_text)
+	_dock_button(bag_column, "NEXT ITEM", _next_inventory_item)
+	_dock_button(bag_column, "EQUIP SELECTED", _equip_selected)
+	_dock_button(bag_column, "CLOSE BAG", _toggle_bag)
 	inventory_panel.visible = false
 	_update_bag()
-	var next_button := Button.new()
-	next_button.text = "NEXT ITEM"
-	next_button.position = Vector2(430, 470)
-	next_button.size = Vector2(150, 55)
-	next_button.pressed.connect(_next_inventory_item)
-	layer.add_child(next_button)
-	var equip_button := Button.new()
-	equip_button.text = "EQUIP"
-	equip_button.position = Vector2(585, 470)
-	equip_button.size = Vector2(130, 55)
-	equip_button.pressed.connect(_equip_selected)
-	layer.add_child(equip_button)
-	var equipment_button := Button.new()
-	equipment_button.text = "EQUIPMENT"
-	equipment_button.position = Vector2(470, 630)
-	equipment_button.size = Vector2(200, 60)
-	equipment_button.pressed.connect(_toggle_equipment)
-	layer.add_child(equipment_button)
 	equipment_panel = PanelContainer.new()
-	equipment_panel.position = Vector2(740, 95)
-	equipment_panel.custom_minimum_size = Vector2(320, 260)
+	equipment_panel.position = Vector2(390, 90)
+	equipment_panel.custom_minimum_size = Vector2(350, 250)
 	layer.add_child(equipment_panel)
+	var gear_column := VBoxContainer.new()
+	equipment_panel.add_child(gear_column)
 	equipment_text = Label.new()
-	equipment_panel.add_child(equipment_text)
+	gear_column.add_child(equipment_text)
+	_dock_button(gear_column, "REMOVE WEAPON", _unequip_weapon)
+	_dock_button(gear_column, "REMOVE ARMOR", _unequip_armor)
+	_dock_button(gear_column, "CLOSE", _toggle_equipment)
 	equipment_panel.visible = false
 	_update_equipment()
-	var remove_weapon := Button.new()
-	remove_weapon.text = "REMOVE WEAPON"
-	remove_weapon.position = Vector2(740, 365)
-	remove_weapon.size = Vector2(160, 50)
-	remove_weapon.pressed.connect(_unequip_weapon)
-	layer.add_child(remove_weapon)
-	var remove_armor := Button.new()
-	remove_armor.text = "REMOVE ARMOR"
-	remove_armor.position = Vector2(910, 365)
-	remove_armor.size = Vector2(160, 50)
-	remove_armor.pressed.connect(_unequip_armor)
-	layer.add_child(remove_armor)
+
+func _dock_button(parent: VBoxContainer, label: String, callback: Callable) -> void:
+	var button := Button.new()
+	button.text = label
+	button.custom_minimum_size = Vector2(155, 43)
+	button.pressed.connect(callback)
+	parent.add_child(button)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
@@ -654,7 +625,7 @@ func _physics_process(delta: float) -> void:
 	hero.move_and_slide()
 	if inside_dungeon:
 		hero.position.x = clampf(hero.position.x, -11, 11)
-		hero.position.z = clampf(hero.position.z, 70, 108)
+		hero.position.z = clampf(hero.position.z, 70 + active_dungeon * 55, 108 + active_dungeon * 55)
 	else:
 		hero.position.x = clampf(hero.position.x, -54, 54)
 		hero.position.z = clampf(hero.position.z, -54, 54)
@@ -795,18 +766,22 @@ func _next_inventory_item() -> void:
 	_update_bag()
 
 func _interact() -> void:
-	if inside_dungeon and hero.position.distance_to(Vector3(0, .2, 72)) < 4.0:
+	if inside_dungeon and hero.position.distance_to(Vector3(0, .2, 72 + active_dungeon * 55)) < 5.0:
 		inside_dungeon = false
-		hero.position = dungeon_entry + Vector3(0, .3, 2)
-		message = "You emerge from the ancient crypt."
+		hero.position = dungeon_entries[active_dungeon] + Vector3(0, .3, 4)
+		message = "You emerge from " + dungeon_names[active_dungeon]
+		active_dungeon = -1
 		message_timer = 4
 		return
-	if not inside_dungeon and hero.position.distance_to(dungeon_entry) < 4.0:
-		inside_dungeon = true
-		hero.position = Vector3(0, .2, 73)
-		message = "You descend into the forgotten crypt."
-		message_timer = 5
-		return
+	if not inside_dungeon:
+		for i in range(dungeon_entries.size()):
+			if hero.position.distance_to(dungeon_entries[i]) < 5.0:
+				inside_dungeon = true
+				active_dungeon = i
+				hero.position = Vector3(0, .2, 73 + i * 55)
+				message = "Entering " + dungeon_names[i] + " - find the exit at the entrance!"
+				message_timer = 6
+				return
 	for item in world_items.duplicate():
 		if is_instance_valid(item) and hero.global_position.distance_to(item.global_position) < 2.6:
 			if inventory.size() >= 200:
@@ -845,7 +820,7 @@ func _scatter_loot() -> void:
 	for i in range(320):
 		var dungeon_item := i >= 260
 		var x := rng.randf_range(-48, 48) if not dungeon_item else rng.randf_range(-8, 8)
-		var z := rng.randf_range(-48, 48) if not dungeon_item else rng.randf_range(76, 105)
+		var z := rng.randf_range(-48, 48) if not dungeon_item else rng.randf_range(76, 105) + (i % 3) * 55
 		if not dungeon_item and absf(x) < 3.0 and absf(z) < 10.0:
 			x += 5.0
 		var item := Node3D.new()
@@ -901,3 +876,64 @@ func _create_dungeon() -> void:
 func _throw_from_bag() -> void:
 	if not inventory.is_empty():
 		_throw_item()
+
+func _create_extra_dungeons() -> void:
+	var stone := material(Color(.16, .16, .19))
+	var floor_mat := material(Color(.23, .20, .20))
+	for i in range(1, 3):
+		var entry := Node3D.new()
+		entry.position = dungeon_entries[i]
+		add_child(entry)
+		for x in [-2.0, 2.0]:
+			cylinder_mesh(entry, .55, 4.5, Vector3(x, 2.25, 0), stone)
+		box_mesh(entry, Vector3(5.5, .8, 2), Vector3(0, 4.7, 0), stone)
+		var glow := sphere_mesh(entry, .8, Vector3(0, 1.6, -.5), material(Color(.2, .13, .33), .3, Color(.13, .04, .2)))
+		glow.scale.z = .25
+		var root := Node3D.new()
+		root.position = Vector3(0, 0, 70 + i * 55)
+		add_child(root)
+		var floor := StaticBody3D.new()
+		root.add_child(floor)
+		box_mesh(floor, Vector3(24, .6, 42), Vector3(0, -.4, 19), floor_mat)
+		var shape := BoxShape3D.new()
+		shape.size = Vector3(24, .6, 42)
+		var collision := CollisionShape3D.new()
+		collision.shape = shape
+		collision.position = Vector3(0, -.4, 19)
+		floor.add_child(collision)
+		for x in [-12.0, 12.0]:
+			box_mesh(root, Vector3(1, 6, 42), Vector3(x, 2.7, 19), stone)
+		for z in [0.0, 40.0]:
+			box_mesh(root, Vector3(24, 6, 1), Vector3(0, 2.7, z), stone)
+		for j in range(6):
+			var z := 6.0 + j * 6.0
+			for x in [-8.0, 8.0]:
+				cylinder_mesh(root, .55, 5, Vector3(x, 2.5, z), stone)
+			_make_torch(Vector3(-9, 0, 70 + i * 55 + z))
+		var altar := box_mesh(root, Vector3(4, 1.5, 3), Vector3(0, .7, 35), stone)
+		altar.name = "AncientAltar"
+
+func _create_enemy_varieties() -> void:
+	var enemy_types := ["Skeleton", "Wraith", "Cultist", "Golem", "Spider", "Crypt Guardian", "Bandit", "Necromancer"]
+	var colors := [Color(.74, .70, .60), Color(.25, .32, .52), Color(.38, .12, .19), Color(.34, .34, .32), Color(.15, .11, .13), Color(.27, .21, .35), Color(.29, .20, .13), Color(.22, .13, .31)]
+	for i in range(48):
+		var kind := i % enemy_types.size()
+		var enemy := Node3D.new()
+		enemy.name = enemy_types[kind]
+		var in_crypt := i >= 24
+		enemy.position = Vector3(rng.randf_range(-45, 45) if not in_crypt else rng.randf_range(-8, 8), 0, rng.randf_range(-45, 45) if not in_crypt else rng.randf_range(78, 103) + (i % 3) * 55)
+		add_child(enemy)
+		var shade := material(colors[kind], .65, colors[kind] * .10 if kind == 1 else Color.BLACK)
+		if kind == 4:
+			for leg in range(6):
+				var a := float(leg) * TAU / 6
+				var limb := cylinder_mesh(enemy, .09, 1.4, Vector3(cos(a) * .65, .3, sin(a) * .65), shade)
+				limb.rotation.z = sin(a) * .8
+			sphere_mesh(enemy, .7, Vector3(0, .65, 0), shade)
+		else:
+			var torso := sphere_mesh(enemy, .55 if kind != 3 else .85, Vector3(0, 1.2, 0), shade)
+			torso.scale = Vector3(.8, 1.2, .6)
+			sphere_mesh(enemy, .3, Vector3(0, 2.05, 0), shade)
+			for x in [-.55, .55]:
+				cylinder_mesh(enemy, .13, 1.0, Vector3(x, 1.15, 0), shade)
+		enemies.append(enemy)
