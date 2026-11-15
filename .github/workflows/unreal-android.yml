@@ -27,6 +27,17 @@ jobs:
           "ANDROID_SDK_ROOT=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append
           Write-Host "Unreal Engine: $engine"
           Write-Host "Android SDK: $sdk"
+      - name: Clear stale project build metadata
+        shell: powershell
+        run: |
+          $projectRoot = Join-Path $env:GITHUB_WORKSPACE 'unreal'
+          foreach ($folder in @('Intermediate', 'Binaries', 'PackagedAndroid')) {
+            $target = Join-Path $projectRoot $folder
+            if (Test-Path $target) {
+              Write-Host "Removing generated project folder: $target"
+              Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop
+            }
+          }
       - name: Build and package Android APK
         shell: powershell
         run: |
