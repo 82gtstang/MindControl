@@ -171,7 +171,7 @@ class MainActivity : Activity() {
    else dialog="Your sword cuts through the air."
    enemyTurn()
   }
-  private fun restart(){hero.x=19;hero.y=20;hp=10;gold=0;potions=2;keys=0;kills=0;quest=0;inventory=false;gameOver=false;victory=false;opened.clear();enemies.clear();rng.let{repeat(15){val x=it.nextInt(3,37);val y=it.nextInt(3,37);if(passable(x,y)&&abs(x-19)+abs(y-20)>8)enemies.add(Point(x,y))}};dialog="A new adventure begins!"}
+  private fun restart(){hero.x=19;hero.y=20;hp=10;gold=0;potions=2;keys=0;kills=0;quest=0;inventory=false;gameOver=false;victory=false;opened.clear();enemies.clear();repeat(15){val x=rng.nextInt(3,37);val y=rng.nextInt(3,37);if(passable(x,y)&&abs(x-19)+abs(y-20)>8)enemies.add(Point(x,y))};dialog="A new adventure begins!"}
   override fun onTouchEvent(e:MotionEvent):Boolean{
    if(e.action!=MotionEvent.ACTION_UP)return true
    if(gameOver||victory){restart();invalidate();return true}
