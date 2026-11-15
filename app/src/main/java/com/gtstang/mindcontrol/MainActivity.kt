@@ -69,30 +69,91 @@ class MainActivity : Activity() {
    paint.color=color;paint.style=Paint.Style.FILL;c.drawRoundRect(x,y,x+w,y+h,r,r,paint)
   }
   private fun drawTile(c:Canvas,x:Float,y:Float,z:Float,t:Int,wx:Int,wy:Int){
-   rect(c,x,y,z+1,z+1,colors[t])
+   val time=System.currentTimeMillis()/1000.0
+   val sway=sin(time*1.7+wx*.9+wy*.5).toFloat()
+   val sparkle=sin(time*2.6+wx*2.3+wy).toFloat()
+   val seed=(wx*73+wy*191).let{abs(it)}
+   val grass=if(seed%3==0)0xff397b45.toInt() else 0xff448b4e.toInt()
+   rect(c,x,y,z+1,z+1,if(t==0)grass else colors[t])
+   if(t!=2){
+    for(i in 0..3){
+     val px=x+z*((seed+i*29)%83)/100f
+     val py=y+z*((seed+i*41)%79)/100f
+     paint.color=if(t==3)0xffc6a66c.toInt() else 0xff71a85b.toInt()
+     paint.strokeWidth=max(1f,z*.025f)
+     c.drawLine(px,py,px+z*.045f+sway*z*.015f,py-z*.075f,paint)
+    }
+   }
    when(t){
     1,5 -> {
-     rect(c,x+z*.42f,y+z*.46f,z*.16f,z*.44f,0xff674529.toInt(),3f)
-     paint.color=if(t==1)0xff164c2c.toInt() else 0xff235c36.toInt()
-     c.drawCircle(x+z*.5f,y+z*.38f,z*.32f,paint)
-     c.drawCircle(x+z*.32f,y+z*.5f,z*.23f,paint)
-     c.drawCircle(x+z*.67f,y+z*.5f,z*.23f,paint)
+     paint.color=0x55000000;c.drawOval(x+z*.13f,y+z*.7f,x+z*.94f,y+z*.93f,paint)
+     rect(c,x+z*.43f,y+z*.43f,z*.15f,z*.46f,0xff68442d.toInt(),z*.04f)
+     val shift=sway*z*.035f
+     paint.color=0xff133f2b.toInt();c.drawCircle(x+z*.49f+shift,y+z*.34f,z*.35f,paint)
+     paint.color=if(t==1)0xff246c39.toInt() else 0xff327d3f.toInt()
+     c.drawCircle(x+z*.33f+shift,y+z*.39f,z*.24f,paint)
+     c.drawCircle(x+z*.67f+shift,y+z*.39f,z*.26f,paint)
+     paint.color=0xff4a9a52.toInt();c.drawCircle(x+z*.39f+shift,y+z*.23f,z*.14f,paint)
+     c.drawCircle(x+z*.68f+shift,y+z*.24f,z*.11f,paint)
     }
-    2 -> {paint.color=0xff8fd1ef.toInt();c.drawCircle(x+z*.4f,y+z*.55f,z*.12f,paint)}
-    4 -> {paint.color=0xff77717b.toInt();c.drawCircle(x+z*.48f,y+z*.46f,z*.34f,paint)}
-    6 -> {rect(c,x+z*.15f,y+z*.12f,z*.7f,z*.75f,0xffc3aa78.toInt(),4f)}
+    2 -> {
+     val wave=sin(time*2.5+wx*.7+wy*.8).toFloat()
+     rect(c,x,y,z+1,z+1,0xff235c91.toInt())
+     paint.color=0xff2c7fac.toInt();c.drawOval(x+z*.03f,y+z*.12f+wave*z*.05f,x+z*.85f,y+z*.53f+wave*z*.05f,paint)
+     paint.color=0xff68b9d6.toInt();paint.style=Paint.Style.STROKE;paint.strokeWidth=z*.045f
+     c.drawArc(x+z*.18f,y+z*.25f+wave*z*.08f,x+z*.75f,y+z*.65f+wave*z*.08f,190f,120f,false,paint)
+     paint.style=Paint.Style.FILL
+    }
+    3 -> {
+     rect(c,x+z*.06f,y+z*.22f,z*.9f,z*.13f,0x33805a32)
+     rect(c,x+z*.15f,y+z*.7f,z*.55f,z*.06f,0x55785b39)
+    }
+    4 -> {
+     paint.color=0x55000000;c.drawOval(x+z*.2f,y+z*.67f,x+z*.9f,y+z*.88f,paint)
+     val path=Path();path.moveTo(x+z*.14f,y+z*.7f);path.lineTo(x+z*.32f,y+z*.21f);path.lineTo(x+z*.66f,y+z*.12f);path.lineTo(x+z*.89f,y+z*.62f);path.close()
+     paint.color=0xff555665.toInt();c.drawPath(path,paint)
+     paint.color=0xff8a8d94.toInt();c.drawCircle(x+z*.46f,y+z*.33f,z*.14f,paint)
+    }
+    6 -> {
+     rect(c,x+z*.04f,y+z*.04f,z*.92f,z*.92f,0xff9d8866.toInt(),z*.05f)
+     rect(c,x+z*.09f,y+z*.09f,z*.8f,z*.8f,0xffc4ad7c.toInt(),z*.04f)
+     rect(c,x+z*.13f,y+z*.17f,z*.32f,z*.08f,0xffd5bf90.toInt())
+    }
+    0 -> if(seed%7==0){
+     paint.color=if(seed%2==0)0xfff8dc77.toInt() else 0xffdf91c5.toInt()
+     val fx=x+z*.54f+sway*z*.04f;val fy=y+z*.56f
+     c.drawCircle(fx,fy,z*.06f,paint)
+     paint.color=0xffffeaa4.toInt();c.drawCircle(fx,fy,z*.025f,paint)
+    }
    }
    if(chests.contains(key(wx,wy))&&!opened.contains(key(wx,wy))){
-    rect(c,x+z*.18f,y+z*.37f,z*.64f,z*.4f,0xff6a321b.toInt(),3f)
-    rect(c,x+z*.2f,y+z*.34f,z*.6f,z*.13f,0xffe9b84e.toInt(),3f)
+    paint.color=0x77000000;c.drawOval(x+z*.1f,y+z*.74f,x+z*.91f,y+z*.93f,paint)
+    rect(c,x+z*.16f,y+z*.4f,z*.68f,z*.4f,0xff63341f.toInt(),z*.06f)
+    rect(c,x+z*.18f,y+z*.35f,z*.64f,z*.15f,0xffd8a74e.toInt(),z*.05f)
+    rect(c,x+z*.44f,y+z*.47f,z*.13f,z*.18f,0xffffd96b.toInt(),z*.03f)
+    paint.color=0x77ffdf66; c.drawCircle(x+z*.5f,y+z*.26f,z*(.09f+.03f*sparkle),paint)
    }
   }
   private fun drawActor(c:Canvas,x:Float,y:Float,z:Float,color:Int,player:Boolean){
-   paint.color=0x77000000;c.drawOval(x+z*.2f,y+z*.77f,x+z*.8f,y+z*.94f,paint)
-   rect(c,x+z*.3f,y+z*.42f,z*.4f,z*.4f,color,5f)
-   paint.color=0xffffd7a4.toInt();c.drawCircle(x+z*.5f,y+z*.33f,z*.19f,paint)
-   if(player){rect(c,x+z*.25f,y+z*.2f,z*.5f,z*.1f,0xffbcd6df.toInt(),3f)}
-   else {rect(c,x+z*.39f,y+z*.28f,z*.07f,z*.05f,0xff171717.toInt());rect(c,x+z*.56f,y+z*.28f,z*.07f,z*.05f,0xff171717.toInt())}
+   val time=System.currentTimeMillis()/1000.0
+   val bob=(sin(time*4.3+(if(player)0.0 else x*.08)).toFloat())*z*.025f
+   val foot=(sin(time*5.8+(if(player)0.0 else y*.06)).toFloat())*z*.065f
+   paint.color=0x77000000;c.drawOval(x+z*.18f,y+z*.79f,x+z*.84f,y+z*.96f,paint)
+   rect(c,x+z*.31f,y+z*.66f+foot,z*.14f,z*.19f,0xff252b40.toInt(),z*.04f)
+   rect(c,x+z*.56f,y+z*.66f-foot,z*.14f,z*.19f,0xff252b40.toInt(),z*.04f)
+   rect(c,x+z*.26f,y+z*.41f+bob,z*.49f,z*.34f,color,z*.09f)
+   rect(c,x+z*.19f,y+z*.47f-bob,z*.13f,z*.24f,if(player)0xffd4dde6.toInt() else color,z*.05f)
+   rect(c,x+z*.7f,y+z*.47f+bob,z*.13f,z*.24f,if(player)0xffd4dde6.toInt() else color,z*.05f)
+   paint.color=0xffffd3a0.toInt();c.drawCircle(x+z*.51f,y+z*.31f+bob,z*.19f,paint)
+   if(player){
+    rect(c,x+z*.29f,y+z*.14f+bob,z*.45f,z*.12f,0xffd2dce6.toInt(),z*.06f)
+    rect(c,x+z*.37f,y+z*.11f+bob,z*.28f,z*.1f,0xff516c8c.toInt(),z*.05f)
+    rect(c,x+z*.68f,y+z*.46f+bob,z*.11f,z*.24f,0xffe0b45c.toInt(),z*.02f)
+   }else{
+    paint.color=0xff1d2131.toInt()
+    c.drawCircle(x+z*.44f,y+z*.3f+bob,z*.028f,paint)
+    c.drawCircle(x+z*.59f,y+z*.3f+bob,z*.028f,paint)
+   }
   }
   override fun onDraw(c:Canvas){
    c.drawColor(0xff101823.toInt())
@@ -111,6 +172,13 @@ class MainActivity : Activity() {
    for(npc in villagers){val dx=npc.x-hero.x+5;val dy=npc.y-hero.y+5;if(dx in 0..9&&dy in 0..9)drawActor(c,offsetX+dx*z,offsetY+dy*z,z,0xffc783e9.toInt(),false)}
    for(e in enemies){val dx=e.x-hero.x+5;val dy=e.y-hero.y+5;if(dx in 0..9&&dy in 0..9)drawActor(c,offsetX+dx*z,offsetY+dy*z,z,0xffc43c47.toInt(),false)}
    drawActor(c,offsetX+5*z,offsetY+5*z,z,0xff347de3.toInt(),true)
+   // Fireflies drift through the scene after dusk.
+   val seconds=System.currentTimeMillis()/1000.0
+   for(i in 0..10){
+    val fx=offsetX+((i*37)%97)/10f*z+sin(seconds*.6+i).toFloat()*z*.18f
+    val fy=top+((i*23)%89)/10f*z+cos(seconds*.7+i*2).toFloat()*z*.22f
+    paint.color=0x88ffe9a1.toInt();c.drawCircle(fx,fy,z*.035f,paint)
+   }
    c.restore()
    val bottom=top+z*10
    rect(c,10f,bottom+8,w-20,57f,0xff27344b.toInt(),10f)
@@ -139,6 +207,7 @@ class MainActivity : Activity() {
      text(c,"Tap anywhere to start again",w/2,top+z*5,16f)
     }
    }
+   postInvalidateDelayed(50L)
   }
   private fun passable(x:Int,y:Int)=x in 1..38&&y in 1..38&&world[y][x] !in listOf(1,2,4,5)
   private fun move(dx:Int,dy:Int){
