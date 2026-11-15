@@ -35,6 +35,7 @@ func _ready() -> void:
 	RenderingServer.set_default_clear_color(Color(0.12, 0.15, 0.2))
 	_create_lighting()
 	_create_ground()
+	_create_nature_details()
 	_create_ruins()
 	_create_hero()
 	_create_enemies()
@@ -181,6 +182,69 @@ func _make_water(pos: Vector3) -> void:
 	for i in range(20):
 		var lily := sphere_mesh(water, rng.randf_range(.1, .28), Vector3(rng.randf_range(-6, 6), .1, rng.randf_range(-4, 4)), material(Color(.14, .34, .14)))
 		lily.scale.y = .1
+
+func _create_nature_details() -> void:
+	# Small environmental accents give the forest a more organic silhouette.
+	var grass_mats := [
+		material(Color(.19, .31, .14)),
+		material(Color(.28, .34, .16)),
+		material(Color(.13, .25, .12))
+	]
+	var fern_mat := material(Color(.11, .27, .14))
+	var flower_mats := [
+		material(Color(.72, .62, .34)),
+		material(Color(.66, .46, .60)),
+		material(Color(.75, .74, .65))
+	]
+	# MultiMesh batches hundreds of blades into only a few draw calls.
+	for variant in range(3):
+		var blade_mesh := PlaneMesh.new()
+		blade_mesh.size = Vector2(.095 + variant * .035, .32 + variant * .12)
+		var blade_mat: StandardMaterial3D = grass_mats[variant]
+		blade_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		blade_mesh.material = blade_mat
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = blade_mesh
+		mm.instance_count = 800
+		for i in range(mm.instance_count):
+			var x := rng.randf_range(-53.0, 53.0)
+			var z := rng.randf_range(-53.0, 53.0)
+			if absf(x) < 3.0:
+				x += 3.5 if x >= 0.0 else -3.5
+			var basis := Basis(Vector3.UP, rng.randf_range(0.0, TAU))
+			basis = basis.scaled(Vector3(rng.randf_range(.7, 1.3), rng.randf_range(.7, 1.5), 1.0))
+			mm.set_instance_transform(i, Transform3D(basis, Vector3(x, .19, z)))
+		var instance := MultiMeshInstance3D.new()
+		instance.mesh = mm
+		add_child(instance)
+	for i in range(70):
+		var x := rng.randf_range(-49.0, 49.0)
+		var z := rng.randf_range(-49.0, 49.0)
+		if absf(x) < 5.0 and absf(z) < 12.0:
+			continue
+		var bush := Node3D.new()
+		bush.position = Vector3(x, .12, z)
+		add_child(bush)
+		for j in range(4):
+			var angle := float(j) * TAU / 4.0
+			var frond := sphere_mesh(bush, rng.randf_range(.25, .42), Vector3(cos(angle) * .27, .22 + float(j % 2) * .12, sin(angle) * .27), fern_mat)
+			frond.scale = Vector3(.9, .42, 1.45)
+			frond.rotation.y = angle
+	for i in range(45):
+		var x := rng.randf_range(-49.0, 49.0)
+		var z := rng.randf_range(-49.0, 49.0)
+		var blossom := Node3D.new()
+		blossom.position = Vector3(x, .1, z)
+		add_child(blossom)
+		var stem := cylinder_mesh(blossom, .018, .35, Vector3(0, .19, 0), fern_mat)
+		stem.rotation.z = rng.randf_range(-.25, .25)
+		sphere_mesh(blossom, .09, Vector3(0, .39, 0), flower_mats[i % flower_mats.size()])
+	for i in range(35):
+		var x := rng.randf_range(-50.0, 50.0)
+		var z := rng.randf_range(-50.0, 50.0)
+		var pebble := sphere_mesh(self, rng.randf_range(.12, .25), Vector3(x, .025, z), material(Color(.31, .30, .27)))
+		pebble.scale = Vector3(1.5, .35, 1.0)
 
 func _create_ruins() -> void:
 	var stone := material(Color(.35, .35, .34))
