@@ -27,7 +27,7 @@ void ACryptGameMode::BeginPlay()
  UE_LOG(LogTemp,Warning,TEXT("MindControl stability test: no saved startup state"));
  if(GEngine) GEngine->AddOnScreenDebugMessage(-1,60.f,FColor::Yellow,TEXT("STABILITY TEST - world disabled"));
  // The world can be re-enabled explicitly for future diagnostics.
- if(FParse::Param(FCommandLine::Get(), TEXT("MindControlGenerateWorld")))
+ if(true) // Diagnostic: generate basic collision ground and world on launch
  {
  // World units are centimeters; cubes are 100 cm per side.
  PlaceBlock(FVector(0,0,-70),FVector(110,70,1)); // walkable ground
