@@ -5,6 +5,10 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Misc/Paths.h"
+#include "Misc/FileHelper.h"
+#include "HAL/FileManager.h"
+#include "Engine/Engine.h"
 ACryptGameMode::ACryptGameMode() { DefaultPawnClass = ACryptHero::StaticClass(); }
 void ACryptGameMode::PlaceBlock(const FVector& Location,const FVector& Scale,const FRotator& Rotation)
 {
@@ -20,6 +24,21 @@ void ACryptGameMode::PlaceBlock(const FVector& Location,const FVector& Scale,con
 void ACryptGameMode::BeginPlay()
 {
  Super::BeginPlay();
+ // Keep startup breadcrumbs in the app's writable saved directory.
+ const FString DiagnosticPath=FPaths::Combine(FPaths::ProjectSavedDir(),TEXT("MindControlStartup.txt"));
+ FString Previous;
+ FFileHelper::LoadFileToString(Previous,*DiagnosticPath);
+ const bool bPreviousStartupInterrupted=Previous.StartsWith(TEXT("STARTING"));
+ FFileHelper::SaveStringToFile(TEXT("STARTING: world generation"),*DiagnosticPath);
+ UE_LOG(LogTemp,Warning,TEXT("MindControl startup: previous incomplete=%d"),bPreviousStartupInterrupted?1:0);
+ if(bPreviousStartupInterrupted)
+ {
+  UE_LOG(LogTemp,Error,TEXT("MindControl SAFE MODE: skipping procedural world after incomplete startup"));
+  if(GEngine) GEngine->AddOnScreenDebugMessage(-1,30.f,FColor::Yellow,TEXT("MIND CONTROL SAFE MODE - screenshot this message"));
+  FFileHelper::SaveStringToFile(TEXT("SAFE MODE: previous startup did not complete"),*DiagnosticPath);
+  return;
+ }
+ if(GEngine) GEngine->AddOnScreenDebugMessage(-1,15.f,FColor::Green,TEXT("Mind Control: loading town and monsters"));
  // World units are centimeters; cubes are 100 cm per side.
  PlaceBlock(FVector(0,0,-70),FVector(110,70,1)); // walkable ground
  PlaceBlock(FVector(0,0,-12),FVector(110,4,.12)); // main road
@@ -52,6 +71,10 @@ void ACryptGameMode::BeginPlay()
  for(int32 i=0;i<3;++i)
  {
   const FVector P(-1650.f+i*680.f,(i%2==0?220.f:-260.f),120.f);
-  GetWorld()->SpawnActor<ACryptMonster>(P,FRotator::ZeroRotator);
+  if(!GetWorld()->SpawnActor<ACryptMonster>(P,FRotator::ZeroRotator))
+   UE_LOG(LogTemp,Warning,TEXT("MindControl: failed to spawn monster %d"),i);
  }
+ FFileHelper::SaveStringToFile(TEXT("READY: world generation completed"),*DiagnosticPath);
+ UE_LOG(LogTemp,Display,TEXT("MindControl: world generation completed"));
+ if(GEngine) GEngine->AddOnScreenDebugMessage(-1,15.f,FColor::Green,TEXT("Mind Control: town is ahead - follow the road"));
 }
