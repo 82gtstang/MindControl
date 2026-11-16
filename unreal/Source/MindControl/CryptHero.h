@@ -16,6 +16,10 @@ public:
  UFUNCTION(BlueprintCallable) void EquipSword(bool bEquip);
  UPROPERTY(BlueprintReadOnly) bool bSwordEquipped = false;
  UPROPERTY(BlueprintReadOnly) int32 TreasureCount = 0;
+ UPROPERTY(BlueprintReadOnly) bool bInventoryOpen = false;
+ UFUNCTION(BlueprintCallable) void ToggleInventory() { bInventoryOpen = !bInventoryOpen; }
+ UFUNCTION(BlueprintCallable) void AddTreasure(int32 Amount = 1) { TreasureCount += Amount; }
+ void TouchPressed(ETouchIndex::Type FingerIndex, FVector Location);
 protected:
  virtual void BeginPlay() override;
  void MoveForward(float Value);
