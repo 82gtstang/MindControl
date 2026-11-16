@@ -1,4 +1,6 @@
 #include "CryptHero.h"
+#include "CryptMonster.h"
+#include "EngineUtils.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -19,6 +21,17 @@ ACryptHero::ACryptHero()
  CameraBoom->bUsePawnControlRotation = true;
  FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
  FollowCamera->SetupAttachment(CameraBoom);
+ // Visible placeholder hero, until licensed skeletal character art is imported.
+ UStaticMeshComponent* Torso=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeroTorso"));
+ Torso->SetupAttachment(RootComponent);
+ Torso->SetRelativeLocation(FVector(0,0,-12));
+ Torso->SetRelativeScale3D(FVector(.65f,.42f,1.35f));
+ UStaticMeshComponent* Head=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeroHead"));
+ Head->SetupAttachment(RootComponent);
+ Head->SetRelativeLocation(FVector(0,0,95));
+ Head->SetRelativeScale3D(FVector(.42f,.42f,.42f));
+ static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+ if(Sphere.Succeeded()) { Torso->SetStaticMesh(Sphere.Object); Head->SetStaticMesh(Sphere.Object); }
  SwordVisual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("SwordVisual"));
  SwordVisual->SetupAttachment(GetMesh(), TEXT("hand_rSocket"));
  SwordVisual->SetRelativeScale3D(FVector(.08f,.08f,1.0f));
@@ -26,7 +39,7 @@ ACryptHero::ACryptHero()
  static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
  if(Cube.Succeeded()) SwordVisual->SetStaticMesh(Cube.Object);
 }
-void ACryptHero::BeginPlay() { Super::BeginPlay(); }
+void ACryptHero::BeginPlay() { Super::BeginPlay(); SetActorLocation(FVector(-2900,0,150),false,nullptr,ETeleportType::TeleportPhysics); }
 void ACryptHero::Tick(float DeltaSeconds) { Super::Tick(DeltaSeconds); AttackCooldown = FMath::Max(0.f,AttackCooldown-DeltaSeconds); }
 void ACryptHero::SetupPlayerInputComponent(UInputComponent* Input)
 {
@@ -44,7 +57,23 @@ void ACryptHero::MoveForward(float V) { if(FMath::Abs(V)>.01f) AddMovementInput(
 void ACryptHero::MoveRight(float V) { if(FMath::Abs(V)>.01f) AddMovementInput(FRotationMatrix(FRotator(0,GetControlRotation().Yaw,0)).GetUnitAxis(EAxis::Y),V); }
 void ACryptHero::Turn(float V) { AddControllerYawInput(V); }
 void ACryptHero::LookUp(float V) { AddControllerPitchInput(V); }
-void ACryptHero::Attack() { if(AttackCooldown>0) return; AttackCooldown=.45f; /* Animation montage and hit detection to be implemented */ }
-void ACryptHero::SpinAttack() { if(AttackCooldown>0) return; AttackCooldown=1.2f; /* Whirlwind montage and hit detection to be implemented */ }
+void ACryptHero::Attack()
+{
+ if(AttackCooldown>0) return;
+ AttackCooldown=.45f;
+ for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
+ {
+  const FVector Offset=It->GetActorLocation()-GetActorLocation();
+  if(Offset.Size()<260.f && FVector::DotProduct(GetActorForwardVector(),Offset.GetSafeNormal())>.25f)
+   It->TakeHit(bSwordEquipped?2.f:1.f);
+ }
+}
+void ACryptHero::SpinAttack()
+{
+ if(AttackCooldown>0) return;
+ AttackCooldown=1.2f;
+ for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
+  if(FVector::Dist(It->GetActorLocation(),GetActorLocation())<300.f) It->TakeHit(bSwordEquipped?2.f:1.f);
+}
 void ACryptHero::Interact() { /* Trace for treasure and dungeon portal actors to be implemented */ }
 void ACryptHero::EquipSword(bool bEquip) { bSwordEquipped=bEquip; SwordVisual->SetVisibility(bEquip); }
