@@ -38,6 +38,15 @@ jobs:
               Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop
             }
           }
+      - name: Build Windows editor target for cooking
+        shell: powershell
+        run: |
+          $build = Join-Path $env:UE_ROOT 'Engine\Build\BatchFiles\Build.bat'
+          $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\MindControl.uproject'
+          & $build MindControlEditor Win64 Development "-Project=$project" -WaitMutex -NoHotReload
+          if ($LASTEXITCODE -ne 0) { throw "MindControlEditor build failed with exit code $LASTEXITCODE" }
+          $receipt = Join-Path $env:GITHUB_WORKSPACE 'unreal\Binaries\Win64\MindControlEditor.target'
+          if (!(Test-Path $receipt)) { throw "Editor target receipt missing: $receipt" }
       - name: Build and package Android APK
         shell: powershell
         run: |
