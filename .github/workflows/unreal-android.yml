@@ -63,91 +63,20 @@ jobs:
           $root = Join-Path $env:GITHUB_WORKSPACE 'unreal'
           $destination = Join-Path $env:GITHUB_WORKSPACE 'unreal-android-symbols'
           New-Item -ItemType Directory -Path $destination -Force | Out-Null
-          $sources = @('Binaries\\Android', 'Intermediate\\Android', 'PackagedAndroid')
-          $found = 0
-          foreach ($source in $sources) {
-            $folder = Join-Path $root $source
+          $folders = @('Binaries/Android', 'Intermediate/Android', 'PackagedAndroid')
+          foreach ($item in $folders) {
+            $folder = Join-Path $root $item
             if (!(Test-Path $folder)) { continue }
-            Get-ChildItem -LiteralPath $folder -File -Recurse -ErrorAction SilentlyContinue |
-              Where-Object { $_.Name -match '\\.(so|sym|debug|symbols)
-        if: failure()
-        shell: powershell
-        run: |
-          $diagnostics = Join-Path $env:GITHUB_WORKSPACE 'unreal-build-diagnostics'
-          New-Item -ItemType Directory -Path $diagnostics -Force | Out-Null
-          $root = Join-Path $env:APPDATA 'Unreal Engine\AutomationTool\Logs'
-          if (Test-Path $root) {
-            Get-ChildItem -Path $root -File -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in @('.txt', '.log') } | ForEach-Object {
-              $relative = $_.FullName.Substring($root.Length).TrimStart('\')
-              $destination = Join-Path $diagnostics $relative
-              New-Item -ItemType Directory -Path (Split-Path $destination) -Force | Out-Null
-              Copy-Item $_.FullName $destination -Force -ErrorAction SilentlyContinue
-            }
-          }
-      - name: Upload Unreal diagnostic logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: MindControl-Unreal-Build-Logs
-          path: unreal-build-diagnostics/**
-          if-no-files-found: warn
-      - name: Verify APK exists
-        shell: powershell
-        run: |
-          $apks = @(Get-ChildItem -Path 'unreal\PackagedAndroid' -Filter '*.apk' -Recurse -ErrorAction SilentlyContinue)
-          if ($apks.Count -eq 0) { throw 'No APK was produced.' }
-          $apks | ForEach-Object { Write-Host $_.FullName }
-      - name: Upload Android APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: MindControl-Unreal-Android-APK
-          path: unreal/PackagedAndroid/**/*.apk
-          if-no-files-found: error
- -or $_.Name -match '\\.so\\.debug
-        if: failure()
-        shell: powershell
-        run: |
-          $diagnostics = Join-Path $env:GITHUB_WORKSPACE 'unreal-build-diagnostics'
-          New-Item -ItemType Directory -Path $diagnostics -Force | Out-Null
-          $root = Join-Path $env:APPDATA 'Unreal Engine\AutomationTool\Logs'
-          if (Test-Path $root) {
-            Get-ChildItem -Path $root -File -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in @('.txt', '.log') } | ForEach-Object {
-              $relative = $_.FullName.Substring($root.Length).TrimStart('\')
-              $destination = Join-Path $diagnostics $relative
-              New-Item -ItemType Directory -Path (Split-Path $destination) -Force | Out-Null
-              Copy-Item $_.FullName $destination -Force -ErrorAction SilentlyContinue
-            }
-          }
-      - name: Upload Unreal diagnostic logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: MindControl-Unreal-Build-Logs
-          path: unreal-build-diagnostics/**
-          if-no-files-found: warn
-      - name: Verify APK exists
-        shell: powershell
-        run: |
-          $apks = @(Get-ChildItem -Path 'unreal\PackagedAndroid' -Filter '*.apk' -Recurse -ErrorAction SilentlyContinue)
-          if ($apks.Count -eq 0) { throw 'No APK was produced.' }
-          $apks | ForEach-Object { Write-Host $_.FullName }
-      - name: Upload Android APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: MindControl-Unreal-Android-APK
-          path: unreal/PackagedAndroid/**/*.apk
-          if-no-files-found: error
- } |
+            Get-ChildItem -LiteralPath $folder -Recurse -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Extension -in @('.so', '.sym', '.debug', '.symbols') } |
               ForEach-Object {
-                $relative = $_.FullName.Substring($root.Length).TrimStart('\\')
+                $relative = $_.FullName.Substring($root.Length).TrimStart([char]92)
                 $target = Join-Path $destination $relative
                 New-Item -ItemType Directory -Path (Split-Path $target) -Force | Out-Null
                 Copy-Item -LiteralPath $_.FullName -Destination $target -Force
-                Write-Host "Collected symbol candidate: $relative"
-                $found++
+                Write-Host "Collected: $relative"
               }
           }
-          if ($found -eq 0) { Write-Warning 'No native symbol files found; Android packaging may be stripping them.' }
       - name: Upload Android native debug symbols
         if: success()
         uses: actions/upload-artifact@v4
@@ -165,7 +94,7 @@ jobs:
           $root = Join-Path $env:APPDATA 'Unreal Engine\AutomationTool\Logs'
           if (Test-Path $root) {
             Get-ChildItem -Path $root -File -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in @('.txt', '.log') } | ForEach-Object {
-              $relative = $_.FullName.Substring($root.Length).TrimStart('\')
+              $relative = $_.FullName.Substring($root.Length).TrimStart([char]92)
               $destination = Join-Path $diagnostics $relative
               New-Item -ItemType Directory -Path (Split-Path $destination) -Force | Out-Null
               Copy-Item $_.FullName $destination -Force -ErrorAction SilentlyContinue
