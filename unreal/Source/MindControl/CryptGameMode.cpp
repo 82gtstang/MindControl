@@ -39,6 +39,11 @@ void ACryptGameMode::BeginPlay()
   return;
  }
  if(GEngine) GEngine->AddOnScreenDebugMessage(-1,15.f,FColor::Green,TEXT("Mind Control: loading town and monsters"));
+ // Isolation build: skip procedural world generation to test Android stability.
+ UE_LOG(LogTemp,Warning,TEXT("MindControl isolation build: world generation disabled"));
+ FFileHelper::SaveStringToFile(TEXT("READY: isolation build"),*DiagnosticPath);
+ if(GEngine) GEngine->AddOnScreenDebugMessage(-1,60.f,FColor::Yellow,TEXT("TEST BUILD: WORLD DISABLED - does the game stay open?"));
+ return;
  // World units are centimeters; cubes are 100 cm per side.
  PlaceBlock(FVector(0,0,-70),FVector(110,70,1)); // walkable ground
  PlaceBlock(FVector(0,0,-12),FVector(110,4,.12)); // main road
