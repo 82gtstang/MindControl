@@ -26,7 +26,7 @@ void ACryptGameMode::BeginPlay()
  Super::BeginPlay();
  // Stateless stability build: no persisted startup flags or data-file writes.
  UE_LOG(LogTemp,Warning,TEXT("MindControl stability test: no saved startup state"));
- if(GEngine) GEngine->AddOnScreenDebugMessage(-1,60.f,FColor::Yellow,TEXT("STABILITY TEST - world disabled"));
+ if(GEngine) GEngine->AddOnScreenDebugMessage(-1,8.f,FColor::Yellow,TEXT("MindControl - detailed world prototype"));
  // The world can be re-enabled explicitly for future diagnostics.
  if(true) // Diagnostic: generate basic collision ground and world on launch
  {
@@ -78,7 +78,77 @@ void ACryptGameMode::BeginPlay()
  PlaceBlock(FVector(2700,3200,180),FVector(1.5f,30,5));
  for(int32 i=0;i<5;++i)
   GetWorld()->SpawnActor<ACryptMonster>(FVector(200+i*380.f,3000.f+(i%2)*300.f,120.f),FRotator::ZeroRotator);
- UE_LOG(LogTemp,Display,TEXT("MindControl: world generation completed"));
+ // Roadside timber fences, lantern posts, rubble, and a village square.
+ for(int32 i=0;i<26;++i)
+ {
+  const float X=-2700.f+i*275.f;
+  for(int32 Side=-1;Side<=1;Side+=2)
+  {
+   const float Y=Side*420.f;
+   PlaceBlock(FVector(X,Y,35),FVector(.22f,.22f,1.35f));
+   PlaceBlock(FVector(X+135.f,Y,82),FVector(2.7f,.12f,.15f));
+  }
+ }
+ for(int32 i=0;i<12;++i)
+ {
+  const float X=-2300.f+i*540.f;
+  const float Y=(i%2==0?1.f:-1.f)*490.f;
+  PlaceBlock(FVector(X,Y,135),FVector(.18f,.18f,3.f));
+  PlaceBlock(FVector(X,Y,290),FVector(.55f,.55f,.45f));
+ }
+ // House doorways, chimneys, shutters, and roof beams.
+ for(int32 i=0;i<6;++i)
+ {
+  const float X=750.f+(i/2)*650.f;
+  const float Y=(i%2==0?850.f:-850.f);
+  const float Front=Y+(i%2==0?-220.f:220.f);
+  PlaceBlock(FVector(X,Front,95),FVector(1.15f,.18f,2.0f));
+  PlaceBlock(FVector(X+155.f,Y,540),FVector(.65f,.65f,3.2f));
+  for(int32 j=-1;j<=1;j+=2)
+  {
+   PlaceBlock(FVector(X+j*145.f,Front,240),FVector(.7f,.22f,.85f));
+   PlaceBlock(FVector(X+j*145.f,Front+(i%2==0?-16.f:16.f),240),FVector(.08f,.28f,.85f));
+  }
+ }
+ // A cobbled village square with market stalls and stone benches.
+ PlaceBlock(FVector(2400,0,-7),FVector(22,18,.14f));
+ for(int32 i=0;i<9;++i)
+ {
+  const float X=1600.f+(i%3)*750.f;
+  const float Y=-650.f+(i/3)*650.f;
+  PlaceBlock(FVector(X,Y,18),FVector(1.4f,1.4f,.22f));
+ }
+ for(int32 i=0;i<4;++i)
+ {
+  const float X=1550.f+i*580.f;
+  PlaceBlock(FVector(X,1000,110),FVector(3.1f,1.5f,.25f));
+  for(int32 j=-1;j<=1;j+=2)
+   PlaceBlock(FVector(X+j*125.f,1000,60),FVector(.22f,.22f,1.25f));
+ }
+ // Castle battlements and entrance arch framing.
+ for(int32 i=0;i<12;++i)
+ {
+  const float X=3850.f+i*105.f;
+  PlaceBlock(FVector(X,-1050,675),FVector(.7f,1.3f,1.0f));
+  PlaceBlock(FVector(X,1050,675),FVector(.7f,1.3f,1.0f));
+ }
+ PlaceBlock(FVector(3790,-260,310),FVector(1.1f,1.1f,6.5f));
+ PlaceBlock(FVector(3790,260,310),FVector(1.1f,1.1f,6.5f));
+ PlaceBlock(FVector(3790,0,660),FVector(1.1f,6.3f,.8f));
+ // Ruined dungeon chambers with partial partitions and stone rubble.
+ for(int32 i=0;i<5;++i)
+ {
+  const float X=-250.f+i*550.f;
+  PlaceBlock(FVector(X,2600,90),FVector(.8f,9.f,2.7f));
+  PlaceBlock(FVector(X,3750,90),FVector(.8f,9.f,2.7f));
+ }
+ for(int32 i=0;i<22;++i)
+ {
+  const float X=-450.f+(i*317%2750);
+  const float Y=1900.f+(i*491%2400);
+  PlaceBlock(FVector(X,Y,12),FVector(.35f+(i%3)*.2f,.5f,.35f));
+ }
+ UE_LOG(LogTemp,Display,TEXT("MindControl: detailed world generation completed"));
  if(GEngine) GEngine->AddOnScreenDebugMessage(-1,15.f,FColor::Green,TEXT("Mind Control: town is ahead - follow the road"));
  }
 }
