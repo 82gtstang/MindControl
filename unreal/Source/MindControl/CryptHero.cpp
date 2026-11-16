@@ -8,6 +8,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/GameViewportClient.h"
 #include "UObject/ConstructorHelpers.h"
 ACryptHero::ACryptHero()
 {
@@ -44,6 +45,7 @@ void ACryptHero::Tick(float DeltaSeconds) { Super::Tick(DeltaSeconds); AttackCoo
 void ACryptHero::SetupPlayerInputComponent(UInputComponent* Input)
 {
  Super::SetupPlayerInputComponent(Input);
+ Input->BindTouch(IE_Pressed,this,&ACryptHero::TouchPressed);
  Input->BindAxis("MoveForward",this,&ACryptHero::MoveForward);
  Input->BindAxis("MoveRight",this,&ACryptHero::MoveRight);
  Input->BindAxis("Turn",this,&ACryptHero::Turn);
@@ -77,3 +79,18 @@ void ACryptHero::SpinAttack()
 }
 void ACryptHero::Interact() { /* Trace for treasure and dungeon portal actors to be implemented */ }
 void ACryptHero::EquipSword(bool bEquip) { bSwordEquipped=bEquip; SwordVisual->SetVisibility(bEquip); }
+
+void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
+{
+ if(!GEngine || !GEngine->GameViewport) return;
+ FVector2D ViewSize;
+ GEngine->GameViewport->GetViewportSize(ViewSize);
+ if(ViewSize.X<=0 || ViewSize.Y<=0) return;
+ const float S=FMath::Max(.7f,FMath::Min(ViewSize.X/1600.f,ViewSize.Y/900.f));
+ auto Hit=[&](float X,float Y) { return FMath::Abs(Location.X-X)<78.f*S && FMath::Abs(Location.Y-Y)<78.f*S; };
+ const float W=ViewSize.X,H=ViewSize.Y;
+ if(Hit(W-110*S,H-125*S)) Jump();
+ else if(Hit(W-280*S,H-125*S)) Attack();
+ else if(Hit(W-110*S,H-300*S)) SpinAttack();
+ else if(Hit(W-280*S,H-300*S)) ToggleInventory();
+}
