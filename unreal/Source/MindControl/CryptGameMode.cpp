@@ -1,6 +1,7 @@
 #include "CryptGameMode.h"
 #include "CryptHero.h"
 #include "CryptMonster.h"
+#include "CryptMobileHUD.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -8,7 +9,7 @@
 #include "Engine/Engine.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
-ACryptGameMode::ACryptGameMode() { DefaultPawnClass = ACryptHero::StaticClass(); }
+ACryptGameMode::ACryptGameMode() { DefaultPawnClass = ACryptHero::StaticClass(); HUDClass = ACryptMobileHUD::StaticClass(); }
 void ACryptGameMode::PlaceBlock(const FVector& Location,const FVector& Scale,const FRotator& Rotation)
 {
  UWorld* World=GetWorld(); if(!World) return;
@@ -64,6 +65,19 @@ void ACryptGameMode::BeginPlay()
   if(!GetWorld()->SpawnActor<ACryptMonster>(P,FRotator::ZeroRotator))
    UE_LOG(LogTemp,Warning,TEXT("MindControl: failed to spawn monster %d"),i);
  }
+ // Open-air stone dungeon: a walk-in ruin with pillars, treasure marker and guardians.
+ PlaceBlock(FVector(1000,3200,-70),FVector(36,30,1));
+ for(int32 i=0;i<8;++i)
+ {
+  const float X=-600.f+(i%4)*950.f;
+  const float Y=1800.f+(i/4)*2800.f;
+  PlaceBlock(FVector(X,Y,160),FVector(1.5f,1.5f,4.5f));
+ }
+ PlaceBlock(FVector(1000,4650,180),FVector(20,1.5f,5));
+ PlaceBlock(FVector(-700,3200,180),FVector(1.5f,30,5));
+ PlaceBlock(FVector(2700,3200,180),FVector(1.5f,30,5));
+ for(int32 i=0;i<5;++i)
+  GetWorld()->SpawnActor<ACryptMonster>(FVector(200+i*380.f,3000.f+(i%2)*300.f,120.f),FRotator::ZeroRotator);
  UE_LOG(LogTemp,Display,TEXT("MindControl: world generation completed"));
  if(GEngine) GEngine->AddOnScreenDebugMessage(-1,15.f,FColor::Green,TEXT("Mind Control: town is ahead - follow the road"));
  }
