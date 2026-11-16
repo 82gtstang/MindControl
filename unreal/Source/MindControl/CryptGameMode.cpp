@@ -15,7 +15,7 @@ void ACryptGameMode::PlaceBlock(const FVector& Location,const FVector& Scale,con
  Block->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
  Block->GetStaticMeshComponent()->SetStaticMesh(Cube);
  Block->SetActorScale3D(Scale);
- Block->SetMobility(EComponentMobility::Static);
+ Block->GetStaticMeshComponent()->SetMobility(EComponentMobility::Static);
 }
 void ACryptGameMode::BeginPlay()
 {
