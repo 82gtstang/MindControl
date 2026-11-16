@@ -1,0 +1,198 @@
+name: Unreal Engine 5.7 Android APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [unreal5-prototype]
+    paths:
+      - 'unreal/**'
+      - '.github/workflows/unreal-android.yml'
+jobs:
+  package-android:
+    runs-on: [self-hosted, Windows, X64, unreal-5-7, android-sdk]
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Unreal 5.7 and Android toolchain
+        shell: powershell
+        run: |
+          $engine = "C:\Users\82gts\Epic Games\UE_5.7"
+          $uat = Join-Path $engine 'Engine\Build\BatchFiles\RunUAT.bat'
+          if (!(Test-Path $uat)) { throw "Unreal Engine not found at $engine. Set UE_ROOT as a system environment variable and restart the runner service." }
+          $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
+          if (!(Test-Path $sdk)) { throw "Android SDK not found at $sdk. Set ANDROID_HOME as a system environment variable accessible to the runner service." }
+          "UE_ROOT=$engine" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "ANDROID_HOME=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "ANDROID_SDK_ROOT=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Unreal Engine: $engine"
+          Write-Host "Android SDK: $sdk"
+      - name: Clear stale project build metadata
+        shell: powershell
+        run: |
+          $projectRoot = Join-Path $env:GITHUB_WORKSPACE 'unreal'
+          foreach ($folder in @('Intermediate', 'Binaries', 'PackagedAndroid')) {
+            $target = Join-Path $projectRoot $folder
+            if (Test-Path $target) {
+              Write-Host "Removing generated project folder: $target"
+              Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop
+            }
+          }
+      - name: Build Windows editor target for cooking
+        shell: powershell
+        run: |
+          $build = Join-Path $env:UE_ROOT 'Engine\Build\BatchFiles\Build.bat'
+          $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\MindControl.uproject'
+          & $build MindControlEditor Win64 Development "-Project=$project" -WaitMutex -NoHotReload
+          if ($LASTEXITCODE -ne 0) { throw "MindControlEditor build failed with exit code $LASTEXITCODE" }
+          $receipt = Join-Path $env:GITHUB_WORKSPACE 'unreal\Binaries\Win64\MindControlEditor.target'
+          if (!(Test-Path $receipt)) { throw "Editor target receipt missing: $receipt" }
+      - name: Build and package Android APK
+        shell: powershell
+        run: |
+          $uat = Join-Path $env:UE_ROOT 'Engine\Build\BatchFiles\RunUAT.bat'
+          $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\MindControl.uproject'
+          $output = Join-Path $env:GITHUB_WORKSPACE 'unreal\PackagedAndroid'
+          if (!(Test-Path $project)) { throw "Unreal project not found: $project" }
+          & $uat BuildCookRun -project="$project" -noP4 -platform=Android -clientconfig=Development -nocompileeditor -unattended -build -cook -stage -pak -package -archive -archivedirectory="$output" -utf8output
+          if ($LASTEXITCODE -ne 0) { throw "Unreal BuildCookRun failed with exit code $LASTEXITCODE" }
+      - name: Collect Android native debug symbols
+        if: success()
+        shell: powershell
+        run: |
+          $root = Join-Path $env:GITHUB_WORKSPACE 'unreal'
+          $destination = Join-Path $env:GITHUB_WORKSPACE 'unreal-android-symbols'
+          New-Item -ItemType Directory -Path $destination -Force | Out-Null
+          $folders = @('Binaries/Android', 'Intermediate/Android', 'PackagedAndroid')
+          foreach ($item in $folders) {
+            $folder = Join-Path $root $item
+            if (!(Test-Path $folder)) { continue }
+            Get-ChildItem -LiteralPath $folder -Recurse -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Extension -in @('.so', '.sym', '.debug', '.symbols') } |
+              ForEach-Object {
+                $relative = $_.FullName.Substring($root.Length).TrimStart([char]92)
+                $target = Join-Path $destination $relative
+                New-Item -ItemType Directory -Path (Split-Path $target) -Force | Out-Null
+                Copy-Item -LiteralPath $_.FullName -Destination $target -Force
+                Write-Host "Collected: $relative"
+              }
+          }
+      - name: Upload Android native debug symbols
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MindControl-Android-Debug-Symbols
+          path: unreal-android-symbols/**
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Split large native symbol files into downloadable chunks
+        if: success()
+        shell: powershell
+        run: |
+          $source = Join-Path $env:GITHUB_WORKSPACE 'unreal-android-symbols'
+          $output = Join-Path $env:GITHUB_WORKSPACE 'unreal-symbol-chunks'
+          New-Item -ItemType Directory -Path $output -Force | Out-Null
+          $chunkSize = 180MB
+          $index = 0
+          Get-ChildItem -LiteralPath $source -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Length -gt 200MB } |
+            ForEach-Object {
+              $file = $_
+              $stream = [System.IO.File]::OpenRead($file.FullName)
+              try {
+                $part = 0
+                $buffer = New-Object byte[] (4MB)
+                while ($stream.Position -lt $stream.Length) {
+                  $index++
+                  $part++
+                  $name = 'chunk-{0:D3}.bin' -f $index
+                  $target = Join-Path $output $name
+                  $dest = [System.IO.File]::Create($target)
+                  try {
+                    $written = 0L
+                    while ($written -lt $chunkSize -and $stream.Position -lt $stream.Length) {
+                      $take = [int][Math]::Min($buffer.Length, [Math]::Min($chunkSize - $written, $stream.Length - $stream.Position))
+                      $read = $stream.Read($buffer, 0, $take)
+                      if ($read -le 0) { break }
+                      $dest.Write($buffer, 0, $read)
+                      $written += $read
+                    }
+                  } finally { $dest.Dispose() }
+                  Write-Host "$name is part $part of $($file.Name), bytes=$written"
+                }
+              } finally { $stream.Dispose() }
+            }
+      - name: Upload symbol chunks 001-002
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MindControl-Symbol-Chunks-001-002
+          path: |
+            unreal-symbol-chunks/chunk-001.bin
+            unreal-symbol-chunks/chunk-002.bin
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Upload symbol chunks 003-004
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MindControl-Symbol-Chunks-003-004
+          path: |
+            unreal-symbol-chunks/chunk-003.bin
+            unreal-symbol-chunks/chunk-004.bin
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Upload symbol chunks 005-006
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MindControl-Symbol-Chunks-005-006
+          path: |
+            unreal-symbol-chunks/chunk-005.bin
+            unreal-symbol-chunks/chunk-006.bin
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Upload symbol chunks 007-008
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MindControl-Symbol-Chunks-007-008
+          path: |
+            unreal-symbol-chunks/chunk-007.bin
+            unreal-symbol-chunks/chunk-008.bin
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Preserve Unreal build logs on failure
+        if: failure()
+        shell: powershell
+        run: |
+          $diagnostics = Join-Path $env:GITHUB_WORKSPACE 'unreal-build-diagnostics'
+          New-Item -ItemType Directory -Path $diagnostics -Force | Out-Null
+          $root = Join-Path $env:APPDATA 'Unreal Engine\AutomationTool\Logs'
+          if (Test-Path $root) {
+            Get-ChildItem -Path $root -File -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in @('.txt', '.log') } | ForEach-Object {
+              $relative = $_.FullName.Substring($root.Length).TrimStart([char]92)
+              $destination = Join-Path $diagnostics $relative
+              New-Item -ItemType Directory -Path (Split-Path $destination) -Force | Out-Null
+              Copy-Item $_.FullName $destination -Force -ErrorAction SilentlyContinue
+            }
+          }
+      - name: Upload Unreal diagnostic logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MindControl-Unreal-Build-Logs
+          path: unreal-build-diagnostics/**
+          if-no-files-found: warn
+      - name: Verify APK exists
+        shell: powershell
+        run: |
+          $apks = @(Get-ChildItem -Path 'unreal\PackagedAndroid' -Filter '*.apk' -Recurse -ErrorAction SilentlyContinue)
+          if ($apks.Count -eq 0) { throw 'No APK was produced.' }
+          $apks | ForEach-Object { Write-Host $_.FullName }
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MindControl-Unreal-Android-APK
+          path: unreal/PackagedAndroid/**/*.apk
+          if-no-files-found: error
