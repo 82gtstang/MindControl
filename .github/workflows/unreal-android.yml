@@ -17,7 +17,7 @@ jobs:
       - name: Verify Unreal 5.7 and Android toolchain
         shell: powershell
         run: |
-          $engine = if ($env:UE_ROOT) { $env:UE_ROOT } else { "D:\unreal\UE_5.7" }
+          $engine = "C:\Users\82gts\Epic Games\UE_5.7"
           $uat = Join-Path $engine 'Engine\Build\BatchFiles\RunUAT.bat'
           if (!(Test-Path $uat)) { throw "Unreal Engine not found at $engine. Set UE_ROOT as a system environment variable and restart the runner service." }
           $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
