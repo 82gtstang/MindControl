@@ -9,6 +9,8 @@
 #include "Misc/FileHelper.h"
 #include "HAL/FileManager.h"
 #include "Engine/Engine.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 ACryptGameMode::ACryptGameMode() { DefaultPawnClass = ACryptHero::StaticClass(); }
 void ACryptGameMode::PlaceBlock(const FVector& Location,const FVector& Scale,const FRotator& Rotation)
 {
@@ -43,7 +45,8 @@ void ACryptGameMode::BeginPlay()
  UE_LOG(LogTemp,Warning,TEXT("MindControl isolation build: world generation disabled"));
  FFileHelper::SaveStringToFile(TEXT("READY: isolation build"),*DiagnosticPath);
  if(GEngine) GEngine->AddOnScreenDebugMessage(-1,60.f,FColor::Yellow,TEXT("TEST BUILD: WORLD DISABLED - does the game stay open?"));
- return;
+ if(FParse::Param(FCommandLine::Get(), TEXT("MindControlGenerateWorld")))
+ {
  // World units are centimeters; cubes are 100 cm per side.
  PlaceBlock(FVector(0,0,-70),FVector(110,70,1)); // walkable ground
  PlaceBlock(FVector(0,0,-12),FVector(110,4,.12)); // main road
@@ -82,4 +85,5 @@ void ACryptGameMode::BeginPlay()
  FFileHelper::SaveStringToFile(TEXT("READY: world generation completed"),*DiagnosticPath);
  UE_LOG(LogTemp,Display,TEXT("MindControl: world generation completed"));
  if(GEngine) GEngine->AddOnScreenDebugMessage(-1,15.f,FColor::Green,TEXT("Mind Control: town is ahead - follow the road"));
+ }
 }
