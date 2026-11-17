@@ -1,0 +1,57 @@
+name: Ocean Serenity experimental auto-rig
+on:
+  workflow_dispatch:
+  push:
+    branches: [diagnostic/android-landscape-startup]
+    paths:
+      - 'tools/rig_ocean_serenity.py'
+      - '.github/workflows/ocean-serenity-rig.yml'
+jobs:
+  rig:
+    runs-on: [self-hosted, Windows, X64, unreal-5-7, android-sdk]
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Ocean Serenity OBJ
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://github.com/82gtstang/MindControl/releases/download/ocean-serenity-test/Ocean_Serenity_Blender_Starter.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'OceanSerenityRig'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Invoke-WebRequest -Uri $url -OutFile (Join-Path $dir 'source.zip')
+          Expand-Archive -Path (Join-Path $dir 'source.zip') -DestinationPath (Join-Path $dir 'input') -Force
+          $obj = Get-ChildItem (Join-Path $dir 'input') -Filter '*.obj' -Recurse -File | Select-Object -First 1
+          if (-not $obj) { throw 'No OBJ in Ocean Serenity release ZIP' }
+          "OCEAN_OBJ=$($obj.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "OCEAN_OUTPUT=$(Join-Path $env:GITHUB_WORKSPACE 'rig-output\OceanSerenity.fbx')" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Find Blender
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $candidates = @()
+          $command = Get-Command blender.exe -ErrorAction SilentlyContinue
+          if ($command) { $candidates += $command.Source }
+          $candidates += @(Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
+          $blender = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $blender) {
+            throw 'Blender not found on Windows runner. Install Blender 4.3+ once on the runner, or add blender.exe to PATH; no installation is needed on the Android phone.'
+          }
+          "BLENDER_EXE=$blender" | Out-File -FilePath $env:GITHUB_ENV -Append
+          & $blender --version
+      - name: Generate experimental A-pose FBX
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & $env:BLENDER_EXE -b -t 2 --python 'tools/rig_ocean_serenity.py' -- "$env:OCEAN_OBJ" "$env:OCEAN_OUTPUT"
+          if ($LASTEXITCODE -ne 0) { throw "Rigging failed with exit code $LASTEXITCODE" }
+          if (!(Test-Path $env:OCEAN_OUTPUT)) { throw 'Rigged FBX was not exported' }
+          if ((Get-Item $env:OCEAN_OUTPUT).Length -lt 1024) { throw 'FBX suspiciously small' }
+      - name: Upload rigged model and report
+        uses: actions/upload-artifact@v4
+        with:
+          name: OceanSerenity-Experimental-Rig-FBX
+          path: rig-output/*
+          if-no-files-found: error
