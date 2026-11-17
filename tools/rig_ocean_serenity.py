@@ -4,7 +4,7 @@ This is a first-pass anatomical estimate, not a production-quality rig.
 """
 import bpy, sys, math, json
 from pathlib import Path
-from mathutils import Vector
+from mathutils import Vector, Quaternion
 
 args = sys.argv[sys.argv.index("--")+1:]
 if len(args) != 2:
@@ -188,15 +188,38 @@ def pose_action(name,frames):
             pb.rotation_mode="XYZ"
             pb.rotation_euler=(0,0,0)
             pb.location=(0,0,0)
-        # Use shoulder bending, not bone-axis twisting, for relaxed arm posture.
-        for side,sign in (("L",-1),("R",1)):
-            shoulder=rig.pose.bones.get("upperarm_"+side)
-            if shoulder: shoulder.rotation_euler[2]=math.radians(sign*12)
+        # Map shoulder motion to anatomical WORLD axes through each bone's
+        # rest orientation. Euler indices alone are unreliable for arm bones.
+        arm_motion={}
         for bone,axis,angle in angles:
-            pb=rig.pose.bones.get(bone)
-            if pb: pb.rotation_euler[axis]+=math.radians(angle)
+            if bone.startswith(("upperarm_","forearm_")):
+                arm_motion[bone]=arm_motion.get(bone,0)+angle
+            else:
+                pb=rig.pose.bones.get(bone)
+                if pb: pb.rotation_euler[axis]+=math.radians(angle)
+        for side,sign in (("L",-1),("R",1)):
+            name="upperarm_"+side
+            pb=rig.pose.bones.get(name)
+            if not pb: continue
+            # Downward arm correction around model Y; forward/back swing
+            # around X. Convert both to the bone's own rest-space.
+            rest=pb.bone.matrix_local.to_3x3()
+            down_axis=rest.inverted() @ Vector((0,1,0))
+            swing_axis=rest.inverted() @ Vector((1,0,0))
+            down=Quaternion(down_axis,math.radians(sign*38))
+            swing=Quaternion(swing_axis,math.radians(arm_motion.get(name,0)))
+            pb.rotation_mode="QUATERNION"
+            pb.rotation_quaternion=down @ swing
+        for side in ("L","R"):
+            name="forearm_"+side
+            pb=rig.pose.bones.get(name)
+            if pb:
+                rest=pb.bone.matrix_local.to_3x3()
+                axis=rest.inverted() @ Vector((1,0,0))
+                pb.rotation_mode="QUATERNION"
+                pb.rotation_quaternion=Quaternion(axis,math.radians(arm_motion.get(name,0)))
         for pb in rig.pose.bones:
-            pb.keyframe_insert(data_path="rotation_euler",frame=frame,group=pb.name)
+            pb.keyframe_insert(data_path="rotation_quaternion" if pb.rotation_mode=="QUATERNION" else "rotation_euler",frame=frame,group=pb.name)
             if pb.name=="root": pb.keyframe_insert(data_path="location",frame=frame,group=pb.name)
     action.use_fake_user=True
     # Keep all animations in the FBX as separate named NLA takes.
