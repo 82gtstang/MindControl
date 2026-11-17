@@ -6,6 +6,7 @@ on:
     paths:
       - 'tools/rig_ocean_serenity.py'
       - '.github/workflows/ocean-serenity-rig.yml'
+      - 'tools/preview_ocean_serenity.py'
 jobs:
   rig:
     runs-on: [self-hosted, Windows, X64, unreal-5-7, android-sdk]
@@ -60,4 +61,16 @@ jobs:
         with:
           name: OceanSerenity-Experimental-Rig-FBX
           path: rig-output/*
+          if-no-files-found: error
+      - name: Render six animation preview sequences
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & $env:BLENDER_EXE -b -t 2 --python 'tools/preview_ocean_serenity.py' -- "$env:OCEAN_OUTPUT" "rig-preview"
+          if ($LASTEXITCODE -ne 0) { throw "Animation preview render failed ($LASTEXITCODE)" }
+      - name: Upload animation preview frames
+        uses: actions/upload-artifact@v4
+        with:
+          name: OceanSerenity-Animation-Previews
+          path: rig-preview/*
           if-no-files-found: error
