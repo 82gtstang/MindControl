@@ -15,7 +15,7 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          if ($env:COMPUTERNAME -ine 'actions-runner') {
+          if ($env:COMPUTERNAME -ine 'MSI') {
             throw "Refusing to modify firewall on unexpected host: $env:COMPUTERNAME"
           }
           $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
