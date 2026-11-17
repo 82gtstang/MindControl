@@ -23,9 +23,19 @@ ACryptHero::ACryptHero()
  CameraBoom->bUsePawnControlRotation = true;
  FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
  FollowCamera->SetupAttachment(CameraBoom);
+ // Prefer the imported Ocean Serenity rig; retain Countess and silhouette fallbacks.
+ static ConstructorHelpers::FObjectFinder<USkeletalMesh> OceanMesh(TEXT("/Game/Characters/OceanSerenity/OceanSerenity.OceanSerenity"));
  // Load the licensed Countess mesh if its Fab content has been installed locally.
  static ConstructorHelpers::FObjectFinder<USkeletalMesh> CountessMesh(TEXT("/Game/ParagonCountess/Characters/Heroes/Countess/Meshes/Countess.Countess"));
- const bool bHasCountess = CountessMesh.Succeeded();
+ const bool bHasOcean = OceanMesh.Succeeded();
+ const bool bHasCountess = !bHasOcean && CountessMesh.Succeeded();
+ if(bHasOcean)
+ {
+  GetMesh()->SetSkeletalMesh(OceanMesh.Object);
+  GetMesh()->SetRelativeLocation(FVector(0,0,-88));
+  GetMesh()->SetRelativeRotation(FRotator(0,-90,0));
+  GetMesh()->SetRelativeScale3D(FVector(1,1,1));
+ }
  if(bHasCountess)
  {
   GetMesh()->SetSkeletalMesh(CountessMesh.Object);
@@ -43,15 +53,15 @@ ACryptHero::ACryptHero()
  Head->SetRelativeScale3D(FVector(.36f,.36f,.39f));
  static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
  if(Sphere.Succeeded()) { Torso->SetStaticMesh(Sphere.Object); Head->SetStaticMesh(Sphere.Object); }
- Torso->SetVisibility(!bHasCountess);
- Head->SetVisibility(!bHasCountess);
+ Torso->SetVisibility(!bHasOcean && !bHasCountess);
+ Head->SetVisibility(!bHasOcean && !bHasCountess);
  // Temporary stylized female silhouette with long hair until a licensed skeletal mesh is imported.
  UStaticMeshComponent* Hair=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeroLongHair"));
  Hair->SetupAttachment(RootComponent);
  Hair->SetRelativeLocation(FVector(-19,0,68));
  Hair->SetRelativeScale3D(FVector(.35f,.48f,.80f));
  if(Sphere.Succeeded()) Hair->SetStaticMesh(Sphere.Object);
- Hair->SetVisibility(!bHasCountess);
+ Hair->SetVisibility(!bHasOcean && !bHasCountess);
  SwordVisual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("SwordVisual"));
  SwordVisual->SetupAttachment(GetMesh(), TEXT("hand_rSocket"));
  SwordVisual->SetRelativeScale3D(FVector(.08f,.08f,1.0f));
