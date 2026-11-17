@@ -44,12 +44,12 @@ ACryptHero::ACryptHero()
   // do not rotate the capsule, movement directions, or follow camera.
   GetMesh()->SetRelativeRotation(FRotator(0,-90,-90));
   GetMesh()->SetRelativeScale3D(FVector(1,1,1));
-  static ConstructorHelpers::FObjectFinder<UAnimSequence> Idle(TEXT("/Game/Characters/OceanSerenity/Ocean_Idle.Ocean_Idle"));
-  static ConstructorHelpers::FObjectFinder<UAnimSequence> Walk(TEXT("/Game/Characters/OceanSerenity/Ocean_Walk.Ocean_Walk"));
-  static ConstructorHelpers::FObjectFinder<UAnimSequence> Run(TEXT("/Game/Characters/OceanSerenity/Ocean_Run.Ocean_Run"));
-  static ConstructorHelpers::FObjectFinder<UAnimSequence> JumpAnim(TEXT("/Game/Characters/OceanSerenity/Ocean_Jump.Ocean_Jump"));
-  static ConstructorHelpers::FObjectFinder<UAnimSequence> AttackAnim(TEXT("/Game/Characters/OceanSerenity/Ocean_Attack.Ocean_Attack"));
-  static ConstructorHelpers::FObjectFinder<UAnimSequence> SpinAnim(TEXT("/Game/Characters/OceanSerenity/Ocean_Spin.Ocean_Spin"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> Idle(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Idle.OceanSerenityOcean_Idle"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> Walk(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Walk.OceanSerenityOcean_Walk"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> Run(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Run.OceanSerenityOcean_Run"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> JumpAnim(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Jump.OceanSerenityOcean_Jump"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> AttackAnim(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Attack.OceanSerenityOcean_Attack"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> SpinAnim(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Spin.OceanSerenityOcean_Spin"));
   OceanIdle=Idle.Object; OceanWalk=Walk.Object; OceanRun=Run.Object;
   OceanJump=JumpAnim.Object; OceanAttack=AttackAnim.Object; OceanSpin=SpinAnim.Object;
   // Start the relaxed idle immediately; never leave the mesh in FBX reference pose.
