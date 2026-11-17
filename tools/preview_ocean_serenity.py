@@ -79,7 +79,8 @@ for action in actions:
     for track in rig.animation_data.nla_tracks:track.mute=True
     rig.animation_data.action=action
     start,end=action.frame_range
-    frames=[int(start+(end-start)*f) for f in (.1,.5,.9)]
+    fractions=(0,.125,.25,.375,.5,.625,.75,.875,1) if "spin" in name.lower() else (.1,.5,.9)
+    frames=[int(start+(end-start)*f) for f in fractions]
     samples=[]
     for index,frame in enumerate(frames):
         scene.frame_set(frame)
