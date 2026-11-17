@@ -30,4 +30,13 @@ protected:
  UPROPERTY() class UCameraComponent* FollowCamera;
  UPROPERTY() class UStaticMeshComponent* SwordVisual;
  float AttackCooldown = 0;
+ UPROPERTY() class UAnimSequence* OceanIdle = nullptr;
+ UPROPERTY() class UAnimSequence* OceanWalk = nullptr;
+ UPROPERTY() class UAnimSequence* OceanRun = nullptr;
+ UPROPERTY() class UAnimSequence* OceanJump = nullptr;
+ UPROPERTY() class UAnimSequence* OceanAttack = nullptr;
+ UPROPERTY() class UAnimSequence* OceanSpin = nullptr;
+ UPROPERTY() class UAnimSequence* ActiveOceanAnimation = nullptr;
+ float OceanActionTime = 0.f;
+ void PlayOceanAction(class UAnimSequence* Sequence, float Duration);
 };
