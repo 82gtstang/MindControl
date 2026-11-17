@@ -55,5 +55,5 @@ unreal.EditorAssetLibrary.save_directory(destination,only_if_is_dirty=False,recu
 for clip in clips:
     path=destination+"/Ocean_"+clip
     if not unreal.EditorAssetLibrary.does_asset_exist(path):
-        unreal.log_warning("Ocean animation missing after import: "+path)
-print("OCEAN_IMPORT_SUCCESS "+expected)
+        raise RuntimeError("Required Ocean animation missing after import: "+path)
+print("OCEAN_IMPORT_SUCCESS "+expected+" animations="+",".join(clips))
