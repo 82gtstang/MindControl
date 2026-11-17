@@ -206,7 +206,7 @@ def pose_action(name,frames):
             rest=pb.bone.matrix_local.to_3x3()
             down_axis=rest.inverted() @ Vector((0,1,0))
             swing_axis=rest.inverted() @ Vector((1,0,0))
-            down=Quaternion(down_axis,math.radians(sign*38))
+            down=Quaternion(down_axis,math.radians(sign*50))
             swing=Quaternion(swing_axis,math.radians(arm_motion.get(name,0)))
             pb.rotation_mode="QUATERNION"
             pb.rotation_quaternion=down @ swing
@@ -218,6 +218,10 @@ def pose_action(name,frames):
                 axis=rest.inverted() @ Vector((1,0,0))
                 pb.rotation_mode="QUATERNION"
                 pb.rotation_quaternion=Quaternion(axis,math.radians(arm_motion.get(name,0)))
+        if name=="Jump":
+            # Lift the whole character in mid-air, not only the legs.
+            jump_heights={1:0.0,7:0.18,15:0.34,23:0.10,30:0.0}
+            rig.pose.bones["root"].location.z=jump_heights.get(frame,0.0)
         for pb in rig.pose.bones:
             pb.keyframe_insert(data_path="rotation_quaternion" if pb.rotation_mode=="QUATERNION" else "rotation_euler",frame=frame,group=pb.name)
             if pb.name=="root": pb.keyframe_insert(data_path="location",frame=frame,group=pb.name)
