@@ -91,15 +91,41 @@ def segment_dist(point,a,b):
     return (point-(a+t*ab)).length
 deform=[(name,Vector(head),Vector(tail)) for name,_,head,tail in bones if name!="root"]
 groups={name:body.vertex_groups.new(name=name) for name,_,_ in deform}
+# Region-aware skinning. Nearest-bone-only weighting previously assigned torso
+# vertices to arms and legs, causing stretched rubber-like deformation.
+# Partition by height and horizontal distance from the body's midline.
 for v in body.data.vertices:
     q=v.co
-    # Bias to nearest bones and taper influence by distance.
-    ds=sorted(((segment_dist(q,a,b),name) for name,a,b in deform),key=lambda x:x[0])[:4]
-    scale=max(h*.035,ds[0][0]*.6)
-    weights=[math.exp(-((d-ds[0][0])/scale)**2) for d,_ in ds]
+    z=q.z/max(h,1e-6)
+    x=abs(q.x)/max(w,1e-6)
+    if z >= .83:
+        allowed={"head","neck","chest"}
+    elif z >= .72:
+        allowed={"chest","spine","neck","clavicle_L","clavicle_R"}
+        if x > .13: allowed.update({"upperarm_L","upperarm_R"})
+    elif z >= .54:
+        allowed={"chest","spine","pelvis"}
+        if x > .16: allowed.update({"clavicle_L","clavicle_R","upperarm_L","upperarm_R","forearm_L","forearm_R","hand_L","hand_R"})
+    elif z >= .46:
+        allowed={"pelvis","spine","thigh_L","thigh_R"}
+        if x > .22: allowed.update({"forearm_L","forearm_R","hand_L","hand_R"})
+    else:
+        allowed={"thigh_L","thigh_R","shin_L","shin_R","foot_L","foot_R"}
+        if z > .32 and x > .22: allowed.update({"hand_L","hand_R"})
+    # Do not blend across left/right limbs. x sign is matched to bone side.
+    if q.x < -w*.035:
+        allowed={name for name in allowed if not name.endswith("_R")}
+    elif q.x > w*.035:
+        allowed={name for name in allowed if not name.endswith("_L")}
+    candidates=sorted(((segment_dist(q,aa,bb),name) for name,aa,bb in deform if name in allowed),key=lambda item:item[0])[:3]
+    if not candidates:
+        raise RuntimeError("No deform candidates for vertex")
+    scale=max(h*.045,candidates[0][0]*.5)
+    weights=[math.exp(-((d-candidates[0][0])/scale)**2) for d,_ in candidates]
     total=sum(weights)
-    for (_,name),weight in zip(ds,weights):
-        if weight/total >= .001: groups[name].add([v.index],weight/total,"REPLACE")
+    for (_,name),weight in zip(candidates,weights):
+        if weight/total >= .001:
+            groups[name].add([v.index],weight/total,"REPLACE")
 mod=body.modifiers.new("OceanSerenitySkin","ARMATURE")
 mod.object=rig
 body.parent=rig
