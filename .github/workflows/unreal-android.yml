@@ -164,9 +164,39 @@ jobs:
           $apks = @(Get-ChildItem -Path 'unreal\PackagedAndroid' -Filter '*.apk' -Recurse -ErrorAction SilentlyContinue)
           if ($apks.Count -eq 0) { throw 'No APK was produced.' }
           $apks | ForEach-Object { Write-Host $_.FullName }
+      - name: Check GitHub artifact storage DNS
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($hostName in @('results-receiver.actions.githubusercontent.com', 'productionresultssa13.blob.core.windows.net')) {
+            $resolved = $false
+            for ($attempt = 1; $attempt -le 5; $attempt++) {
+              try {
+                $addresses = [System.Net.Dns]::GetHostAddresses($hostName)
+                if ($addresses.Count -gt 0) {
+                  Write-Host "$hostName resolves to $($addresses[0])"
+                  $resolved = $true
+                  break
+                }
+              } catch {
+                Write-Warning "DNS attempt $attempt for $hostName failed: $_"
+              }
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+            if (-not $resolved) { Write-Warning "DNS still unavailable for $hostName; artifact upload may fail. Check runner DNS, firewall, and proxy." }
+          }
       - name: Upload Android APK
+        id: upload_apk
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: MindControl-Unreal-Android-APK
+          path: unreal/PackagedAndroid/**/*.apk
+          if-no-files-found: error
+      - name: Retry Android APK upload after network failure
+        if: steps.upload_apk.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MindControl-Unreal-Android-APK-Retry
           path: unreal/PackagedAndroid/**/*.apk
           if-no-files-found: error
