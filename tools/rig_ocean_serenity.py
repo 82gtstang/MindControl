@@ -203,25 +203,34 @@ def pose_action(name,frames):
     strip.action_frame_end=max(f for f,_ in frames)
     strip.mute=False
     return action
-# Conservative movements: shoulders rotate around local Y, legs around local X.
-# Large rotations on the estimated rig tear skin and look like rubber limbs.
-pose_action("Idle",[(1,[]),(16,[("chest",1,1.0)]),(31,[])])
+# More expressive cycles while retaining moderate joint rotations.
+# All angles are local Euler rotations; verify visually before Android packaging.
+pose_action("Idle",[(1,[]),(16,[("chest",1,2),("head",1,-1)]),(31,[])])
 pose_action("Walk",[
- (1,[("thigh_L",0,15),("thigh_R",0,-15),("shin_R",0,12),("upperarm_L",1,-8),("upperarm_R",1,8)]),
- (9,[("thigh_L",0,-15),("thigh_R",0,15),("shin_L",0,12),("upperarm_L",1,8),("upperarm_R",1,-8)]),
- (17,[("thigh_L",0,15),("thigh_R",0,-15),("shin_R",0,12),("upperarm_L",1,-8),("upperarm_R",1,8)])])
+ (1,[("thigh_L",0,19),("thigh_R",0,-19),("shin_R",0,17),("upperarm_L",1,-13),("upperarm_R",1,13),("chest",2,2)]),
+ (5,[("thigh_L",0,7),("thigh_R",0,-7),("shin_L",0,8),("shin_R",0,5)]),
+ (9,[("thigh_L",0,-19),("thigh_R",0,19),("shin_L",0,17),("upperarm_L",1,13),("upperarm_R",1,-13),("chest",2,-2)]),
+ (13,[("thigh_L",0,-7),("thigh_R",0,7),("shin_R",0,8),("shin_L",0,5)]),
+ (17,[("thigh_L",0,19),("thigh_R",0,-19),("shin_R",0,17),("upperarm_L",1,-13),("upperarm_R",1,13),("chest",2,2)])])
 pose_action("Run",[
- (1,[("thigh_L",0,27),("thigh_R",0,-27),("shin_R",0,22),("upperarm_L",1,-16),("upperarm_R",1,16)]),
- (7,[("thigh_L",0,-27),("thigh_R",0,27),("shin_L",0,22),("upperarm_L",1,16),("upperarm_R",1,-16)]),
- (13,[("thigh_L",0,27),("thigh_R",0,-27),("shin_R",0,22),("upperarm_L",1,-16),("upperarm_R",1,16)])])
-pose_action("Jump",[(1,[("thigh_L",0,-12),("thigh_R",0,-12),("shin_L",0,15),("shin_R",0,15)]),
- (10,[("thigh_L",0,8),("thigh_R",0,8),("upperarm_L",1,-10),("upperarm_R",1,10)]),
- (24,[("thigh_L",0,-12),("thigh_R",0,-12),("shin_L",0,15),("shin_R",0,15)]),(30,[])])
-pose_action("Attack",[(1,[]),(7,[("chest",2,-10),("upperarm_R",1,-25),("forearm_R",1,-15)]),
- (13,[("chest",2,12),("upperarm_R",1,28),("forearm_R",1,-10)]),(22,[])])
-pose_action("Spin",[(1,[]),(7,[("chest",2,18),("upperarm_L",1,-18),("upperarm_R",1,18)]),
- (13,[("chest",2,30),("upperarm_L",1,-18),("upperarm_R",1,18)]),
- (19,[("chest",2,18)]),(25,[])])
+ (1,[("thigh_L",0,31),("thigh_R",0,-26),("shin_R",0,32),("upperarm_L",1,-22),("upperarm_R",1,22),("chest",0,5)]),
+ (4,[("thigh_L",0,3),("thigh_R",0,-3),("shin_L",0,14),("shin_R",0,14),("chest",0,7)]),
+ (7,[("thigh_L",0,-26),("thigh_R",0,31),("shin_L",0,32),("upperarm_L",1,22),("upperarm_R",1,-22),("chest",0,5)]),
+ (10,[("thigh_L",0,-3),("thigh_R",0,3),("shin_L",0,14),("shin_R",0,14),("chest",0,7)]),
+ (13,[("thigh_L",0,31),("thigh_R",0,-26),("shin_R",0,32),("upperarm_L",1,-22),("upperarm_R",1,22),("chest",0,5)])])
+pose_action("Jump",[
+ (1,[("thigh_L",0,-18),("thigh_R",0,-18),("shin_L",0,24),("shin_R",0,24),("upperarm_L",1,8),("upperarm_R",1,-8)]),
+ (7,[("thigh_L",0,12),("thigh_R",0,12),("shin_L",0,8),("shin_R",0,8),("upperarm_L",1,-26),("upperarm_R",1,26)]),
+ (15,[("thigh_L",0,8),("thigh_R",0,8),("shin_L",0,12),("shin_R",0,12),("upperarm_L",1,-20),("upperarm_R",1,20)]),
+ (23,[("thigh_L",0,-16),("thigh_R",0,-16),("shin_L",0,22),("shin_R",0,22)]),(30,[])])
+pose_action("Attack",[
+ (1,[]),(5,[("chest",2,-16),("upperarm_R",1,-36),("forearm_R",1,-25),("upperarm_L",1,12)]),
+ (10,[("chest",2,22),("upperarm_R",1,36),("forearm_R",1,15),("upperarm_L",1,-12)]),
+ (15,[("chest",2,8),("upperarm_R",1,15),("forearm_R",1,6)]),(22,[])])
+pose_action("Spin",[
+ (1,[]),(7,[("chest",2,16),("upperarm_L",1,-28),("upperarm_R",1,28)]),
+ (13,[("chest",2,27),("upperarm_L",1,-34),("upperarm_R",1,34)]),
+ (19,[("chest",2,16),("upperarm_L",1,-28),("upperarm_R",1,28)]),(25,[])])
 rig.animation_data.action=None
 # Preserve textures through FBX texture copying when Blender finds the MTL.
 bpy.ops.object.select_all(action="DESELECT")
