@@ -117,13 +117,13 @@ jobs:
           $animationDir = Join-Path $env:GITHUB_WORKSPACE 'unreal\Content\Characters\OceanSerenity'
           $missingAnimations = @()
           foreach ($clip in @('Idle','Walk','Run','Jump','Attack','Spin')) {
-            $asset = Join-Path $animationDir "Ocean_$clip.uasset"
+            $asset = Join-Path $animationDir "OceanSerenityOcean_$clip.uasset"
             if (!(Test-Path $asset)) { $missingAnimations += $clip }
           }
           if ($missingAnimations.Count -gt 0) {
             throw "Ocean Serenity animation import incomplete. Missing clips: $($missingAnimations -join ', '). UE 5.7 Interchange post-import crash may be interrupting animation import."
           }
-          Write-Host 'Verified all six Ocean Serenity animation assets on disk.'
+          Write-Host 'Verified all six imported Ocean Serenity animation assets on disk (Interchange-prefixed names).'
           if ($process.ExitCode -ne 0) {
             # UE 5.7 Interchange can assert in Slate/ContentBrowser AFTER saving
             # the mesh. Permit only this specific post-save crash, and let the
