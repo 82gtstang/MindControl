@@ -93,8 +93,18 @@ jobs:
           if (!(Test-Path $editor)) { throw "Unreal editor commandlet missing: $editor" }
           # Full editor initializes Slate; Interchange FBX import can crash in UnrealEditor-Cmd without it.
           # A self-hosted Windows runner must have an interactive desktop session available.
-          & $editor "$project" -run=pythonscript "-script=$script" -unattended -nop4 -nosplash -log
-          if ($LASTEXITCODE -ne 0) { throw "Unreal Ocean Serenity import failed ($LASTEXITCODE)" }
+          $arguments = @(
+            "`"$project`""
+            '-run=pythonscript'
+            "-script=`"$script`""
+            '-unattended'
+            '-nop4'
+            '-nosplash'
+            '-log'
+          )
+          $process = Start-Process -FilePath $editor -ArgumentList $arguments -Wait -PassThru
+          Write-Host "Unreal Editor exit code: $($process.ExitCode)"
+          if ($process.ExitCode -ne 0) { throw "Unreal Ocean Serenity import failed ($($process.ExitCode))" }
           $assets = @(Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE 'unreal\Content\Characters\OceanSerenity') -Filter '*.uasset' -ErrorAction SilentlyContinue)
           if ($assets.Count -eq 0) { throw 'No imported Ocean Serenity .uasset found' }
           Write-Host "Imported $($assets.Count) Unreal assets for Android cooking"
