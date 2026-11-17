@@ -22,22 +22,28 @@ scene.render.image_settings.file_format="PNG"
 scene.display.shading.light="STUDIO"
 scene.display.shading.color_type="MATERIAL"
 scene.render.film_transparent=False
-bpy.ops.object.camera_add(location=(0,-5,2.1))
-cam=bpy.context.object
-scene.camera=cam
-def aim(obj,point):
-    direction=Vector(point)-obj.location
-    obj.rotation_euler=direction.to_track_quat("-Z","Y").to_euler()
-# Determine bounds from imported geometry in world coordinates.
-from mathutils import Vector
 points=[o.matrix_world@Vector(corner) for o in meshes for corner in o.bound_box]
 lo=Vector(tuple(min(p[i] for p in points) for i in range(3)))
 hi=Vector(tuple(max(p[i] for p in points) for i in range(3)))
 center=(lo+hi)*.5
-extent=max((hi-lo).length,1.)
-cam.location=(center.x,center.y-extent*1.65,center.z+extent*.12)
-aim(cam,center)
-cam.data.type="ORTHO";cam.data.ortho_scale=extent*1.18
+dimensions=hi-lo
+height=max(dimensions.z,.01)
+width=max(dimensions.x,.01)
+depth=max(dimensions.y,.01)
+if height < max(width,depth)*.65:
+    raise RuntimeError("Character not upright in Blender; bounds="+str(tuple(dimensions)))
+bpy.ops.object.camera_add()
+cam=bpy.context.object
+scene.camera=cam
+cam.data.type="ORTHO"
+cam.data.ortho_scale=max(height*1.32,width*1.25,depth*1.25)
+distance=max(height,width,depth)*2.5
+def set_view(view):
+    if view=="front":
+        cam.location=(center.x,center.y-distance,center.z)
+    else:
+        cam.location=(center.x+distance,center.y,center.z)
+    cam.rotation_euler=(center-cam.location).to_track_quat("-Z","Y").to_euler()
 report={"actions":[],"mesh_count":len(meshes),"bones":len(rig.data.bones)}
 if not rig.animation_data: rig.animation_data_create()
 for action in actions:
@@ -59,8 +65,11 @@ for action in actions:
         mins=[min(v[i] for v in corners) for i in range(3)]
         maxs=[max(v[i] for v in corners) for i in range(3)]
         samples.append({"frame":frame,"bbox_min":mins,"bbox_max":maxs})
-        scene.render.filepath=str(out/(re.sub(r'[<>:"/\\\\|?*\\x00-\\x1f]', "_", name)+"_"+str(index)+".png"))
-        bpy.ops.render.render(write_still=True)
+        safe_name=re.sub(r'[^A-Za-z0-9_.-]+', '_', name)
+        for view in ("front","side"):
+            set_view(view)
+            scene.render.filepath=str(out/(safe_name+"_"+view+"_"+str(index)+".png"))
+            bpy.ops.render.render(write_still=True)
     report["actions"].append({"name":name,"samples":samples})
 if not report["actions"]:
     raise RuntimeError("No matching animation actions found. Available: "+repr([a.name for a in actions]))
