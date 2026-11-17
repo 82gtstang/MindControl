@@ -21,7 +21,8 @@ ACryptHero::ACryptHero()
  GetCharacterMovement()->AirControl = .45f;
  CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
  CameraBoom->SetupAttachment(RootComponent);
- CameraBoom->TargetArmLength = 380;
+ CameraBoom->TargetArmLength = 520;
+ CameraBoom->bDoCollisionTest = true;
  CameraBoom->bUsePawnControlRotation = true;
  FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
  FollowCamera->SetupAttachment(CameraBoom);
