@@ -37,7 +37,13 @@ jobs:
           $candidates += @(Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
           $blender = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $blender) {
-            throw 'Blender not found on Windows runner. Install Blender 4.3+ once on the runner, or add blender.exe to PATH; no installation is needed on the Android phone.'
+            Write-Host 'Blender missing; attempting unattended installation via winget on the build runner.'
+            $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+            if (-not $winget) { throw 'winget not found on runner; install Blender 4.3+ on build runner once.' }
+            & $winget.Source install --id BlenderFoundation.Blender --exact --silent --accept-source-agreements --accept-package-agreements --disable-interactivity
+            if ($LASTEXITCODE -ne 0) { throw "Blender unattended install failed ($LASTEXITCODE)" }
+            $blender = Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1
+            if (-not $blender) { throw 'Blender installation finished but blender.exe was not found' }
           }
           "BLENDER_EXE=$blender" | Out-File -FilePath $env:GITHUB_ENV -Append
           & $blender --version
