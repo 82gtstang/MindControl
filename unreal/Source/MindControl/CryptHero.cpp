@@ -26,13 +26,19 @@ ACryptHero::ACryptHero()
  UStaticMeshComponent* Torso=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeroTorso"));
  Torso->SetupAttachment(RootComponent);
  Torso->SetRelativeLocation(FVector(0,0,-12));
- Torso->SetRelativeScale3D(FVector(.65f,.42f,1.35f));
+ Torso->SetRelativeScale3D(FVector(.53f,.40f,1.22f));
  UStaticMeshComponent* Head=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeroHead"));
  Head->SetupAttachment(RootComponent);
  Head->SetRelativeLocation(FVector(0,0,95));
- Head->SetRelativeScale3D(FVector(.42f,.42f,.42f));
+ Head->SetRelativeScale3D(FVector(.36f,.36f,.39f));
  static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
  if(Sphere.Succeeded()) { Torso->SetStaticMesh(Sphere.Object); Head->SetStaticMesh(Sphere.Object); }
+ // Temporary stylized female silhouette with long hair until a licensed skeletal mesh is imported.
+ UStaticMeshComponent* Hair=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeroLongHair"));
+ Hair->SetupAttachment(RootComponent);
+ Hair->SetRelativeLocation(FVector(-19,0,68));
+ Hair->SetRelativeScale3D(FVector(.35f,.48f,.80f));
+ if(Sphere.Succeeded()) Hair->SetStaticMesh(Sphere.Object);
  SwordVisual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("SwordVisual"));
  SwordVisual->SetupAttachment(GetMesh(), TEXT("hand_rSocket"));
  SwordVisual->SetRelativeScale3D(FVector(.08f,.08f,1.0f));
@@ -89,8 +95,8 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
  const float S=FMath::Max(.7f,FMath::Min(ViewSize.X/1600.f,ViewSize.Y/900.f));
  auto Hit=[&](float X,float Y) { return FMath::Abs(Location.X-X)<78.f*S && FMath::Abs(Location.Y-Y)<78.f*S; };
  const float W=ViewSize.X,H=ViewSize.Y;
- if(Hit(W-110*S,H-125*S)) Jump();
- else if(Hit(W-280*S,H-125*S)) Attack();
- else if(Hit(W-110*S,H-300*S)) SpinAttack();
- else if(Hit(W-280*S,H-300*S)) ToggleInventory();
+ if(Hit(W-110*S,105*S)) Jump();
+ else if(Hit(W-280*S,105*S)) Attack();
+ else if(Hit(W-110*S,275*S)) SpinAttack();
+ else if(Hit(W-280*S,275*S)) ToggleInventory();
 }
