@@ -32,7 +32,10 @@ ACryptHero::ACryptHero()
  if(bHasOcean)
  {
   GetMesh()->SetSkeletalMesh(OceanMesh.Object);
-  GetMesh()->SetRelativeLocation(FVector(0,0,-88));
+  // Blender rig is grounded at its feet, unlike the usual UE mannequin
+  // whose mesh origin is at capsule center. Keep Ocean at capsule base
+  // and allow a little clearance above the floor.
+  GetMesh()->SetRelativeLocation(FVector(0,0,-75));
   // The Blender FBX arrives lying on its back in the Android build.
   // Rotate only the skeletal mesh about its local X axis to stand it upright;
   // do not rotate the capsule, movement directions, or follow camera.
