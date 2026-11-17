@@ -111,9 +111,21 @@ jobs:
             Write-Host '=== End of Unreal log ==='
             Get-Content $log -Tail 65 | ForEach-Object { Write-Host $_ }
           } else { Write-Warning "Unreal import log not found: $log" }
-          if ($process.ExitCode -ne 0) { throw "Unreal Ocean Serenity import failed ($($process.ExitCode))" }
           $mesh = Join-Path $env:GITHUB_WORKSPACE 'unreal\Content\Characters\OceanSerenity\OceanSerenity.uasset'
           if (!(Test-Path $mesh)) { throw "Expected skeletal mesh missing: $mesh" }
+          if ((Get-Item $mesh).Length -lt 4096) { throw "Imported skeletal mesh is suspiciously small: $mesh" }
+          if ($process.ExitCode -ne 0) {
+            # UE 5.7 Interchange can assert in Slate/ContentBrowser AFTER saving
+            # the mesh. Permit only this specific post-save crash, and let the
+            # subsequent Android cook validate whether assets are usable.
+            $raw = if (Test-Path $log) { Get-Content $log -Raw } else { '' }
+            $saved = $raw.Contains('Moving output files for package: /Game/Characters/OceanSerenity/OceanSerenity') -and $raw.Contains('OceanSerenity.uasset')
+            $knownCrash = $raw.Contains('Assertion failed: CurrentApplication.IsValid()') -and $raw.Contains('UnrealEditor-ContentBrowser.dll')
+            if (-not ($process.ExitCode -eq 3 -and $saved -and $knownCrash)) {
+              throw "Unreal Ocean Serenity import failed with unexpected exit $($process.ExitCode)"
+            }
+            Write-Warning 'Known UE 5.7 post-save Content Browser assertion detected; mesh file exists. Continuing to cook for asset validation.'
+          }
           Write-Host "Ocean Serenity skeletal mesh asset exists: $mesh"
       - name: Build and package Android APK
         shell: powershell
