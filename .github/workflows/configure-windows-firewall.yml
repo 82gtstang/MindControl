@@ -1,4 +1,4 @@
-name: Configure Windows Firewall for RDP
+name: Configure MSI LAN Remote Desktop
 
 on:
   workflow_dispatch:
@@ -11,24 +11,33 @@ jobs:
     runs-on: [self-hosted, Windows]
     timeout-minutes: 5
     steps:
-      - name: Validate server and configure LAN-only RDP
+      - name: Verify MSI and configure Remote Desktop
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          if ($env:COMPUTERNAME -ine 'MSI') {
-            throw "Refusing to modify firewall on unexpected host: $env:COMPUTERNAME"
-          }
+          if ($env:COMPUTERNAME -ine 'MSI') { throw "Unexpected computer: $env:COMPUTERNAME" }
+          $ip = Get-NetIPAddress -AddressFamily IPv4 -IPAddress '192.168.1.33' -ErrorAction SilentlyContinue
+          if (-not $ip) { throw 'MSI does not currently have 192.168.1.33; no changes made.' }
+          $os = Get-CimInstance Win32_OperatingSystem
+          Write-Host "Operating system: $($os.Caption)"
+          $edition = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').EditionID
+          Write-Host "Windows edition: $edition"
+          if ($edition -match '^Core|Home') { throw 'Windows Home cannot host built-in Remote Desktop. No changes made.' }
           $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
           $principal = New-Object Security.Principal.WindowsPrincipal($identity)
-          if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-            throw "Runner service must run elevated to modify Windows Firewall."
-          }
-          $ruleName = 'Allow RDP from Home LAN'
-          $existing = Get-NetFirewallRule -Name 'MindControl-LAN-RDP' -ErrorAction SilentlyContinue
-          if ($existing) {
-            Remove-NetFirewallRule -Name 'MindControl-LAN-RDP'
-          }
-          New-NetFirewallRule -Name 'MindControl-LAN-RDP' -DisplayName $ruleName -Enabled True -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3389 -RemoteAddress '192.168.1.0/24' -Profile Private
-          Get-NetFirewallRule -Name 'MindControl-LAN-RDP' | Format-List Name,Enabled,Direction,Action,Profile
+          if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Runner must be elevated. No changes made.' }
+          $profile = Get-NetConnectionProfile -InterfaceIndex $ip.InterfaceIndex
+          Write-Host "Network profile: $($profile.NetworkCategory)"
+          if ($profile.NetworkCategory -ne 'Private') { throw 'MSI LAN must be Private before enabling the private-profile RDP rule. No changes made.' }
+          Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
+          Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name UserAuthentication -Value 1
+          Set-Service TermService -StartupType Manual
+          Start-Service TermService
+          $rule = Get-NetFirewallRule -Name 'MindControl-LAN-RDP' -ErrorAction SilentlyContinue
+          if ($rule) { Remove-NetFirewallRule -Name 'MindControl-LAN-RDP' }
+          New-NetFirewallRule -Name 'MindControl-LAN-RDP' -DisplayName 'MSI RDP from home LAN' -Enabled True -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3389 -RemoteAddress '192.168.1.0/24' -Profile Private | Out-Null
+          Write-Host 'RDP registry setting:' (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server').fDenyTSConnections
+          Write-Host 'TermService status:' (Get-Service TermService).Status
+          Write-Host 'RDP listening:' ([bool](Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue))
+          Get-NetFirewallRule -Name 'MindControl-LAN-RDP' | Format-List Name,Enabled,Profile,Action
           Get-NetFirewallRule -Name 'MindControl-LAN-RDP' | Get-NetFirewallAddressFilter | Format-List RemoteAddress
-          Get-NetFirewallRule -Name 'MindControl-LAN-RDP' | Get-NetFirewallPortFilter | Format-List Protocol,LocalPort
