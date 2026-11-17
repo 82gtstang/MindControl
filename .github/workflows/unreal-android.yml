@@ -38,6 +38,19 @@ jobs:
               Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop
             }
           }
+      - name: Download and inspect Ocean Serenity source model
+        shell: powershell
+        run: |
+          $url = 'https://github.com/82gtstang/MindControl/releases/download/ocean-serenity-test/Ocean_Serenity_Blender_Starter.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'OceanSerenitySource'
+          New-Item -ItemType Directory -Path $dir -Force | Out-Null
+          $archive = Join-Path $dir 'Ocean_Serenity_Blender_Starter.zip'
+          Invoke-WebRequest -Uri $url -OutFile $archive
+          Expand-Archive -LiteralPath $archive -DestinationPath (Join-Path $dir 'Extracted') -Force
+          $models = @(Get-ChildItem (Join-Path $dir 'Extracted') -Recurse -File -Filter '*.obj')
+          if ($models.Count -eq 0) { throw 'Ocean Serenity release does not contain an OBJ mesh.' }
+          $models | ForEach-Object { Write-Host "Source model: $($_.FullName) ($($_.Length) bytes)" }
+          Write-Host 'Source verified. OBJ is not yet an imported/cooked Unreal skeletal mesh.'
       - name: Build Windows editor target for cooking
         shell: powershell
         run: |
