@@ -143,6 +143,12 @@ report["shoulder_rig"]={"axes_legend":{"X":"red","Y":"green","Z":"blue"},"bones"
 from mathutils import Quaternion
 for obj in markers:obj.hide_render=True
 report["shoulder_weight_tests"]=[]
+# Capture evaluated skin coordinates before the test, not just bone positions.
+# A moving bone with stationary mesh vertices indicates lost/incorrect FBX skinning.
+def evaluated_mesh_positions():
+    deps=bpy.context.evaluated_depsgraph_get()
+    return [[tuple(obj.matrix_world @ v.co) for v in obj.evaluated_get(deps).to_mesh().vertices] for obj in meshes]
+baseline_mesh_positions=evaluated_mesh_positions()
 for side in ("L","R"):
     pb=rig.pose.bones.get("upperarm_"+side)
     if not pb:continue
@@ -155,7 +161,23 @@ for side in ("L","R"):
     rest_tail=rig.matrix_world @ pb.bone.tail_local
     posed_head=rig.matrix_world @ pb.head
     posed_tail=rig.matrix_world @ pb.tail
+    posed_mesh_positions=evaluated_mesh_positions()
+    moved_count=0
+    max_movement=0.0
+    shoulder_region_count=0
+    for obj_index, (before,after) in enumerate(zip(baseline_mesh_positions,posed_mesh_positions)):
+        for orig,now in zip(before,after):
+            # Check arm-side vertices outside the torso near the shoulder height.
+            if (orig[0]<-0.25 if side=="L" else orig[0]>0.25) and orig[2]>0.95:
+                shoulder_region_count+=1
+                delta=(Vector(now)-Vector(orig)).length
+                if delta>.02:moved_count+=1
+                max_movement=max(max_movement,delta)
+    print("SKIN_TEST",side,"region",shoulder_region_count,"moved",moved_count,"max_m",max_movement,flush=True)
     report["shoulder_weight_tests"].append({
+        "shoulder_region_vertices":shoulder_region_count,
+        "vertices_moved_over_2cm":moved_count,
+        "max_vertex_movement_m":max_movement,
         "side":side,"angle_degrees":-50 if side=="L" else 50,
         "rest_head":list(rest_head),"rest_tail":list(rest_tail),
         "posed_head":list(posed_head),"posed_tail":list(posed_tail),
