@@ -60,6 +60,42 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "MindControlEditor build failed with exit code $LASTEXITCODE" }
           $receipt = Join-Path $env:GITHUB_WORKSPACE 'unreal\Binaries\Win64\MindControlEditor.target'
           if (!(Test-Path $receipt)) { throw "Editor target receipt missing: $receipt" }
+      - name: Download rigged Ocean Serenity FBX from successful rigging build
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
+          $api = 'https://api.github.com/repos/82gtstang/MindControl'
+          $runs = Invoke-RestMethod -Uri "$api/actions/runs?per_page=40" -Headers $headers
+          $rig = $runs.workflow_runs | Where-Object { $_.name -eq 'Ocean Serenity experimental auto-rig' -and $_.conclusion -eq 'success' -and $_.head_branch -eq 'diagnostic/android-landscape-startup' } | Select-Object -First 1
+          if (-not $rig) { throw 'No successful Ocean Serenity rigging workflow run found.' }
+          $artifacts = Invoke-RestMethod -Uri "$api/actions/runs/$($rig.id)/artifacts" -Headers $headers
+          $artifact = $artifacts.artifacts | Where-Object { $_.name -eq 'OceanSerenity-Experimental-Rig-FBX' -and -not $_.expired } | Select-Object -First 1
+          if (-not $artifact) { throw "No rigged FBX artifact found in workflow run $($rig.id)" }
+          $dir = Join-Path $env:RUNNER_TEMP 'OceanSerenityRigged'
+          New-Item -ItemType Directory -Path $dir -Force | Out-Null
+          $zip = Join-Path $dir 'rig.zip'
+          Invoke-WebRequest -Uri "$api/actions/artifacts/$($artifact.id)/zip" -Headers $headers -OutFile $zip
+          Expand-Archive -LiteralPath $zip -DestinationPath $dir -Force
+          $fbx = Get-ChildItem -Path $dir -Filter '*.fbx' -Recurse | Select-Object -First 1
+          if (-not $fbx) { throw 'Rigging artifact contains no FBX' }
+          "OCEAN_FBX=$($fbx.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Using rigged FBX from run $($rig.id): $($fbx.FullName)"
+      - name: Import Ocean Serenity skeletal mesh into Unreal project
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $editor = Join-Path $env:UE_ROOT 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
+          $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\MindControl.uproject'
+          $script = Join-Path $env:GITHUB_WORKSPACE 'tools\import_ocean_serenity.py'
+          if (!(Test-Path $editor)) { throw "Unreal editor commandlet missing: $editor" }
+          & $editor "$project" -run=pythonscript "-script=$script" -unattended -nop4 -nullrhi -nosplash -log
+          if ($LASTEXITCODE -ne 0) { throw "Unreal Ocean Serenity import failed ($LASTEXITCODE)" }
+          $assets = @(Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE 'unreal\Content\Characters\OceanSerenity') -Filter '*.uasset' -ErrorAction SilentlyContinue)
+          if ($assets.Count -eq 0) { throw 'No imported Ocean Serenity .uasset found' }
+          Write-Host "Imported $($assets.Count) Unreal assets for Android cooking"
       - name: Build and package Android APK
         shell: powershell
         run: |
