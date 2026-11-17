@@ -188,9 +188,13 @@ def pose_action(name,frames):
             pb.rotation_mode="XYZ"
             pb.rotation_euler=(0,0,0)
             pb.location=(0,0,0)
+        # Use shoulder bending, not bone-axis twisting, for relaxed arm posture.
+        for side,sign in (("L",-1),("R",1)):
+            shoulder=rig.pose.bones.get("upperarm_"+side)
+            if shoulder: shoulder.rotation_euler[2]=math.radians(sign*12)
         for bone,axis,angle in angles:
             pb=rig.pose.bones.get(bone)
-            if pb: pb.rotation_euler[axis]=math.radians(angle)
+            if pb: pb.rotation_euler[axis]+=math.radians(angle)
         for pb in rig.pose.bones:
             pb.keyframe_insert(data_path="rotation_euler",frame=frame,group=pb.name)
             if pb.name=="root": pb.keyframe_insert(data_path="location",frame=frame,group=pb.name)
@@ -207,32 +211,32 @@ def pose_action(name,frames):
 # All angles are local Euler rotations; verify visually before Android packaging.
 pose_action("Idle",[(1,[]),(16,[("chest",1,2),("head",1,-1)]),(31,[])])
 pose_action("Walk",[
- (1,[("thigh_L",0,19),("thigh_R",0,-19),("shin_R",0,17),("upperarm_L",1,-13),("upperarm_R",1,13),("chest",2,2)]),
+ (1,[("thigh_L",0,19),("thigh_R",0,-19),("shin_R",0,17),("upperarm_L",2,-13),("upperarm_R",2,13),("chest",2,2)]),
  (5,[("thigh_L",0,7),("thigh_R",0,-7),("shin_L",0,8),("shin_R",0,5)]),
- (9,[("thigh_L",0,-19),("thigh_R",0,19),("shin_L",0,17),("upperarm_L",1,13),("upperarm_R",1,-13),("chest",2,-2)]),
+ (9,[("thigh_L",0,-19),("thigh_R",0,19),("shin_L",0,17),("upperarm_L",2,13),("upperarm_R",2,-13),("chest",2,-2)]),
  (13,[("thigh_L",0,-7),("thigh_R",0,7),("shin_R",0,8),("shin_L",0,5)]),
- (17,[("thigh_L",0,19),("thigh_R",0,-19),("shin_R",0,17),("upperarm_L",1,-13),("upperarm_R",1,13),("chest",2,2)])])
+ (17,[("thigh_L",0,19),("thigh_R",0,-19),("shin_R",0,17),("upperarm_L",2,-13),("upperarm_R",2,13),("chest",2,2)])])
 pose_action("Run",[
- (1,[("thigh_L",0,31),("thigh_R",0,-26),("shin_R",0,32),("upperarm_L",1,-22),("upperarm_R",1,22),("chest",0,5)]),
+ (1,[("thigh_L",0,31),("thigh_R",0,-26),("shin_R",0,32),("upperarm_L",2,-22),("upperarm_R",2,22),("chest",0,5)]),
  (4,[("thigh_L",0,3),("thigh_R",0,-3),("shin_L",0,14),("shin_R",0,14),("chest",0,7)]),
- (7,[("thigh_L",0,-26),("thigh_R",0,31),("shin_L",0,32),("upperarm_L",1,22),("upperarm_R",1,-22),("chest",0,5)]),
+ (7,[("thigh_L",0,-26),("thigh_R",0,31),("shin_L",0,32),("upperarm_L",2,22),("upperarm_R",2,-22),("chest",0,5)]),
  (10,[("thigh_L",0,-3),("thigh_R",0,3),("shin_L",0,14),("shin_R",0,14),("chest",0,7)]),
- (13,[("thigh_L",0,31),("thigh_R",0,-26),("shin_R",0,32),("upperarm_L",1,-22),("upperarm_R",1,22),("chest",0,5)])])
+ (13,[("thigh_L",0,31),("thigh_R",0,-26),("shin_R",0,32),("upperarm_L",2,-22),("upperarm_R",2,22),("chest",0,5)])])
 pose_action("Jump",[
- (1,[("thigh_L",0,-18),("thigh_R",0,-18),("shin_L",0,24),("shin_R",0,24),("upperarm_L",1,8),("upperarm_R",1,-8)]),
- (7,[("thigh_L",0,12),("thigh_R",0,12),("shin_L",0,8),("shin_R",0,8),("upperarm_L",1,-26),("upperarm_R",1,26)]),
- (15,[("thigh_L",0,8),("thigh_R",0,8),("shin_L",0,12),("shin_R",0,12),("upperarm_L",1,-20),("upperarm_R",1,20)]),
+ (1,[("thigh_L",0,-18),("thigh_R",0,-18),("shin_L",0,24),("shin_R",0,24),("upperarm_L",2,8),("upperarm_R",2,-8)]),
+ (7,[("thigh_L",0,5),("thigh_R",0,5),("shin_L",0,8),("shin_R",0,8),("upperarm_L",2,-26),("upperarm_R",2,26)]),
+ (15,[("thigh_L",0,3),("thigh_R",0,3),("shin_L",0,12),("shin_R",0,12),("upperarm_L",2,-20),("upperarm_R",2,20)]),
  (23,[("thigh_L",0,-16),("thigh_R",0,-16),("shin_L",0,22),("shin_R",0,22)]),(30,[])])
 pose_action("Attack",[
- (1,[]),(5,[("chest",2,-16),("upperarm_R",1,-36),("forearm_R",1,-25),("upperarm_L",1,12)]),
- (10,[("chest",2,22),("upperarm_R",1,36),("forearm_R",1,15),("upperarm_L",1,-12)]),
- (15,[("chest",2,8),("upperarm_R",1,15),("forearm_R",1,6)]),(22,[])])
+ (1,[]),(5,[("chest",2,-16),("upperarm_R",2,-36),("forearm_R",2,-25),("upperarm_L",2,12)]),
+ (10,[("chest",2,22),("upperarm_R",2,36),("forearm_R",2,15),("upperarm_L",2,-12)]),
+ (15,[("chest",2,8),("upperarm_R",2,15),("forearm_R",2,6)]),(22,[])])
 spin=pose_action("Spin",[
- (1,[("root",2,0),("upperarm_L",1,-24),("upperarm_R",1,24)]),
- (7,[("root",2,90),("upperarm_L",1,-32),("upperarm_R",1,32)]),
- (13,[("root",2,180),("upperarm_L",1,-32),("upperarm_R",1,32)]),
- (19,[("root",2,270),("upperarm_L",1,-32),("upperarm_R",1,32)]),
- (25,[("root",2,360),("upperarm_L",1,-24),("upperarm_R",1,24)])])
+ (1,[("root",2,0),("upperarm_L",2,-24),("upperarm_R",2,24)]),
+ (7,[("root",2,90),("upperarm_L",2,-32),("upperarm_R",2,32)]),
+ (13,[("root",2,180),("upperarm_L",2,-32),("upperarm_R",2,32)]),
+ (19,[("root",2,270),("upperarm_L",2,-32),("upperarm_R",2,32)]),
+ (25,[("root",2,360),("upperarm_L",2,-24),("upperarm_R",2,24)])])
 for fc in spin.fcurves:
     if fc.data_path=='pose.bones["root"].rotation_euler':
         for key in fc.keyframe_points: key.interpolation="LINEAR"
