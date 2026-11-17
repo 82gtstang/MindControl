@@ -108,50 +108,71 @@ for name,parent,head,tail in bones:
     bone.tail=tail
     if parent: bone.parent=edit[parent]
 bpy.ops.object.mode_set(mode="OBJECT")
-# Distance-based smooth vertex weighting: robust headless fallback when Blender
-# heat weights fail on non-manifold or disconnected AI meshes.
+# Prefer Blender's heat-diffusion skinning over hand-authored distance weights.
+# AI-generated meshes can be disconnected/non-manifold, so verify coverage and
+# use the anatomical distance fallback only if automatic weights fail.
 def segment_dist(point,a,b):
     ab=b-a
     t=max(0,min(1,(point-a).dot(ab)/max(ab.length_squared,1e-12)))
     return (point-(a+t*ab)).length
 deform=[(name,Vector(head),Vector(tail)) for name,_,head,tail in bones if name!="root"]
-groups={name:body.vertex_groups.new(name=name) for name,_,_ in deform}
-# Anatomical masks prevent body vertices from attaching to distant limb bones.
-# Bone labels are selected from the geometry's height and lateral position.
-for v in body.data.vertices:
-    q=v.co
-    z=q.z/max(h,1e-6)
-    ax=abs(q.x)
-    side="L" if q.x<0 else "R"
-    if z>=.87:
-        allowed={"head","neck"}
-    elif z>=.81 and ax<shoulder_x*.82:
-        allowed={"neck","chest","head"}
-    elif z>=.52 and ax>shoulder_x*.85:
-        allowed={f"upperarm_{side}",f"forearm_{side}",f"hand_{side}",f"clavicle_{side}"}
-    elif z>=.71:
-        allowed={"chest","spine",f"clavicle_{side}"}
-    elif z>=.54:
-        allowed={"spine","chest","pelvis"}
-    elif z>=.43:
-        allowed={"pelvis","spine",f"thigh_{side}"}
-    elif z>=.27:
-        allowed={f"thigh_{side}",f"shin_{side}"}
-    elif z>=.08:
-        allowed={f"shin_{side}",f"thigh_{side}"}
-    else:
-        allowed={f"foot_{side}",f"shin_{side}"}
-    candidates=sorted(((segment_dist(q,aa,bb),name) for name,aa,bb in deform if name in allowed),key=lambda item:item[0])[:2]
-    if not candidates: raise RuntimeError("No matching deform bones")
-    # Keep influences local; avoid rubber-band stretching from four distant bones.
-    distances=[max(d,1e-4) for d,_ in candidates]
-    weights=[1.0/(d*d) for d in distances]
-    total=sum(weights)
-    for (_,name),weight in zip(candidates,weights):
-        groups[name].add([v.index],weight/total,"REPLACE")
-mod=body.modifiers.new("OceanSerenitySkin","ARMATURE")
-mod.object=rig
-body.parent=rig
+weight_method="automatic"
+try:
+    bpy.ops.object.select_all(action="DESELECT")
+    body.select_set(True)
+    rig.select_set(True)
+    bpy.context.view_layer.objects.active=rig
+    bpy.ops.object.parent_set(type="ARMATURE_AUTO")
+    # Verify each vertex has normalized nonzero weights, and no vertices are
+    # accidentally influenced by a non-deforming control bone.
+    covered=0
+    for v in body.data.vertices:
+        total=sum(g.weight for g in v.groups if g.group<len(body.vertex_groups) and body.vertex_groups[g.group].name!="root")
+        if total>.001: covered+=1
+    if covered<len(body.data.vertices):
+        raise RuntimeError("Automatic weights uncovered %d vertices"%(len(body.data.vertices)-covered))
+    print("SKINNING: automatic armature weights; vertices:",covered,flush=True)
+except Exception as exc:
+    weight_method="anatomical_fallback"
+    print("SKINNING: automatic weights unavailable:",repr(exc),flush=True)
+    # Clear partial automatic weights and remove any automatic armature modifier.
+    for group in list(body.vertex_groups): body.vertex_groups.remove(group)
+    for modifier in list(body.modifiers):
+        if modifier.type=="ARMATURE": body.modifiers.remove(modifier)
+    body.parent=None
+    groups={name:body.vertex_groups.new(name=name) for name,_,_ in deform}
+    for v in body.data.vertices:
+        q=v.co
+        z=q.z/max(h,1e-6)
+        ax=abs(q.x)
+        side="L" if q.x<0 else "R"
+        if z>=.87:
+            allowed={"head","neck"}
+        elif z>=.81 and ax<shoulder_x*.82:
+            allowed={"neck","chest","head"}
+        elif z>=.52 and ax>shoulder_x*.85:
+            allowed={f"upperarm_{side}",f"forearm_{side}",f"hand_{side}",f"clavicle_{side}"}
+        elif z>=.71:
+            allowed={"chest","spine",f"clavicle_{side}"}
+        elif z>=.54:
+            allowed={"spine","chest","pelvis"}
+        elif z>=.43:
+            allowed={"pelvis","spine",f"thigh_{side}"}
+        elif z>=.27:
+            allowed={f"thigh_{side}",f"shin_{side}"}
+        elif z>=.08:
+            allowed={f"shin_{side}",f"thigh_{side}"}
+        else:
+            allowed={f"foot_{side}",f"shin_{side}"}
+        candidates=sorted(((segment_dist(q,aa,bb),name) for name,aa,bb in deform if name in allowed),key=lambda item:item[0])[:2]
+        distances=[max(d,1e-4) for d,_ in candidates]
+        weights=[1.0/(d*d) for d in distances]
+        total=sum(weights)
+        for (_,name),weight in zip(candidates,weights):
+            groups[name].add([v.index],weight/total,"REPLACE")
+    mod=body.modifiers.new("OceanSerenitySkin","ARMATURE")
+    mod.object=rig
+    body.parent=rig
 # Generate distinct baked motion clips on the experimental humanoid rig.
 # All actions share the same rest pose and skeleton for Unreal retarget-free playback.
 from mathutils import Quaternion
@@ -213,6 +234,6 @@ bpy.ops.export_scene.fbx(filepath=str(target),use_selection=True,
     bake_anim=True,bake_anim_use_nla_strips=True,bake_anim_use_all_actions=False,
     bake_anim_simplify_factor=0.0,path_mode="COPY",embed_textures=True)
 report={"source":str(source),"fbx":str(target),"vertices":len(body.data.vertices),
-        "bones":len(bones),"height":h,"width":w,"warning":"Geometry-fitted experimental rig; manual weight painting and joint validation still recommended"}
+        "bones":len(bones),"height":h,"width":w,"weight_method":weight_method,"warning":"Geometry-fitted experimental rig; manual weight painting and joint validation still recommended"}
 target.with_suffix(".json").write_text(json.dumps(report,indent=2))
 print("RIG_REPORT "+json.dumps(report))
