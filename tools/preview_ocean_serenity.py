@@ -3,7 +3,8 @@ import bpy,sys,math,json
 from pathlib import Path
 from mathutils import Vector
 args=sys.argv[sys.argv.index("--")+1:]
-src,out=Path(args[0]),Path(args[1]);out.mkdir(parents=True,exist_ok=True)
+src,out=Path(args[0]).resolve(),Path(args[1]).resolve();out.mkdir(parents=True,exist_ok=True)
+print("PREVIEW SOURCE:",src,"OUTPUT:",out,flush=True)
 bpy.ops.object.select_all(action="SELECT");bpy.ops.object.delete(use_global=False)
 bpy.ops.import_scene.fbx(filepath=str(src),use_anim=True)
 meshes=[o for o in bpy.context.scene.objects if o.type=="MESH"]
@@ -11,6 +12,8 @@ rigs=[o for o in bpy.context.scene.objects if o.type=="ARMATURE"]
 if not meshes or not rigs: raise RuntimeError("FBX missing mesh or armature")
 rig=rigs[0]
 actions=list(bpy.data.actions)
+if not actions:
+    raise RuntimeError("FBX imported without animation actions; inspect FBX export settings")
 print("DIAGNOSTIC ACTIONS:",[a.name for a in actions])
 scene=bpy.context.scene
 scene.render.engine="BLENDER_WORKBENCH"
@@ -39,7 +42,9 @@ report={"actions":[],"mesh_count":len(meshes),"bones":len(rig.data.bones)}
 if not rig.animation_data: rig.animation_data_create()
 for action in actions:
     name=action.name
-    if not any(s in name.lower() for s in ("idle","walk","run","jump","attack","spin")):continue
+    if not any(s in name.lower() for s in ("idle","walk","run","jump","attack","spin")):
+        print("Skipping unmatched action:",name,flush=True)
+        continue
     # Temporarily disable NLA strips so the selected action is evaluated directly.
     for track in rig.animation_data.nla_tracks:track.mute=True
     rig.animation_data.action=action
@@ -57,5 +62,11 @@ for action in actions:
         scene.render.filepath=str(out/(name.replace("/","_")+"_"+str(index)+".png"))
         bpy.ops.render.render(write_still=True)
     report["actions"].append({"name":name,"samples":samples})
+if not report["actions"]:
+    raise RuntimeError("No matching animation actions found. Available: "+repr([a.name for a in actions]))
+images=list(out.glob("*.png"))
+if not images:
+    raise RuntimeError("No PNG images rendered to "+str(out))
+print("Rendered",len(images),"PNG files",flush=True)
 (out/"diagnostics.json").write_text(json.dumps(report,indent=2))
 print("Saved animation previews:",out)
