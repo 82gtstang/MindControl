@@ -129,9 +129,10 @@ void ACryptHero::Tick(float DeltaSeconds)
   else if (Speed > 15.f && OceanWalk) Desired=OceanWalk;
  }
  if (GetMesh()->GetAnimationMode()!=EAnimationMode::AnimationSingleNode ||
-     GetMesh()->GetAnimation()!=Desired)
+     ActiveOceanAnimation!=Desired)
  {
   GetMesh()->PlayAnimation(Desired,bLoop);
+  ActiveOceanAnimation=Desired;
  }
 }
 void ACryptHero::PlayOceanAction(UAnimSequence* Sequence,float Duration)
