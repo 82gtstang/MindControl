@@ -183,6 +183,7 @@ def pose_action(name,frames):
     action=bpy.data.actions.new("Ocean_"+name)
     rig.animation_data_create()
     rig.animation_data.action=action
+    clip_name=name
     for frame,angles in frames:
         for pb in rig.pose.bones:
             pb.rotation_mode="XYZ"
@@ -198,27 +199,27 @@ def pose_action(name,frames):
                 pb=rig.pose.bones.get(bone)
                 if pb: pb.rotation_euler[axis]+=math.radians(angle)
         for side,sign in (("L",-1),("R",1)):
-            name="upperarm_"+side
-            pb=rig.pose.bones.get(name)
+            arm_bone_name="upperarm_"+side
+            pb=rig.pose.bones.get(arm_bone_name)
             if not pb: continue
             # Downward arm correction around model Y; forward/back swing
             # around X. Convert both to the bone's own rest-space.
             rest=pb.bone.matrix_local.to_3x3()
             down_axis=rest.inverted() @ Vector((0,1,0))
             swing_axis=rest.inverted() @ Vector((1,0,0))
-            down=Quaternion(down_axis,math.radians(sign*50))
+            down=Quaternion(down_axis,math.radians(sign*78))
             swing=Quaternion(swing_axis,math.radians(arm_motion.get(name,0)))
             pb.rotation_mode="QUATERNION"
             pb.rotation_quaternion=down @ swing
         for side in ("L","R"):
-            name="forearm_"+side
-            pb=rig.pose.bones.get(name)
+            forearm_bone_name="forearm_"+side
+            pb=rig.pose.bones.get(forearm_bone_name)
             if pb:
                 rest=pb.bone.matrix_local.to_3x3()
                 axis=rest.inverted() @ Vector((1,0,0))
                 pb.rotation_mode="QUATERNION"
                 pb.rotation_quaternion=Quaternion(axis,math.radians(arm_motion.get(name,0)))
-        if name=="Jump":
+        if clip_name=="Jump":
             # Lift the whole character in mid-air, not only the legs.
             jump_heights={1:0.0,7:0.18,15:0.34,23:0.10,30:0.0}
             rig.pose.bones["root"].location.z=jump_heights.get(frame,0.0)
