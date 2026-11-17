@@ -90,27 +90,31 @@ jobs:
           $editor = Join-Path $env:UE_ROOT 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
           $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\MindControl.uproject'
           $script = Join-Path $env:GITHUB_WORKSPACE 'tools\import_ocean_serenity.py'
-          if (!(Test-Path $editor)) { throw "Unreal editor commandlet missing: $editor" }
-          # Disable Interchange FBX importer: its post-import Content Browser callback
-          # requires Slate and asserts in headless GitHub runner sessions.
-          # The legacy FBX importer supports FbxImportUI and unattended import.
+          $log = Join-Path $env:RUNNER_TEMP 'OceanSerenity-UnrealImport.log'
+          if (!(Test-Path $editor)) { throw "Unreal Editor missing: $editor" }
           $arguments = @(
             "`"$project`""
             '-run=pythonscript'
-            '-ExecCmds=Interchange.FeatureFlags.Import.FBX 0'
+            '-Interchange.FeatureFlags.Import.FBX=False'
             "-script=`"$script`""
             '-unattended'
             '-nop4'
             '-nosplash'
-            '-log'
             '-nullrhi'
+            "-abslog=`"$log`""
           )
           $process = Start-Process -FilePath $editor -ArgumentList $arguments -Wait -PassThru
           Write-Host "Unreal Editor exit code: $($process.ExitCode)"
+          if (Test-Path $log) {
+            Write-Host '=== Unreal FBX import diagnostic lines ==='
+            Get-Content $log | Where-Object { $_ -match 'LogPython|LogInterchange|LogWindows: Error|LogAssetTools|LogFbx|Error:|Assertion failed|OCEAN_IMPORT|LogSlate' } | Select-Object -Last 120 | ForEach-Object { Write-Host $_ }
+            Write-Host '=== End of Unreal log ==='
+            Get-Content $log -Tail 65 | ForEach-Object { Write-Host $_ }
+          } else { Write-Warning "Unreal import log not found: $log" }
           if ($process.ExitCode -ne 0) { throw "Unreal Ocean Serenity import failed ($($process.ExitCode))" }
-          $assets = @(Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE 'unreal\Content\Characters\OceanSerenity') -Filter '*.uasset' -ErrorAction SilentlyContinue)
-          if ($assets.Count -eq 0) { throw 'No imported Ocean Serenity .uasset found' }
-          Write-Host "Imported $($assets.Count) Unreal assets for Android cooking"
+          $mesh = Join-Path $env:GITHUB_WORKSPACE 'unreal\Content\Characters\OceanSerenity\OceanSerenity.uasset'
+          if (!(Test-Path $mesh)) { throw "Expected skeletal mesh missing: $mesh" }
+          Write-Host "Ocean Serenity skeletal mesh asset exists: $mesh"
       - name: Build and package Android APK
         shell: powershell
         run: |
