@@ -66,7 +66,8 @@ void ACryptGameMode::BeginPlay()
    UE_LOG(LogTemp,Warning,TEXT("MindControl: failed to spawn monster %d"),i);
  }
  // Open-air stone dungeon: a walk-in ruin with pillars, treasure marker and guardians.
- PlaceBlock(FVector(1000,3200,-70),FVector(36,30,1));
+ // Raise dungeon paving above terrain (terrain top = -20 cm) to avoid coplanar Z-fighting.
+ PlaceBlock(FVector(1000,3200,-57),FVector(36,30,1));
  for(int32 i=0;i<8;++i)
  {
   const float X=-600.f+(i%4)*950.f;
@@ -111,7 +112,8 @@ void ACryptGameMode::BeginPlay()
   }
  }
  // A cobbled village square with market stalls and stone benches.
- PlaceBlock(FVector(2400,0,-7),FVector(22,18,.14f));
+ // Square paving top = +8 cm, safely above road top = -6 cm.
+ PlaceBlock(FVector(2400,0,1),FVector(22,18,.14f));
  for(int32 i=0;i<9;++i)
  {
   const float X=1600.f+(i%3)*750.f;
