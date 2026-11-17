@@ -27,23 +27,40 @@ lo=Vector(tuple(min(p[i] for p in points) for i in range(3)))
 hi=Vector(tuple(max(p[i] for p in points) for i in range(3)))
 center=(lo+hi)*.5
 dimensions=hi-lo
-height=max(dimensions.z,.01)
-width=max(dimensions.x,.01)
-depth=max(dimensions.y,.01)
-if height < max(width,depth)*.65:
-    raise RuntimeError("Character not upright in Blender; bounds="+str(tuple(dimensions)))
+# Blender 2.92 imports this FBX with its height on Y, not Z.
+# Detect the vertical axis from the largest rest-pose extent.
+up_axis=max(range(3),key=lambda i:dimensions[i])
+height=max(dimensions[up_axis],.01)
+horizontal=[i for i in range(3) if i!=up_axis]
+# For the Ocean Serenity FBX the wide horizontal axis is X and depth is Z.
+wide_axis=max(horizontal,key=lambda i:dimensions[i])
+depth_axis=next(i for i in horizontal if i!=wide_axis)
+width=max(dimensions[wide_axis],.01)
+depth=max(dimensions[depth_axis],.01)
+print("Camera axes: up",up_axis,"width",wide_axis,"depth",depth_axis,flush=True)
 bpy.ops.object.camera_add()
 cam=bpy.context.object
 scene.camera=cam
 cam.data.type="ORTHO"
-cam.data.ortho_scale=max(height*1.32,width*1.25,depth*1.25)
+cam.data.ortho_scale=max(height*1.35,width*1.25,depth*1.25)
 distance=max(height,width,depth)*2.5
 def set_view(view):
-    if view=="front":
-        cam.location=(center.x,center.y-distance,center.z)
-    else:
-        cam.location=(center.x+distance,center.y,center.z)
-    cam.rotation_euler=(center-cam.location).to_track_quat("-Z","Y").to_euler()
+    position=center.copy()
+    axis=depth_axis if view=="front" else wide_axis
+    position[axis]-=distance
+    cam.location=position
+    # Align camera image vertical to the imported model's actual up axis.
+    up=Vector((0,0,0));up[up_axis]=1
+    direction=center-cam.location
+    cam.rotation_euler=direction.to_track_quat("-Z","Y").to_euler() if up_axis==2 else direction.to_track_quat("-Z","X").to_euler()
+    # Blender's default camera up convention is Z; for Y-up, rotate
+    # the camera's local frame so image vertical follows world Y.
+    from mathutils import Matrix
+    right=direction.cross(up).normalized()
+    image_up=right.cross(direction).normalized()
+    backward=-direction.normalized()
+    matrix=Matrix(((right.x,image_up.x,backward.x),(right.y,image_up.y,backward.y),(right.z,image_up.z,backward.z)))
+    cam.rotation_euler=matrix.to_euler()
 report={"actions":[],"mesh_count":len(meshes),"bones":len(rig.data.bones)}
 if not rig.animation_data: rig.animation_data_create()
 for action in actions:
