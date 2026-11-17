@@ -209,7 +209,8 @@ def pose_action(name,frames):
             arm_direction=(pb.bone.tail_local-pb.bone.head_local).normalized()
             target_direction=Vector((sign*0.13,0,-0.991)).normalized()
             world_correction=arm_direction.rotation_difference(target_direction)
-            local_correction=rest.inverted() @ world_correction @ rest
+            rest_rotation=rest.to_quaternion()
+            local_correction=rest_rotation.inverted() @ world_correction @ rest_rotation
             swing_axis=rest.inverted() @ Vector((1,0,0))
             swing=Quaternion(swing_axis,math.radians(arm_motion.get(arm_bone_name,0)))
             pb.rotation_mode="QUATERNION"
