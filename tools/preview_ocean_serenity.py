@@ -138,6 +138,24 @@ for name in ("clavicle_L","upperarm_L","forearm_L","clavicle_R","upperarm_R","fo
         add_marker(head,head+vector*height*.10,height*.004,axis_colors[axis],name+"_"+axis)
     shoulders.append(entry)
 report["shoulder_rig"]={"axes_legend":{"X":"red","Y":"green","Z":"blue"},"bones":shoulders}
+# Skinning probe: rotate each shoulder 50 degrees around anatomical world Y.
+# Capture before/after mesh views to reveal whether the weighted vertices follow.
+from mathutils import Quaternion
+for obj in markers:obj.hide_render=True
+for side in ("L","R"):
+    pb=rig.pose.bones.get("upperarm_"+side)
+    if not pb:continue
+    rest=pb.bone.matrix_local.to_3x3()
+    axis=rest.inverted() @ Vector((0,1,0))
+    pb.rotation_mode="QUATERNION"
+    pb.rotation_quaternion=Quaternion(axis,math.radians(-50 if side=="L" else 50))
+    bpy.context.view_layer.update()
+    set_view("front")
+    scene.render.filepath=str(out/("Shoulder_Weight_Test_"+side+".png"))
+    bpy.ops.render.render(write_still=True)
+    pb.rotation_quaternion=(1,0,0,0)
+    bpy.context.view_layer.update()
+for obj in markers:obj.hide_render=False
 # Hide skinned geometry so joint and local-axis markers are unobstructed.
 for obj in meshes:obj.hide_render=True
 for view in ("front","side"):
