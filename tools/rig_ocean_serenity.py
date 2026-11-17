@@ -227,10 +227,15 @@ pose_action("Attack",[
  (1,[]),(5,[("chest",2,-16),("upperarm_R",1,-36),("forearm_R",1,-25),("upperarm_L",1,12)]),
  (10,[("chest",2,22),("upperarm_R",1,36),("forearm_R",1,15),("upperarm_L",1,-12)]),
  (15,[("chest",2,8),("upperarm_R",1,15),("forearm_R",1,6)]),(22,[])])
-pose_action("Spin",[
- (1,[]),(7,[("chest",2,16),("upperarm_L",1,-28),("upperarm_R",1,28)]),
- (13,[("chest",2,27),("upperarm_L",1,-34),("upperarm_R",1,34)]),
- (19,[("chest",2,16),("upperarm_L",1,-28),("upperarm_R",1,28)]),(25,[])])
+spin=pose_action("Spin",[
+ (1,[("root",2,0),("upperarm_L",1,-24),("upperarm_R",1,24)]),
+ (7,[("root",2,90),("upperarm_L",1,-32),("upperarm_R",1,32)]),
+ (13,[("root",2,180),("upperarm_L",1,-32),("upperarm_R",1,32)]),
+ (19,[("root",2,270),("upperarm_L",1,-32),("upperarm_R",1,32)]),
+ (25,[("root",2,360),("upperarm_L",1,-24),("upperarm_R",1,24)])])
+for fc in spin.fcurves:
+    if fc.data_path=='pose.bones["root"].rotation_euler':
+        for key in fc.keyframe_points: key.interpolation="LINEAR"
 rig.animation_data.action=None
 # Preserve textures through FBX texture copying when Blender finds the MTL.
 bpy.ops.object.select_all(action="DESELECT")
