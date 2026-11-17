@@ -202,15 +202,18 @@ def pose_action(name,frames):
             arm_bone_name="upperarm_"+side
             pb=rig.pose.bones.get(arm_bone_name)
             if not pb: continue
-            # Downward arm correction around model Y; forward/back swing
-            # around X. Convert both to the bone's own rest-space.
+            # Match the actual rest-bone direction to a relaxed arm beside
+            # the hip. Fixed signed-angle guesses leave A-pose arms extended
+            # when the imported model has a different shoulder slope.
             rest=pb.bone.matrix_local.to_3x3()
-            down_axis=rest.inverted() @ Vector((0,1,0))
+            arm_direction=(pb.bone.tail_local-pb.bone.head_local).normalized()
+            target_direction=Vector((sign*0.13,0,-0.991)).normalized()
+            world_correction=arm_direction.rotation_difference(target_direction)
+            local_correction=rest.inverted() @ world_correction @ rest
             swing_axis=rest.inverted() @ Vector((1,0,0))
-            down=Quaternion(down_axis,math.radians(sign*78))
             swing=Quaternion(swing_axis,math.radians(arm_motion.get(arm_bone_name,0)))
             pb.rotation_mode="QUATERNION"
-            pb.rotation_quaternion=down @ swing
+            pb.rotation_quaternion=local_correction @ swing
         for side in ("L","R"):
             forearm_bone_name="forearm_"+side
             pb=rig.pose.bones.get(forearm_bone_name)
