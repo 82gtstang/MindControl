@@ -1,5 +1,5 @@
 """Render FBX animation diagnostic frames with Blender (headless)."""
-import bpy,sys,math,json
+import bpy,sys,math,json,re
 from pathlib import Path
 from mathutils import Vector
 args=sys.argv[sys.argv.index("--")+1:]
@@ -59,7 +59,7 @@ for action in actions:
         mins=[min(v[i] for v in corners) for i in range(3)]
         maxs=[max(v[i] for v in corners) for i in range(3)]
         samples.append({"frame":frame,"bbox_min":mins,"bbox_max":maxs})
-        scene.render.filepath=str(out/(name.replace("/","_")+"_"+str(index)+".png"))
+        scene.render.filepath=str(out/(re.sub(r'[<>:"/\\\\|?*\\x00-\\x1f]', "_", name)+"_"+str(index)+".png"))
         bpy.ops.render.render(write_still=True)
     report["actions"].append({"name":name,"samples":samples})
 if not report["actions"]:
