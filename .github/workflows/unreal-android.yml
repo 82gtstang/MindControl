@@ -5,6 +5,8 @@ on:
     branches: [unreal5-prototype, diagnostic/android-landscape-startup]
     paths:
       - 'unreal/**'
+      - 'tools/rig_ocean_serenity.py'
+      - 'tools/import_ocean_serenity.py'
       - '.github/workflows/unreal-android.yml'
 jobs:
   package-android:
