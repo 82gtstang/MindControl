@@ -66,11 +66,14 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          & $env:BLENDER_EXE -b -t 2 --python 'tools/preview_ocean_serenity.py' -- "$env:OCEAN_OUTPUT" "rig-preview"
+          & $env:BLENDER_EXE -b -t 2 --python 'tools/preview_ocean_serenity.py' -- "$env:OCEAN_OUTPUT" "$env:GITHUB_WORKSPACE\\rig-preview"
           if ($LASTEXITCODE -ne 0) { throw "Animation preview render failed ($LASTEXITCODE)" }
+          $images = @(Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE "rig-preview") -Filter *.png -File -ErrorAction SilentlyContinue)
+          Write-Host "Preview PNG count: $($images.Count)"
+          if ($images.Count -lt 1) { throw "Blender did not generate PNG previews in workspace" }
       - name: Upload animation preview frames
         uses: actions/upload-artifact@v4
         with:
           name: OceanSerenity-Animation-Previews
-          path: rig-preview/*
+          path: ${{ github.workspace }}/rig-preview/*
           if-no-files-found: error
