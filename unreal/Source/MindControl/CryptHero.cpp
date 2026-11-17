@@ -12,6 +12,7 @@
 #include "UObject/ConstructorHelpers.h"
 #include "Engine/SkeletalMesh.h"
 #include "Components/CapsuleComponent.h"
+#include "Animation/AnimSequence.h"
 ACryptHero::ACryptHero()
 {
  PrimaryActorTick.bCanEverTick = true;
@@ -42,6 +43,14 @@ ACryptHero::ACryptHero()
   // do not rotate the capsule, movement directions, or follow camera.
   GetMesh()->SetRelativeRotation(FRotator(0,-90,-90));
   GetMesh()->SetRelativeScale3D(FVector(1,1,1));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> Idle(TEXT("/Game/Characters/OceanSerenity/Ocean_Idle.Ocean_Idle"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> Walk(TEXT("/Game/Characters/OceanSerenity/Ocean_Walk.Ocean_Walk"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> Run(TEXT("/Game/Characters/OceanSerenity/Ocean_Run.Ocean_Run"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> JumpAnim(TEXT("/Game/Characters/OceanSerenity/Ocean_Jump.Ocean_Jump"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> AttackAnim(TEXT("/Game/Characters/OceanSerenity/Ocean_Attack.Ocean_Attack"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> SpinAnim(TEXT("/Game/Characters/OceanSerenity/Ocean_Spin.Ocean_Spin"));
+  OceanIdle=Idle.Object; OceanWalk=Walk.Object; OceanRun=Run.Object;
+  OceanJump=JumpAnim.Object; OceanAttack=AttackAnim.Object; OceanSpin=SpinAnim.Object;
  }
  if(bHasCountess)
  {
@@ -95,7 +104,43 @@ void ACryptHero::BeginPlay()
   }
  }
 }
-void ACryptHero::Tick(float DeltaSeconds) { Super::Tick(DeltaSeconds); AttackCooldown = FMath::Max(0.f,AttackCooldown-DeltaSeconds); }
+void ACryptHero::Tick(float DeltaSeconds)
+{
+ Super::Tick(DeltaSeconds);
+ AttackCooldown=FMath::Max(0.f,AttackCooldown-DeltaSeconds);
+ if (!OceanIdle || !GetMesh()) return;
+ if (OceanActionTime > 0.f) OceanActionTime=FMath::Max(0.f,OceanActionTime-DeltaSeconds);
+ UAnimSequence* Desired=OceanIdle;
+ bool bLoop=true;
+ if (OceanActionTime > 0.f && ActiveOceanAnimation)
+ {
+  Desired=ActiveOceanAnimation;
+  bLoop=false;
+ }
+ else if (GetCharacterMovement()->IsFalling() && OceanJump)
+ {
+  Desired=OceanJump;
+  bLoop=false;
+ }
+ else
+ {
+  const float Speed=GetVelocity().Size2D();
+  if (Speed > 380.f && OceanRun) Desired=OceanRun;
+  else if (Speed > 15.f && OceanWalk) Desired=OceanWalk;
+ }
+ if (GetMesh()->GetAnimationMode()!=EAnimationMode::AnimationSingleNode ||
+     GetMesh()->GetAnimation()!=Desired)
+ {
+  GetMesh()->PlayAnimation(Desired,bLoop);
+ }
+}
+void ACryptHero::PlayOceanAction(UAnimSequence* Sequence,float Duration)
+{
+ if (!Sequence || !GetMesh()) return;
+ ActiveOceanAnimation=Sequence;
+ OceanActionTime=Duration;
+ GetMesh()->PlayAnimation(Sequence,false);
+}
 void ACryptHero::SetupPlayerInputComponent(UInputComponent* Input)
 {
  Super::SetupPlayerInputComponent(Input);
@@ -117,6 +162,7 @@ void ACryptHero::Attack()
 {
  if(AttackCooldown>0) return;
  AttackCooldown=.45f;
+ PlayOceanAction(OceanAttack,.45f);
  for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
  {
   const FVector Offset=It->GetActorLocation()-GetActorLocation();
@@ -128,6 +174,7 @@ void ACryptHero::SpinAttack()
 {
  if(AttackCooldown>0) return;
  AttackCooldown=1.2f;
+ PlayOceanAction(OceanSpin,1.2f);
  for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
   if(FVector::Dist(It->GetActorLocation(),GetActorLocation())<300.f) It->TakeHit(bSwordEquipped?2.f:1.f);
 }
