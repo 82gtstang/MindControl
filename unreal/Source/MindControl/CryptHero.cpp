@@ -52,6 +52,18 @@ ACryptHero::ACryptHero()
   static ConstructorHelpers::FObjectFinder<UAnimSequence> SpinAnim(TEXT("/Game/Characters/OceanSerenity/Ocean_Spin.Ocean_Spin"));
   OceanIdle=Idle.Object; OceanWalk=Walk.Object; OceanRun=Run.Object;
   OceanJump=JumpAnim.Object; OceanAttack=AttackAnim.Object; OceanSpin=SpinAnim.Object;
+  // Start the relaxed idle immediately; never leave the mesh in FBX reference pose.
+  if (OceanIdle)
+  {
+   GetMesh()->PlayAnimation(OceanIdle,true);
+   ActiveOceanAnimation=OceanIdle;
+  }
+  else
+  {
+   UE_LOG(LogTemp,Error,TEXT("Ocean Serenity idle animation missing: /Game/Characters/OceanSerenity/Ocean_Idle"));
+  }
+  UE_LOG(LogTemp,Warning,TEXT("Ocean Serenity clips loaded: idle=%d walk=%d run=%d jump=%d attack=%d spin=%d"),
+   OceanIdle!=nullptr,OceanWalk!=nullptr,OceanRun!=nullptr,OceanJump!=nullptr,OceanAttack!=nullptr,OceanSpin!=nullptr);
  }
  if(bHasCountess)
  {
