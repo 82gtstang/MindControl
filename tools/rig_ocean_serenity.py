@@ -208,7 +208,7 @@ def pose_action(name,frames):
             down_axis=rest.inverted() @ Vector((0,1,0))
             swing_axis=rest.inverted() @ Vector((1,0,0))
             down=Quaternion(down_axis,math.radians(sign*78))
-            swing=Quaternion(swing_axis,math.radians(arm_motion.get(name,0)))
+            swing=Quaternion(swing_axis,math.radians(arm_motion.get(arm_bone_name,0)))
             pb.rotation_mode="QUATERNION"
             pb.rotation_quaternion=down @ swing
         for side in ("L","R"):
@@ -218,7 +218,7 @@ def pose_action(name,frames):
                 rest=pb.bone.matrix_local.to_3x3()
                 axis=rest.inverted() @ Vector((1,0,0))
                 pb.rotation_mode="QUATERNION"
-                pb.rotation_quaternion=Quaternion(axis,math.radians(arm_motion.get(name,0)))
+                pb.rotation_quaternion=Quaternion(axis,math.radians(arm_motion.get(forearm_bone_name,0)))
         if clip_name=="Jump":
             # Lift the whole character in mid-air, not only the legs.
             jump_heights={1:0.0,7:0.18,15:0.34,23:0.10,30:0.0}
