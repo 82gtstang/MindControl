@@ -142,6 +142,7 @@ report["shoulder_rig"]={"axes_legend":{"X":"red","Y":"green","Z":"blue"},"bones"
 # Capture before/after mesh views to reveal whether the weighted vertices follow.
 from mathutils import Quaternion
 for obj in markers:obj.hide_render=True
+report["shoulder_weight_tests"]=[]
 for side in ("L","R"):
     pb=rig.pose.bones.get("upperarm_"+side)
     if not pb:continue
@@ -150,6 +151,18 @@ for side in ("L","R"):
     pb.rotation_mode="QUATERNION"
     pb.rotation_quaternion=Quaternion(axis,math.radians(-50 if side=="L" else 50))
     bpy.context.view_layer.update()
+    rest_head=rig.matrix_world @ pb.bone.head_local
+    rest_tail=rig.matrix_world @ pb.bone.tail_local
+    posed_head=rig.matrix_world @ pb.head
+    posed_tail=rig.matrix_world @ pb.tail
+    report["shoulder_weight_tests"].append({
+        "side":side,"angle_degrees":-50 if side=="L" else 50,
+        "rest_head":list(rest_head),"rest_tail":list(rest_tail),
+        "posed_head":list(posed_head),"posed_tail":list(posed_tail),
+        "tail_displacement_m":(posed_tail-rest_tail).length,
+        "rotation_mode":pb.rotation_mode
+    })
+    print("SHOULDER_TEST",side,"tail_displacement_m",(posed_tail-rest_tail).length,flush=True)
     set_view("front")
     scene.render.filepath=str(out/("Shoulder_Weight_Test_"+side+".png"))
     bpy.ops.render.render(write_still=True)
