@@ -59,6 +59,7 @@ jobs:
       - name: Upload rigged model and report
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: OceanSerenity-Experimental-Rig-FBX
           path: rig-output/*
           if-no-files-found: error
@@ -74,6 +75,7 @@ jobs:
       - name: Upload animation preview frames
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: OceanSerenity-Animation-Previews
           path: ${{ github.workspace }}/rig-preview/*
           if-no-files-found: error
