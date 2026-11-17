@@ -33,7 +33,10 @@ ACryptHero::ACryptHero()
  {
   GetMesh()->SetSkeletalMesh(OceanMesh.Object);
   GetMesh()->SetRelativeLocation(FVector(0,0,-88));
-  GetMesh()->SetRelativeRotation(FRotator(0,-90,0));
+  // The Blender FBX arrives lying on its back in the Android build.
+  // Rotate only the skeletal mesh about its local X axis to stand it upright;
+  // do not rotate the capsule, movement directions, or follow camera.
+  GetMesh()->SetRelativeRotation(FRotator(0,-90,90));
   GetMesh()->SetRelativeScale3D(FVector(1,1,1));
  }
  if(bHasCountess)
