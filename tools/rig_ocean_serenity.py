@@ -51,25 +51,50 @@ for v in body.data.vertices:
     v.co.x -= mid_x
     v.co.y -= mid_y
     v.co.z -= lo.z
-# Standard humanoid proportions for A-pose; adjust after inspecting preview.
-def p(x,y,z): return (x*w,y*w,z*h)
+# Geometry-fitted humanoid rig. Infer body landmarks from horizontal mesh slices
+# rather than scaling every joint from the character's overall width.
+# The full width includes extended A-pose arms and must not determine torso size.
+def slice_points(z_fraction, tolerance=.022):
+    z_target=z_fraction*h
+    return [v.co for v in body.data.vertices if abs(v.co.z-z_target)<tolerance*h]
+def percentile(values,fraction):
+    values=sorted(values)
+    if not values: return 0.
+    return values[min(len(values)-1,max(0,int(fraction*(len(values)-1))))]
+def center_y(z_fraction,central_x=None):
+    pts=slice_points(z_fraction)
+    if central_x is not None:
+        pts=[v for v in pts if abs(v.x)<central_x]
+    return percentile([v.y for v in pts],.5) if pts else 0.
+# Estimate the torso half-width from the waist, avoiding the extended hands.
+waist=slice_points(.55)
+waist_center=[v for v in waist if abs(v.x)<w*.24]
+torso_half=percentile([abs(v.x) for v in waist_center],.85) if waist_center else w*.13
+torso_half=max(w*.075,min(w*.20,torso_half))
+hip_y=center_y(.49,torso_half)
+chest_y=center_y(.73,torso_half)
+shoulder_x=min(w*.22,max(torso_half*.92,w*.105))
+elbow_x=min(w*.36,max(shoulder_x+w*.10,w*.28))
+wrist_x=min(w*.46,max(elbow_x+w*.075,w*.40))
+def p(x,y,z): return (x,y,z*h)
 bones=[
- ("root",None,p(0,0,0),p(0,0,.08)),
- ("pelvis","root",p(0,0,.49),p(0,0,.57)),
- ("spine","pelvis",p(0,0,.57),p(0,0,.72)),
- ("chest","spine",p(0,0,.72),p(0,0,.83)),
- ("neck","chest",p(0,0,.83),p(0,0,.89)),
- ("head","neck",p(0,0,.89),p(0,0,.99)),
+ ("root",None,p(0,hip_y,0),p(0,hip_y,.08)),
+ ("pelvis","root",p(0,hip_y,.49),p(0,hip_y,.56)),
+ ("spine","pelvis",p(0,hip_y,.56),p(0,chest_y,.70)),
+ ("chest","spine",p(0,chest_y,.70),p(0,chest_y,.82)),
+ ("neck","chest",p(0,chest_y,.82),p(0,chest_y,.89)),
+ ("head","neck",p(0,chest_y,.89),p(0,chest_y,.985)),
 ]
 for side,s in (("L",-1),("R",1)):
+    leg_x=torso_half*.52*s
     bones += [
-      (f"clavicle_{side}","chest",p(s*.10,0,.82),p(s*.20,0,.80)),
-      (f"upperarm_{side}",f"clavicle_{side}",p(s*.20,0,.80),p(s*.36,0,.67)),
-      (f"forearm_{side}",f"upperarm_{side}",p(s*.36,0,.67),p(s*.47,0,.56)),
-      (f"hand_{side}",f"forearm_{side}",p(s*.47,0,.56),p(s*.51,0,.52)),
-      (f"thigh_{side}","pelvis",p(s*.105,0,.49),p(s*.105,0,.285)),
-      (f"shin_{side}",f"thigh_{side}",p(s*.105,0,.285),p(s*.105,0,.065)),
-      (f"foot_{side}",f"shin_{side}",p(s*.105,0,.065),p(s*.105,-.11,.035)),
+      (f"clavicle_{side}","chest",p(s*torso_half*.55,chest_y,.81),p(s*shoulder_x,chest_y,.79)),
+      (f"upperarm_{side}",f"clavicle_{side}",p(s*shoulder_x,chest_y,.79),p(s*elbow_x,chest_y,.67)),
+      (f"forearm_{side}",f"upperarm_{side}",p(s*elbow_x,chest_y,.67),p(s*wrist_x,chest_y,.565)),
+      (f"hand_{side}",f"forearm_{side}",p(s*wrist_x,chest_y,.565),p(s*min(w*.49,wrist_x+w*.045),chest_y,.53)),
+      (f"thigh_{side}","pelvis",p(leg_x,hip_y,.49),p(leg_x,hip_y,.285)),
+      (f"shin_{side}",f"thigh_{side}",p(leg_x,hip_y,.285),p(leg_x,hip_y,.065)),
+      (f"foot_{side}",f"shin_{side}",p(leg_x,hip_y,.065),p(leg_x,hip_y-w*.065,.035)),
     ]
 bpy.ops.object.armature_add(enter_editmode=False)
 rig=bpy.context.object
@@ -91,41 +116,39 @@ def segment_dist(point,a,b):
     return (point-(a+t*ab)).length
 deform=[(name,Vector(head),Vector(tail)) for name,_,head,tail in bones if name!="root"]
 groups={name:body.vertex_groups.new(name=name) for name,_,_ in deform}
-# Region-aware skinning. Nearest-bone-only weighting previously assigned torso
-# vertices to arms and legs, causing stretched rubber-like deformation.
-# Partition by height and horizontal distance from the body's midline.
+# Anatomical masks prevent body vertices from attaching to distant limb bones.
+# Bone labels are selected from the geometry's height and lateral position.
 for v in body.data.vertices:
     q=v.co
     z=q.z/max(h,1e-6)
-    x=abs(q.x)/max(w,1e-6)
-    if z >= .83:
-        allowed={"head","neck","chest"}
-    elif z >= .72:
-        allowed={"chest","spine","neck","clavicle_L","clavicle_R"}
-        if x > .13: allowed.update({"upperarm_L","upperarm_R"})
-    elif z >= .54:
-        allowed={"chest","spine","pelvis"}
-        if x > .16: allowed.update({"clavicle_L","clavicle_R","upperarm_L","upperarm_R","forearm_L","forearm_R","hand_L","hand_R"})
-    elif z >= .46:
-        allowed={"pelvis","spine","thigh_L","thigh_R"}
-        if x > .22: allowed.update({"forearm_L","forearm_R","hand_L","hand_R"})
+    ax=abs(q.x)
+    side="L" if q.x<0 else "R"
+    if z>=.87:
+        allowed={"head","neck"}
+    elif z>=.81 and ax<shoulder_x*.82:
+        allowed={"neck","chest","head"}
+    elif z>=.52 and ax>shoulder_x*.85:
+        allowed={f"upperarm_{side}",f"forearm_{side}",f"hand_{side}",f"clavicle_{side}"}
+    elif z>=.71:
+        allowed={"chest","spine",f"clavicle_{side}"}
+    elif z>=.54:
+        allowed={"spine","chest","pelvis"}
+    elif z>=.43:
+        allowed={"pelvis","spine",f"thigh_{side}"}
+    elif z>=.27:
+        allowed={f"thigh_{side}",f"shin_{side}"}
+    elif z>=.08:
+        allowed={f"shin_{side}",f"thigh_{side}"}
     else:
-        allowed={"thigh_L","thigh_R","shin_L","shin_R","foot_L","foot_R"}
-        if z > .32 and x > .22: allowed.update({"hand_L","hand_R"})
-    # Do not blend across left/right limbs. x sign is matched to bone side.
-    if q.x < -w*.035:
-        allowed={name for name in allowed if not name.endswith("_R")}
-    elif q.x > w*.035:
-        allowed={name for name in allowed if not name.endswith("_L")}
-    candidates=sorted(((segment_dist(q,aa,bb),name) for name,aa,bb in deform if name in allowed),key=lambda item:item[0])[:3]
-    if not candidates:
-        raise RuntimeError("No deform candidates for vertex")
-    scale=max(h*.045,candidates[0][0]*.5)
-    weights=[math.exp(-((d-candidates[0][0])/scale)**2) for d,_ in candidates]
+        allowed={f"foot_{side}",f"shin_{side}"}
+    candidates=sorted(((segment_dist(q,aa,bb),name) for name,aa,bb in deform if name in allowed),key=lambda item:item[0])[:2]
+    if not candidates: raise RuntimeError("No matching deform bones")
+    # Keep influences local; avoid rubber-band stretching from four distant bones.
+    distances=[max(d,1e-4) for d,_ in candidates]
+    weights=[1.0/(d*d) for d in distances]
     total=sum(weights)
     for (_,name),weight in zip(candidates,weights):
-        if weight/total >= .001:
-            groups[name].add([v.index],weight/total,"REPLACE")
+        groups[name].add([v.index],weight/total,"REPLACE")
 mod=body.modifiers.new("OceanSerenitySkin","ARMATURE")
 mod.object=rig
 body.parent=rig
@@ -190,6 +213,6 @@ bpy.ops.export_scene.fbx(filepath=str(target),use_selection=True,
     bake_anim=True,bake_anim_use_nla_strips=True,bake_anim_use_all_actions=False,
     bake_anim_simplify_factor=0.0,path_mode="COPY",embed_textures=True)
 report={"source":str(source),"fbx":str(target),"vertices":len(body.data.vertices),
-        "bones":len(bones),"height":h,"width":w,"warning":"Approximate rig: joint positions and deformation require visual validation"}
+        "bones":len(bones),"height":h,"width":w,"warning":"Geometry-fitted experimental rig; manual weight painting and joint validation still recommended"}
 target.with_suffix(".json").write_text(json.dumps(report,indent=2))
 print("RIG_REPORT "+json.dumps(report))
