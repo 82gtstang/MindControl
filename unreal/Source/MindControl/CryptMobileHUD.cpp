@@ -15,10 +15,10 @@ void ACryptMobileHUD::DrawHUD()
   DrawRect(FLinearColor(0.07f,0.12f,0.24f,0.75f),X-R,Y-R,R*2,R*2);
   DrawText(Label,FLinearColor::White,X-R+12*S,Y-13*S,nullptr,1.25f*S,false);
  };
- Button(W-110*S,H-125*S,TEXT("JUMP"));
- Button(W-280*S,H-125*S,TEXT("ATTACK"));
- Button(W-110*S,H-300*S,TEXT("SPIN"));
- Button(W-280*S,H-300*S,TEXT("BAG"));
+ Button(W-110*S,105*S,TEXT("JUMP"));
+ Button(W-280*S,105*S,TEXT("ATTACK"));
+ Button(W-110*S,275*S,TEXT("SPIN"));
+ Button(W-280*S,275*S,TEXT("BAG"));
  if(const ACryptHero* Hero=Cast<ACryptHero>(GetOwningPawn()))
  {
   DrawText(FString::Printf(TEXT("Treasure: %d"),Hero->TreasureCount),FLinearColor::Yellow,30*S,25*S,nullptr,1.3f*S,false);
