@@ -87,20 +87,23 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $editor = Join-Path $env:UE_ROOT 'Engine\Binaries\Win64\UnrealEditor.exe'
+          $editor = Join-Path $env:UE_ROOT 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
           $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\MindControl.uproject'
           $script = Join-Path $env:GITHUB_WORKSPACE 'tools\import_ocean_serenity.py'
           if (!(Test-Path $editor)) { throw "Unreal editor commandlet missing: $editor" }
-          # Full editor initializes Slate; Interchange FBX import can crash in UnrealEditor-Cmd without it.
-          # A self-hosted Windows runner must have an interactive desktop session available.
+          # Disable Interchange FBX importer: its post-import Content Browser callback
+          # requires Slate and asserts in headless GitHub runner sessions.
+          # The legacy FBX importer supports FbxImportUI and unattended import.
           $arguments = @(
             "`"$project`""
             '-run=pythonscript'
+            '-ExecCmds=Interchange.FeatureFlags.Import.FBX 0'
             "-script=`"$script`""
             '-unattended'
             '-nop4'
             '-nosplash'
             '-log'
+            '-nullrhi'
           )
           $process = Start-Process -FilePath $editor -ArgumentList $arguments -Wait -PassThru
           Write-Host "Unreal Editor exit code: $($process.ExitCode)"
