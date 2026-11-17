@@ -37,7 +37,14 @@ wide_axis=max(horizontal,key=lambda i:dimensions[i])
 depth_axis=next(i for i in horizontal if i!=wide_axis)
 width=max(dimensions[wide_axis],.01)
 depth=max(dimensions[depth_axis],.01)
-print("Camera axes: up",up_axis,"width",wide_axis,"depth",depth_axis,flush=True)
+head_bone=rig.data.bones.get("head")
+foot_bone=rig.data.bones.get("foot_L") or rig.data.bones.get("foot_R")
+up_sign=1
+if head_bone and foot_bone:
+    head_world=rig.matrix_world @ head_bone.head_local
+    foot_world=rig.matrix_world @ foot_bone.head_local
+    up_sign=1 if head_world[up_axis]>=foot_world[up_axis] else -1
+print("Camera axes: up",up_axis,"sign",up_sign,"width",wide_axis,"depth",depth_axis,flush=True)
 bpy.ops.object.camera_add()
 cam=bpy.context.object
 scene.camera=cam
@@ -50,7 +57,7 @@ def set_view(view):
     position[axis]-=distance
     cam.location=position
     # Align camera image vertical to the imported model's actual up axis.
-    up=Vector((0,0,0));up[up_axis]=1
+    up=Vector((0,0,0));up[up_axis]=up_sign
     direction=center-cam.location
     cam.rotation_euler=direction.to_track_quat("-Z","Y").to_euler() if up_axis==2 else direction.to_track_quat("-Z","X").to_euler()
     # Blender's default camera up convention is Z; for Y-up, rotate
