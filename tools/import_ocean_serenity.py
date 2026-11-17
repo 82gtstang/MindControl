@@ -18,7 +18,7 @@ task.save=True
 options=unreal.FbxImportUI()
 options.set_editor_property("import_mesh",True)
 options.set_editor_property("import_as_skeletal",True)
-options.set_editor_property("import_animations",False)
+options.set_editor_property("import_animations",True)
 options.set_editor_property("import_materials",True)
 options.set_editor_property("import_textures",True)
 options.set_editor_property("mesh_type_to_import",unreal.FBXImportType.FBXIT_SKELETAL_MESH)
@@ -38,5 +38,22 @@ if mesh.get_path_name()!=expected:
     renamed=unreal.EditorAssetLibrary.rename_asset(mesh.get_path_name(),expected)
     if not renamed:
         raise RuntimeError("Unable to rename imported skeletal mesh to "+expected)
+# Normalize clip asset names so C++ can reference them at cook time.
+clips=("Idle","Walk","Run","Jump","Attack","Spin")
+for path in unreal.EditorAssetLibrary.list_assets(destination,recursive=True,include_folder=False):
+    obj=unreal.EditorAssetLibrary.load_asset(path)
+    if not isinstance(obj,unreal.AnimSequence):
+        continue
+    name=path.rsplit("/",1)[-1].lower()
+    for clip in clips:
+        if ("ocean_"+clip.lower()) in name or name.endswith("_"+clip.lower()):
+            target=destination+"/Ocean_"+clip
+            if path != target and not unreal.EditorAssetLibrary.does_asset_exist(target):
+                unreal.EditorAssetLibrary.rename_asset(path,target)
+            break
 unreal.EditorAssetLibrary.save_directory(destination,only_if_is_dirty=False,recursive=True)
+for clip in clips:
+    path=destination+"/Ocean_"+clip
+    if not unreal.EditorAssetLibrary.does_asset_exist(path):
+        unreal.log_warning("Ocean animation missing after import: "+path)
 print("OCEAN_IMPORT_SUCCESS "+expected)
