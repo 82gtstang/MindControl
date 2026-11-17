@@ -11,6 +11,7 @@
 #include "Engine/GameViewportClient.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Engine/SkeletalMesh.h"
+#include "Components/CapsuleComponent.h"
 ACryptHero::ACryptHero()
 {
  PrimaryActorTick.bCanEverTick = true;
@@ -39,7 +40,7 @@ ACryptHero::ACryptHero()
   // The Blender FBX arrives lying on its back in the Android build.
   // Rotate only the skeletal mesh about its local X axis to stand it upright;
   // do not rotate the capsule, movement directions, or follow camera.
-  GetMesh()->SetRelativeRotation(FRotator(0,-90,90));
+  GetMesh()->SetRelativeRotation(FRotator(0,-90,-90));
   GetMesh()->SetRelativeScale3D(FVector(1,1,1));
  }
  if(bHasCountess)
@@ -75,7 +76,25 @@ ACryptHero::ACryptHero()
  static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
  if(Cube.Succeeded()) SwordVisual->SetStaticMesh(Cube.Object);
 }
-void ACryptHero::BeginPlay() { Super::BeginPlay(); SetActorLocation(FVector(-2900,0,150),false,nullptr,ETeleportType::TeleportPhysics); }
+void ACryptHero::BeginPlay()
+{
+ Super::BeginPlay();
+ SetActorLocation(FVector(-2900,0,150),false,nullptr,ETeleportType::TeleportPhysics);
+ // Align the lowest point of the imported mesh with the collision capsule base.
+ // Imported FBX origins are not guaranteed to match Unreal mannequin origins.
+ if (GetMesh() && GetMesh()->GetSkeletalMeshAsset())
+ {
+  GetMesh()->UpdateBounds();
+  const FBoxSphereBounds MeshBounds = GetMesh()->Bounds;
+  const float MeshBottom = MeshBounds.Origin.Z - MeshBounds.BoxExtent.Z;
+  const float CapsuleBottom = GetActorLocation().Z - GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+  const float Adjustment = CapsuleBottom - MeshBottom + 2.0f;
+  if (FMath::IsFinite(Adjustment) && FMath::Abs(Adjustment) < 10000.f)
+  {
+   GetMesh()->AddWorldOffset(FVector(0,0,Adjustment));
+  }
+ }
+}
 void ACryptHero::Tick(float DeltaSeconds) { Super::Tick(DeltaSeconds); AttackCooldown = FMath::Max(0.f,AttackCooldown-DeltaSeconds); }
 void ACryptHero::SetupPlayerInputComponent(UInputComponent* Input)
 {
