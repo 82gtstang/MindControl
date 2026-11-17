@@ -98,6 +98,54 @@ for action in actions:
     report["actions"].append({"name":name,"samples":samples})
 if not report["actions"]:
     raise RuntimeError("No matching animation actions found. Available: "+repr([a.name for a in actions]))
+# Shoulder rig diagnostic: rest-space joint axes and visible bone markers.
+# Render the imported rig at rest, without relying on viewport-only bone overlays.
+from mathutils import Quaternion
+rig.animation_data.action=None
+for track in rig.animation_data.nla_tracks: track.mute=True
+scene.frame_set(1)
+for pb in rig.pose.bones:
+    pb.rotation_mode="QUATERNION"
+    pb.rotation_quaternion=(1,0,0,0)
+    pb.location=(0,0,0)
+bpy.context.view_layer.update()
+shoulders=[]
+markers=[]
+axis_colors={"X":(1.0,.15,.15,1),"Y":(.15,1.0,.15,1),"Z":(.15,.35,1.0,1)}
+def add_marker(a,b,radius,color,label):
+    direction=b-a
+    if direction.length<1e-6:return
+    bpy.ops.mesh.primitive_cylinder_add(vertices=10,radius=radius,depth=direction.length,location=(a+b)*.5)
+    obj=bpy.context.object
+    obj.name=label
+    obj.rotation_euler=direction.to_track_quat("Z","Y").to_euler()
+    mat=bpy.data.materials.new(label+"_material")
+    mat.diffuse_color=color
+    obj.data.materials.append(mat)
+    markers.append(obj)
+for name in ("clavicle_L","upperarm_L","forearm_L","clavicle_R","upperarm_R","forearm_R"):
+    bone=rig.data.bones.get(name)
+    if not bone:continue
+    head=rig.matrix_world @ bone.head_local
+    tail=rig.matrix_world @ bone.tail_local
+    rot=rig.matrix_world.to_3x3() @ bone.matrix_local.to_3x3()
+    entry={"bone":name,"head":list(head),"tail":list(tail),"axes":{}}
+    add_marker(head,tail,height*.007,(.95,.82,.15,1),name+"_bone")
+    for axis,index in (("X",0),("Y",1),("Z",2)):
+        unit=Vector(tuple(1.0 if i==index else 0.0 for i in range(3)))
+        vector=(rot @ unit).normalized()
+        entry["axes"][axis]=list(vector)
+        add_marker(head,head+vector*height*.10,height*.004,axis_colors[axis],name+"_"+axis)
+    shoulders.append(entry)
+report["shoulder_rig"]={"axes_legend":{"X":"red","Y":"green","Z":"blue"},"bones":shoulders}
+# Hide skinned geometry so joint and local-axis markers are unobstructed.
+for obj in meshes:obj.hide_render=True
+for view in ("front","side"):
+    set_view(view)
+    scene.render.filepath=str(out/("Shoulder_Rig_Axes_"+view+".png"))
+    bpy.ops.render.render(write_still=True)
+for obj in meshes:obj.hide_render=False
+for obj in markers:bpy.data.objects.remove(obj,do_unlink=True)
 images=list(out.glob("*.png"))
 if not images:
     raise RuntimeError("No PNG images rendered to "+str(out))
