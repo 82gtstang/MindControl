@@ -158,7 +158,8 @@ bpy.context.view_layer.objects.active=rig
 target.parent.mkdir(parents=True,exist_ok=True)
 bpy.ops.export_scene.fbx(filepath=str(target),use_selection=True,
     object_types={"ARMATURE","MESH"},add_leaf_bones=False,
-    bake_anim=True,bake_anim_use_nla_strips=True,bake_anim_use_all_actions=False,\n    bake_anim_simplify_factor=0.0,path_mode="COPY",embed_textures=True)
+    bake_anim=True,bake_anim_use_nla_strips=True,bake_anim_use_all_actions=False,
+    bake_anim_simplify_factor=0.0,path_mode="COPY",embed_textures=True)
 report={"source":str(source),"fbx":str(target),"vertices":len(body.data.vertices),
         "bones":len(bones),"height":h,"width":w,"warning":"Approximate rig: joint positions and deformation require visual validation"}
 target.with_suffix(".json").write_text(json.dumps(report,indent=2))
