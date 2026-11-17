@@ -32,7 +32,7 @@ void ACryptGameMode::BeginPlay()
  {
  // World units are centimeters; cubes are 100 cm per side.
  PlaceBlock(FVector(0,0,-70),FVector(110,70,1)); // walkable ground
- PlaceBlock(FVector(0,0,-12),FVector(110,4,.12)); // main road
+ PlaceBlock(FVector(0,0,-8),FVector(110,4,.12)); // main road
  // Wilderness stones and ruined pillars beside the approach.
  for(int32 i=0;i<10;++i)
  {
@@ -112,8 +112,8 @@ void ACryptGameMode::BeginPlay()
   }
  }
  // A cobbled village square with market stalls and stone benches.
- // Square paving top = +8 cm, safely above road top = -6 cm.
- PlaceBlock(FVector(2400,0,1),FVector(22,18,.14f));
+ // Square paving top = +19 cm, above road top = -2 cm; avoid near-coplanar surfaces.
+ PlaceBlock(FVector(2400,0,12),FVector(22,18,.14f));
  for(int32 i=0;i<9;++i)
  {
   const float X=1600.f+(i%3)*750.f;
