@@ -87,11 +87,13 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $editor = Join-Path $env:UE_ROOT 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
+          $editor = Join-Path $env:UE_ROOT 'Engine\Binaries\Win64\UnrealEditor.exe'
           $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\MindControl.uproject'
           $script = Join-Path $env:GITHUB_WORKSPACE 'tools\import_ocean_serenity.py'
           if (!(Test-Path $editor)) { throw "Unreal editor commandlet missing: $editor" }
-          & $editor "$project" -run=pythonscript "-script=$script" -unattended -nop4 -nullrhi -nosplash -log
+          # Full editor initializes Slate; Interchange FBX import can crash in UnrealEditor-Cmd without it.
+          # A self-hosted Windows runner must have an interactive desktop session available.
+          & $editor "$project" -run=pythonscript "-script=$script" -unattended -nop4 -nosplash -log
           if ($LASTEXITCODE -ne 0) { throw "Unreal Ocean Serenity import failed ($LASTEXITCODE)" }
           $assets = @(Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE 'unreal\Content\Characters\OceanSerenity') -Filter '*.uasset' -ErrorAction SilentlyContinue)
           if ($assets.Count -eq 0) { throw 'No imported Ocean Serenity .uasset found' }
