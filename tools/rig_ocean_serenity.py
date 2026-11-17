@@ -12,7 +12,10 @@ if len(args) != 2:
 source, target = map(Path, args)
 bpy.ops.object.select_all(action="SELECT")
 bpy.ops.object.delete(use_global=False)
-bpy.ops.wm.obj_import(filepath=str(source))
+if bpy.app.version < (3, 0, 0):
+    bpy.ops.import_scene.obj(filepath=str(source))
+else:
+    bpy.ops.wm.obj_import(filepath=str(source))
 meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
 if not meshes:
     raise RuntimeError("No meshes imported")
