@@ -276,6 +276,12 @@ if outliers:
     print("ARM_OUTLIER_SAMPLES",[(v.index,tuple(round(float(a),3) for a in v.co))
          for v in outliers[::max(1,len(outliers)//12)][:12]],flush=True)
 if len(outliers)>80:
+    # Preserve the failed rig for Blender inspection instead of exporting a
+    # broken FBX. This file retains the evaluated mesh and weight groups.
+    diagnostic=target.with_name("OceanSerenity_FailedRig_Diagnostic.blend")
+    diagnostic.parent.mkdir(parents=True,exist_ok=True)
+    bpy.ops.wm.save_as_mainfile(filepath=str(diagnostic))
+    print("FAILED_RIG_DIAGNOSTIC",str(diagnostic),flush=True)
     raise RuntimeError("Visible arm mesh remains extended after rest bake: %d outlier vertices. Rejecting FBX."%len(outliers))
 
 # Generate distinct baked motion clips on the experimental humanoid rig.
