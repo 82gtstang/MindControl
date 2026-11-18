@@ -174,6 +174,44 @@ except Exception as exc:
     mod=body.modifiers.new("OceanSerenitySkin","ARMATURE")
     mod.object=rig
     body.parent=rig
+# Permanently establish a relaxed bind/rest pose BEFORE creating animation clips.
+# The original OBJ is modeled with extended arms. Animation-only corrections
+# can be lost when Unreal evaluates its reference pose, so bake the arm-lowering
+# deformation into the mesh and apply the pose as the skeleton rest pose.
+for side,sign in (("L",-1),("R",1)):
+    pb=rig.pose.bones["upperarm_"+side]
+    rest=pb.bone.matrix_local.to_3x3()
+    current=(pb.bone.tail_local-pb.bone.head_local).normalized()
+    desired=Vector((sign*.13,0,-.991)).normalized()
+    correction=current.rotation_difference(desired)
+    pb.rotation_mode="QUATERNION"
+    pb.rotation_quaternion=rest.to_quaternion().inverted() @ correction @ rest.to_quaternion()
+bpy.context.view_layer.update()
+# Capture the posed geometry as the new unposed mesh, then adopt the matching
+# armature rest matrices. This prevents Unreal from showing the old T-pose.
+dg=bpy.context.evaluated_depsgraph_get()
+posed=body.evaluated_get(dg).to_mesh()
+if len(posed.vertices)!=len(body.data.vertices):
+    raise RuntimeError("Arm rest-pose bake changed vertex count")
+for v in body.data.vertices:
+    v.co=posed.vertices[v.index].co.copy()
+body.evaluated_get(dg).to_mesh_clear()
+# Remove the skin modifier during rest-pose application to avoid double deformation.
+skin=next((m for m in body.modifiers if m.type=="ARMATURE"),None)
+if skin: body.modifiers.remove(skin)
+bpy.ops.object.select_all(action="DESELECT")
+rig.select_set(True)
+bpy.context.view_layer.objects.active=rig
+bpy.ops.object.mode_set(mode="POSE")
+bpy.ops.pose.armature_apply(selected=False)
+bpy.ops.object.mode_set(mode="OBJECT")
+skin=body.modifiers.new("OceanSerenitySkin","ARMATURE")
+skin.object=rig
+for pb in rig.pose.bones:
+    pb.rotation_mode="XYZ"
+    pb.rotation_euler=(0,0,0)
+bpy.context.view_layer.update()
+print("REST_POSE: baked relaxed arms into geometry and armature bind pose",flush=True)
 # Generate distinct baked motion clips on the experimental humanoid rig.
 # All actions share the same rest pose and skeleton for Unreal retarget-free playback.
 from mathutils import Quaternion
