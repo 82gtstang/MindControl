@@ -188,6 +188,32 @@ for side,sign in (("L",-1),("R",1)):
     pb.rotation_mode="QUATERNION"
     pb.rotation_quaternion=rest.to_quaternion().inverted() @ correction @ rest.to_quaternion()
 bpy.context.view_layer.update()
+# Measure actual shoulder skin movement BEFORE baking. Bone positions alone
+# cannot prove that the arm vertices follow the armature.
+deps=bpy.context.evaluated_depsgraph_get()
+def skin_positions():
+    evaluated=body.evaluated_get(deps)
+    mesh=evaluated.to_mesh()
+    result=[v.co.copy() for v in mesh.vertices]
+    evaluated.to_mesh_clear()
+    return result
+# The original imported mesh is still accessible in body.data.
+rest_positions=[v.co.copy() for v in body.data.vertices]
+posed_positions=skin_positions()
+for side,sign in (("L",-1),("R",1)):
+    ids={g.index for g in body.vertex_groups if g.name in
+         ("upperarm_"+side,"forearm_"+side,"hand_"+side)}
+    strong=[]
+    for v in body.data.vertices:
+        strength=sum(g.weight for g in v.groups if g.group in ids)
+        if strength>.70: strong.append(v.index)
+    if len(strong)<100: raise RuntimeError("Arm "+side+" has fewer than 100 strongly weighted vertices")
+    movements=sorted((posed_positions[i]-rest_positions[i]).length for i in strong)
+    median=movements[len(movements)//2]
+    print("SHOULDER_SKIN_PROBE",side,"strong_vertices",len(strong),
+          "median_displacement",median,"max_displacement",movements[-1],flush=True)
+    if median<.04*h:
+        raise RuntimeError("Arm "+side+" bone rotated but weighted skin barely moved")
 # Bake the evaluated *skinned* geometry, not approximated vertex rotations.
 # The armature's new rest pose is then made identical to that geometry.
 skin=next((m for m in body.modifiers if m.type=="ARMATURE" and m.object==rig),None)
