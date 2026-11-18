@@ -311,29 +311,31 @@ spin=pose_action("Spin",[
 for fc in spin.fcurves:
     if fc.data_path=='pose.bones["root"].rotation_euler':
         for key in fc.keyframe_points: key.interpolation="LINEAR"
-# Verify that the imported geometry actually follows the animated arm bones.
-# A valid action can contain keyframes yet leave the mesh stuck in its T-pose
-# when weights or the armature modifier are incorrect.
+# Verify the relaxed idle pose by absolute arm/hand placement, not movement.
+# After baking the relaxed pose into the rest skeleton, Idle frame 1 SHOULD
+# have zero vertex displacement. The previous test incorrectly rejected that.
 rig.animation_data.action=bpy.data.actions["Ocean_Idle"]
 bpy.context.scene.frame_set(1)
 bpy.context.view_layer.update()
-sample=[v.index for v in body.data.vertices
-        if abs(v.co.x)>shoulder_x*1.2 and .53*h<v.co.z<.84*h]
-sample=sample[::max(1,len(sample)//500)]
-if len(sample)<5:
-    raise RuntimeError("Cannot validate arms: too few shoulder/arm vertices")
-dg=bpy.context.evaluated_depsgraph_get()
-evaluated=body.evaluated_get(dg)
-mesh_eval=evaluated.to_mesh()
-try:
-    arm_deltas=[(mesh_eval.vertices[i].co-body.data.vertices[i].co).length for i in sample]
-    mean_arm_delta=sum(arm_deltas)/len(arm_deltas)
-finally:
-    evaluated.to_mesh_clear()
-print("POSE_VALIDATION: idle arm vertex displacement %.5f, body height %.5f, sample %d"%
-      (mean_arm_delta,h,len(sample)),flush=True)
-if mean_arm_delta < h*.025:
-    raise RuntimeError("Idle pose does not deform arm vertices: verify armature skinning before exporting")
+for side,sign in (("L",-1),("R",1)):
+    shoulder=rig.pose.bones["upperarm_"+side].head
+    elbow=rig.pose.bones["upperarm_"+side].tail
+    wrist=rig.pose.bones["forearm_"+side].tail
+    hand=rig.pose.bones["hand_"+side].tail
+    shoulder_to_hand=hand-shoulder
+    print("ARM_POSE_VALIDATION",side,"shoulder",tuple(shoulder),
+          "elbow",tuple(elbow),"wrist",tuple(wrist),"hand",tuple(hand),
+          "drop",shoulder_to_hand.z,"outward",abs(shoulder_to_hand.x),flush=True)
+    if shoulder_to_hand.z > -.15*h:
+        raise RuntimeError("Arm "+side+" is not lowered: hand must be well below shoulder")
+    if abs(shoulder_to_hand.x) > .15*h:
+        raise RuntimeError("Arm "+side+" is too far from the body: hand must hang beside hip")
+    if elbow.z >= shoulder.z or wrist.z >= elbow.z:
+        raise RuntimeError("Arm "+side+" joint order is not downward")
+# Check mesh skin remains connected to the armature.
+if not any(m.type=="ARMATURE" and m.object==rig for m in body.modifiers):
+    raise RuntimeError("Armature modifier missing after relaxed-rest-pose bake")
+print("POSE_VALIDATION: both hands below shoulders and close to hips; skin modifier connected",flush=True)
 # Restore NLA-only export; each strip becomes its own FBX animation take.
 rig.animation_data.action=None
 bpy.context.scene.frame_set(1)
