@@ -393,9 +393,23 @@ spin=pose_action("Spin",[
  (13,[("root",2,180),("upperarm_L",2,-32),("upperarm_R",2,32)]),
  (19,[("root",2,270),("upperarm_L",2,-32),("upperarm_R",2,32)]),
  (25,[("root",2,360),("upperarm_L",2,-24),("upperarm_R",2,24)])])
-for fc in spin.fcurves:
+# Blender 5.3 layered Actions expose F-curves through channelbags.
+# Older Blender versions expose action.fcurves directly.
+spin_curves=[]
+if hasattr(spin,"fcurves"):
+    spin_curves=list(spin.fcurves)
+else:
+    for layer in spin.layers:
+        for strip in layer.strips:
+            for slot in spin.slots:
+                bag=strip.channelbag(slot,ensure=False)
+                if bag:
+                    spin_curves.extend(bag.fcurves)
+for fc in spin_curves:
     if fc.data_path=='pose.bones["root"].rotation_euler':
-        for key in fc.keyframe_points: key.interpolation="LINEAR"
+        for key in fc.keyframe_points:
+            key.interpolation="LINEAR"
+print("SPIN_CURVES",len(spin_curves),flush=True)
 # Do not mistake an anatomically plausible bone pose for proof of good skinning.
 # Preview images must be reviewed before this experimental FBX is shipped.
 rig.animation_data.action=bpy.data.actions["Ocean_Idle"]
