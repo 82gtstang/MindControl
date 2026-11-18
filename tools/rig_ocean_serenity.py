@@ -173,12 +173,51 @@ except Exception as exc:
     mod=body.modifiers.new("OceanSerenitySkin","ARMATURE")
     mod.object=rig
     body.parent=rig
-# Never rewrite mesh coordinates to lower the arms. The old direct vertex
-# rotation and lateral clamp tore shoulder triangles and detached the arms.
-# Keep the imported mesh untouched; lower arms with pose transforms only.
+# Fresh, non-destructive rest-pose conversion. Blender's armature modifier
+# performs the actual weighted skin deformation, including shoulders.
+# Never rotate/clamp individual vertices by hand.
 if weight_method != "automatic":
-    raise RuntimeError("Automatic skinning failed: refusing destructive fallback rig. Repair source topology or use a manually weighted rig.")
-print("REST_MESH_INTACT: no vertex-coordinate arm bake or lateral clamping",flush=True)
+    raise RuntimeError("Automatic weights failed; source needs mesh repair/manual skinning")
+original_count=len(body.data.vertices)
+for side,sign in (("L",-1),("R",1)):
+    pb=rig.pose.bones["upperarm_"+side]
+    rest=pb.bone.matrix_local.to_3x3()
+    direction=(pb.bone.tail_local-pb.bone.head_local).normalized()
+    desired=Vector((sign*.12,0,-.993)).normalized()
+    correction=direction.rotation_difference(desired)
+    pb.rotation_mode="QUATERNION"
+    pb.rotation_quaternion=rest.to_quaternion().inverted() @ correction @ rest.to_quaternion()
+bpy.context.view_layer.update()
+# Bake the evaluated *skinned* geometry, not approximated vertex rotations.
+# The armature's new rest pose is then made identical to that geometry.
+skin=next((m for m in body.modifiers if m.type=="ARMATURE" and m.object==rig),None)
+if skin is None: raise RuntimeError("Armature modifier missing before rest bake")
+bpy.ops.object.select_all(action="DESELECT")
+body.select_set(True)
+bpy.context.view_layer.objects.active=body
+bpy.ops.object.modifier_apply(modifier=skin.name)
+if len(body.data.vertices)!=original_count:
+    raise RuntimeError("Rest bake unexpectedly changed vertex count")
+bpy.ops.object.select_all(action="DESELECT")
+rig.select_set(True)
+bpy.context.view_layer.objects.active=rig
+bpy.ops.object.mode_set(mode="POSE")
+bpy.ops.pose.armature_apply(selected=False)
+bpy.ops.object.mode_set(mode="OBJECT")
+for pb in rig.pose.bones:
+    pb.rotation_mode="XYZ"
+    pb.rotation_euler=(0,0,0)
+skin=body.modifiers.new("OceanSerenitySkin","ARMATURE")
+skin.object=rig
+bpy.context.view_layer.update()
+for side in ("L","R"):
+    shoulder=rig.data.bones["upperarm_"+side].head_local
+    wrist=rig.data.bones["forearm_"+side].tail_local
+    hand=rig.data.bones["hand_"+side].tail_local
+    print("REST_BAKE",side,"shoulder",tuple(shoulder),"wrist",tuple(wrist),"hand",tuple(hand),flush=True)
+    if hand.z>shoulder.z-.15*h or abs(hand.x)>abs(shoulder.x)+.16*h:
+        raise RuntimeError("Rest pose arm remains extended on "+side)
+print("REST_BAKE: Blender evaluated skin applied; rest skeleton synchronized",flush=True)
 # Generate distinct baked motion clips on the experimental humanoid rig.
 # All actions share the same rest pose and skeleton for Unreal retarget-free playback.
 from mathutils import Quaternion
@@ -204,20 +243,16 @@ def pose_action(name,frames):
             else:
                 pb=rig.pose.bones.get(bone)
                 if pb: pb.rotation_euler[axis]+=math.radians(angle)
-        # Base pose: original A-pose arm axis -> downward beside the thighs.
-        # Add small swing only after the anatomical correction, in world space.
-        for side,sign in (("L",-1),("R",1)):
-            upper=rig.pose.bones["upperarm_"+side]
-            rest=upper.bone.matrix_local.to_3x3()
-            current=(upper.bone.tail_local-upper.bone.head_local).normalized()
-            desired=Vector((sign*.13,0,-.991)).normalized()
-            lower=current.rotation_difference(desired)
-            swing=Quaternion(Vector((1,0,0)),math.radians(arm_motion.get("upperarm_"+side,0)))
-            upper.rotation_mode="QUATERNION"
-            upper.rotation_quaternion=rest.inverted().to_quaternion() @ (swing @ lower) @ rest.to_quaternion()
-            forearm=rig.pose.bones["forearm_"+side]
-            forearm.rotation_mode="QUATERNION"
-            forearm.rotation_quaternion=Quaternion(rest.inverted() @ Vector((1,0,0)),math.radians(arm_motion.get("forearm_"+side,0)))
+        # Arm lowering is already baked into the mesh and skeleton rest pose.
+        # Animate relative to the relaxed rest pose only.
+        for side in ("L","R"):
+            for part in ("upperarm","forearm"):
+                name=part+"_"+side
+                pb=rig.pose.bones[name]
+                rest=pb.bone.matrix_local.to_3x3()
+                axis=rest.inverted() @ Vector((1,0,0))
+                pb.rotation_mode="QUATERNION"
+                pb.rotation_quaternion=Quaternion(axis,math.radians(arm_motion.get(name,0)))
         if clip_name=="Jump":
             # Lift the whole character in mid-air, not only the legs.
             jump_heights={1:0.0,7:0.18,15:0.34,23:0.10,30:0.0}
