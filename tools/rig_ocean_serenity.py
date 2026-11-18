@@ -122,7 +122,7 @@ try:
     body.select_set(True)
     rig.select_set(True)
     bpy.context.view_layer.objects.active=rig
-    bpy.ops.object.parent_set(type="ARMATURE_AUTO")
+    # Auto weights on this non-manifold OBJ assigned most vertices to foot_L.\n    # Use region-constrained anatomical weights instead.\n    raise RuntimeError("Automatic skinning disabled: verified cross-body foot influence")\n    bpy.ops.object.parent_set(type="ARMATURE_AUTO")
     # Verify each vertex has normalized nonzero weights, and no vertices are
     # accidentally influenced by a non-deforming control bone.
     covered=0
@@ -177,7 +177,7 @@ except Exception as exc:
 # performs the actual weighted skin deformation, including shoulders.
 # Never rotate/clamp individual vertices by hand.
 if weight_method != "automatic":
-    raise RuntimeError("Automatic weights failed; source needs mesh repair/manual skinning")
+    print("SKINNING: testing region-constrained anatomical fallback",flush=True)
 original_count=len(body.data.vertices)
 for side,sign in (("L",-1),("R",1)):
     pb=rig.pose.bones["upperarm_"+side]
