@@ -218,6 +218,12 @@ for side in ("L","R"):
     if hand.z>shoulder.z-.15*h or abs(hand.x)>abs(shoulder.x)+.16*h:
         raise RuntimeError("Rest pose arm remains extended on "+side)
 print("REST_BAKE: Blender evaluated skin applied; rest skeleton synchronized",flush=True)
+# Validate visible mesh, not just bones. Extended arms must not be accepted.
+outliers=[v for v in body.data.vertices if .55*h<v.co.z<.84*h and abs(v.co.x)>.32*h]
+print("VISIBLE_ARM_EXTENT",len(outliers),"vertices beyond 32% of character height",flush=True)
+if len(outliers)>80:
+    raise RuntimeError("Visible arm mesh remains extended after rest bake: %d outlier vertices. Rejecting FBX."%len(outliers))
+
 # Generate distinct baked motion clips on the experimental humanoid rig.
 # All actions share the same rest pose and skeleton for Unreal retarget-free playback.
 from mathutils import Quaternion
