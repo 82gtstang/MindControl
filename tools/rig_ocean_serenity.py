@@ -255,6 +255,21 @@ print("REST_BAKE: Blender evaluated skin applied; rest skeleton synchronized",fl
 # Validate visible mesh, not just bones. Extended arms must not be accepted.
 outliers=[v for v in body.data.vertices if .55*h<v.co.z<.84*h and abs(v.co.x)>.32*h]
 print("VISIBLE_ARM_EXTENT",len(outliers),"vertices beyond 32% of character height",flush=True)
+if outliers:
+    for side,sgn in (("L",-1),("R",1)):
+        affected=[v for v in outliers if v.co.x*sgn>0]
+        if not affected: continue
+        by_group={}
+        for v in affected:
+            strongest=max(v.groups,key=lambda g:g.weight) if v.groups else None
+            group_name=body.vertex_groups[strongest.group].name if strongest else "UNWEIGHTED"
+            by_group[group_name]=by_group.get(group_name,0)+1
+        print("ARM_OUTLIER_DIAGNOSTIC",side,"count",len(affected),
+              "x_range",[min(v.co.x for v in affected),max(v.co.x for v in affected)],
+              "z_range",[min(v.co.z for v in affected),max(v.co.z for v in affected)],
+              "dominant_groups",json.dumps(by_group,sort_keys=True),flush=True)
+    print("ARM_OUTLIER_SAMPLES",[(v.index,tuple(round(float(a),3) for a in v.co))
+         for v in outliers[::max(1,len(outliers)//12)][:12]],flush=True)
 if len(outliers)>80:
     raise RuntimeError("Visible arm mesh remains extended after rest bake: %d outlier vertices. Rejecting FBX."%len(outliers))
 
