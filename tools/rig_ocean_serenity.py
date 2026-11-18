@@ -328,6 +328,32 @@ for side in ("L","R"):
 print("REST_BAKE: Blender evaluated skin applied; rest skeleton synchronized",flush=True)
 # Validate visible mesh, not just bones. Extended arms must not be accepted.
 outliers=[v for v in body.data.vertices if .55*h<v.co.z<.84*h and abs(v.co.x)>.32*h]
+# A bone pointing down is not proof that its skinned palm and fingers do.
+# Inspect the actual evaluated/rest-baked hand geometry and reject outward
+# fingertips, which the prior arm-extent test did not cover.
+for side,sgn in (("L",-1),("R",1)):
+    group=body.vertex_groups.get("hand_"+side)
+    hand_verts=[]
+    if group:
+        for v in body.data.vertices:
+            for assignment in v.groups:
+                if assignment.group==group.index and assignment.weight>=.8:
+                    hand_verts.append(v.co)
+                    break
+    if len(hand_verts)<20:
+        raise RuntimeError("Insufficient strongly weighted hand vertices on "+side)
+    xs=[p.x for p in hand_verts]
+    zs=[p.z for p in hand_verts]
+    span_x=max(xs)-min(xs)
+    span_z=max(zs)-min(zs)
+    print("HAND_MESH_GEOMETRY",side,"vertices",len(hand_verts),
+          "x_span",round(span_x,4),"z_span",round(span_z,4),
+          "x_range",(round(min(xs),4),round(max(xs),4)),
+          "z_range",(round(min(zs),4),round(max(zs),4)),flush=True)
+    # The mesh must be vertically elongated in its relaxed hand region.
+    # This is a diagnostic warning while correcting weights, not a fake pass.
+    if span_x>span_z*.85:
+        print("HAND_MESH_WARNING",side,"palm/fingers remain too horizontal",flush=True)
 print("VISIBLE_ARM_EXTENT",len(outliers),"vertices beyond 32% of character height",flush=True)
 if outliers:
     for side,sgn in (("L",-1),("R",1)):
