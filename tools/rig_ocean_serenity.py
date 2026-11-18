@@ -232,17 +232,33 @@ for side,sign in (("L",-1),("R",1)):
     forearm.rotation_mode="QUATERNION"
     forearm.rotation_quaternion=(1,0,0,0)
 bpy.context.view_layer.update()
-# Apply the actual ARMATURE modifier while the arms are posed.  Merely
-# copying evaluated vertex coordinates does not reliably commit deformation
-# in Blender 2.92 (especially with a parent inverse transform).
+# The Blender 2.92 parent/armature modifier evaluation can leave the mesh
+# extended even when the pose bones have rotated. Transform the original
+# arm vertices explicitly with the exact world-space shoulder correction,
+# then adopt that same correction as the armature rest pose.
 skin=next((m for m in body.modifiers if m.type=="ARMATURE"),None)
-if skin is None: raise RuntimeError("Missing armature skin before rest bake")
-bpy.ops.object.select_all(action="DESELECT")
-body.select_set(True)
-bpy.context.view_layer.objects.active=body
-bpy.ops.object.modifier_apply(modifier=skin.name)
+if skin: body.modifiers.remove(skin)
+arm_weight_ids={}
+for side in ("L","R"):
+    arm_weight_ids[side]={g.index for g in body.vertex_groups if g.name in
+        ("upperarm_"+side,"forearm_"+side,"hand_"+side)}
+for side,sign in (("L",-1),("R",1)):
+    shoulder=rig.data.bones["upperarm_"+side].head_local.copy()
+    bone=rig.data.bones["upperarm_"+side]
+    current=(bone.tail_local-bone.head_local).normalized()
+    desired=Vector((sign*.13,0,-.991)).normalized()
+    correction=current.rotation_difference(desired)
+    ids=arm_weight_ids[side]
+    count=0
+    for v in body.data.vertices:
+        influence=sum(g.weight for g in v.groups if g.group in ids)
+        if influence<.001: continue
+        original=v.co.copy()
+        rotated=shoulder+correction @ (original-shoulder)
+        v.co=original.lerp(rotated,min(1.,influence))
+        count+=1
+    print("REST_BAKE_DIRECT",side,"transformed_vertices",count,flush=True)
 bpy.context.view_layer.update()
-print("REST_BAKE: applied posed armature deformation directly to base mesh",flush=True)
 bpy.ops.object.select_all(action="DESELECT")
 rig.select_set(True)
 bpy.context.view_layer.objects.active=rig
