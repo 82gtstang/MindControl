@@ -172,7 +172,11 @@ except Exception as exc:
             groups[name].add([v.index],weight/total,"REPLACE")
     mod=body.modifiers.new("OceanSerenitySkin","ARMATURE")
     mod.object=rig
-    body.parent=rig
+    # Armature modifier alone deforms the mesh. Parenting without a matching
+    # parent inverse can introduce an additional coordinate transform.
+    body.parent=None
+    body.matrix_world.identity()
+    rig.matrix_world.identity()
 # Fresh, non-destructive rest-pose conversion. Blender's armature modifier
 # performs the actual weighted skin deformation, including shoulders.
 # Never rotate/clamp individual vertices by hand.
@@ -204,6 +208,28 @@ def skin_positions():
     return result
 # The original imported mesh is still accessible in body.data.
 rest_positions=[v.co.copy() for v in body.data.vertices]
+posed_positions=skin_positions()
+# Verify the identity pose is stable before applying any shoulder rotation.
+# Catch coordinate-space and parenting errors rather than baking them.
+for pb in rig.pose.bones:
+    pb.rotation_mode="QUATERNION"
+    pb.rotation_quaternion=(1,0,0,0)
+bpy.context.view_layer.update()
+identity_positions=skin_positions()
+identity_errors=sorted((identity_positions[i]-rest_positions[i]).length for i in range(len(rest_positions)))
+print("IDENTITY_SKIN_ERROR",identity_errors[-1],identity_errors[len(identity_errors)//2],flush=True)
+if identity_errors[-1]>.005*h:
+    raise RuntimeError("Armature identity skin unexpectedly moves mesh; aborting before rest bake")
+# Restore the intended shoulder pose after the identity check.
+for side,sign in (("L",-1),("R",1)):
+    pb=rig.pose.bones["upperarm_"+side]
+    rest=pb.bone.matrix_local.to_3x3()
+    direction=(pb.bone.tail_local-pb.bone.head_local).normalized()
+    desired=Vector((sign*.12,0,-.993)).normalized()
+    correction=direction.rotation_difference(desired)
+    local_correction=rest.to_quaternion().inverted() @ correction @ rest.to_quaternion()
+    pb.rotation_quaternion=Quaternion((1,0,0,0)).slerp(local_correction,.85)
+bpy.context.view_layer.update()
 posed_positions=skin_positions()
 for side,sign in (("L",-1),("R",1)):
     ids={g.index for g in body.vertex_groups if g.name in
