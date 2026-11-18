@@ -186,7 +186,12 @@ for side,sign in (("L",-1),("R",1)):
     desired=Vector((sign*.12,0,-.993)).normalized()
     correction=direction.rotation_difference(desired)
     pb.rotation_mode="QUATERNION"
-    pb.rotation_quaternion=rest.to_quaternion().inverted() @ correction @ rest.to_quaternion()
+    # PoseBone rotation is expressed in bone-local axes. Limit the initial
+    # rest correction to prevent a full cross-body swing on this OBJ.
+    local_correction=rest.to_quaternion().inverted() @ correction @ rest.to_quaternion()
+    pb.rotation_quaternion=Quaternion((1,0,0,0)).slerp(local_correction,.5)
+    print("ARM_POSE_CORRECTION",side,"angle_degrees",
+          math.degrees(local_correction.angle),"applied_fraction",.5,flush=True)
 bpy.context.view_layer.update()
 # Measure actual shoulder skin movement BEFORE baking. Bone positions alone
 # cannot prove that the arm vertices follow the armature.
