@@ -207,7 +207,15 @@ for side,sign in (("L",-1),("R",1)):
     for v in body.data.vertices:
         strength=sum(g.weight for g in v.groups if g.group in ids)
         if strength>.70: strong.append(v.index)
-    if len(strong)<100: raise RuntimeError("Arm "+side+" has fewer than 100 strongly weighted vertices")
+    if len(strong)<100:
+        counts={}
+        for group in body.vertex_groups:
+            if group.name.endswith("_"+side):
+                counts[group.name]=sum(1 for v in body.data.vertices
+                    for g in v.groups if g.group==group.index and g.weight>.10)
+        print("ARM_WEIGHT_DIAGNOSTIC",side,"strong",len(strong),
+              "groups_above_10pct",json.dumps(counts),flush=True)
+        raise RuntimeError("Arm "+side+" has fewer than 100 strongly weighted vertices; reject deformed rig")
     movements=sorted((posed_positions[i]-rest_positions[i]).length for i in strong)
     median=movements[len(movements)//2]
     print("SHOULDER_SKIN_PROBE",side,"strong_vertices",len(strong),
