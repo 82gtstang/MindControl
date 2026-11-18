@@ -170,7 +170,11 @@ except Exception as exc:
         # Keep the distal palm/finger region on the hand bone. In the
         # original A-pose the hand is the outermost portion of the limb;
         # generic nearest-two weights let forearm bones flatten fingers.
-        if z>=.50 and z<.66 and ax>wrist_x*.98 and f"hand_{side}" in allowed:
+        # Distal hand vertices in the source A-pose begin BEFORE the
+        # estimated wrist_x. The old .98*wrist_x threshold captured no
+        # strongly weighted hand vertices (verified in run 44420554927).
+        # Isolate the distal region by lateral reach and hand-level height.
+        if .48<=z<.69 and ax>wrist_x*.85 and f"hand_{side}" in allowed:
             allowed={f"hand_{side}"}
         candidates=sorted(((segment_dist(q,aa,bb),name) for name,aa,bb in deform if name in allowed),key=lambda item:item[0])[:2]
         distances=[max(d,1e-4) for d,_ in candidates]
