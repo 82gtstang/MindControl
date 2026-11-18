@@ -10,7 +10,29 @@ on:
       - '.github/workflows/unreal-android.yml'
       - '.github/workflows/ocean-serenity-rig.yml'
 jobs:
+  wait-for-rig:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      actions: read
+    steps:
+      - name: Wait for successful same-commit rig without occupying Windows runner
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          for attempt in $(seq 1 150); do
+            response=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs?per_page=60")
+            result=$(echo "$response" | jq -r --arg sha "$GITHUB_SHA" '[.workflow_runs[] | select(.name=="Ocean Serenity experimental auto-rig" and .head_sha==$sha)] | first | if . == null then "missing" else (.status + ":" + (.conclusion // "pending")) end')
+            echo "Rig on $GITHUB_SHA: $result ($attempt/150)"
+            if [ "$result" = "completed:success" ]; then exit 0; fi
+            if [[ "$result" == completed:* ]]; then echo "Rig failed: $result"; exit 1; fi
+            sleep 30
+          done
+          echo "Timed out waiting for matching rig"
+          exit 1
   package-android:
+    needs: wait-for-rig
     runs-on: [self-hosted, Windows, X64, unreal-5-7, android-sdk]
     timeout-minutes: 240
     permissions:
@@ -71,22 +93,15 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
           $api = 'https://api.github.com/repos/82gtstang/MindControl'
-          # Wait for the rig build from THIS commit, never reuse an older FBX.
-          $rig = $null
-          for ($attempt = 0; $attempt -lt 90; $attempt++) {
-            $runs = Invoke-RestMethod -Uri "$api/actions/runs?per_page=60" -Headers $headers
-            $rig = $runs.workflow_runs | Where-Object {
-              $_.name -eq 'Ocean Serenity experimental auto-rig' -and
-              $_.head_sha -eq $env:GITHUB_SHA -and
-              $_.head_branch -eq 'diagnostic/android-landscape-startup'
-            } | Select-Object -First 1
-            if ($rig -and $rig.status -eq 'completed') { break }
-            Write-Host "Waiting for rig workflow on commit $env:GITHUB_SHA ($attempt/90)"
-            Start-Sleep -Seconds 30
-          }
-          if (-not $rig -or $rig.conclusion -ne 'success') {
-            throw "Matching Ocean Serenity rig workflow did not succeed for $env:GITHUB_SHA (status=$($rig.status), result=$($rig.conclusion)). Refusing stale FBX."
-          }
+          # The ubuntu-latest wait-for-rig job already validated the matching
+          # commit. Do not block the self-hosted Windows runner here.
+          $runs = Invoke-RestMethod -Uri "$api/actions/runs?per_page=60" -Headers $headers
+          $rig = $runs.workflow_runs | Where-Object {
+            $_.name -eq 'Ocean Serenity experimental auto-rig' -and
+            $_.head_sha -eq $env:GITHUB_SHA -and
+            $_.conclusion -eq 'success'
+          } | Select-Object -First 1
+          if (-not $rig) { throw "Matching successful rig artifact not found for $env:GITHUB_SHA" }
           $artifacts = Invoke-RestMethod -Uri "$api/actions/runs/$($rig.id)/artifacts" -Headers $headers
           $artifact = $artifacts.artifacts | Where-Object { $_.name -eq 'OceanSerenity-Experimental-Rig-FBX' -and -not $_.expired } | Select-Object -First 1
           if (-not $artifact) { throw "No rigged FBX artifact found in workflow run $($rig.id)" }
