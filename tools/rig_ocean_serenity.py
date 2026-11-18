@@ -174,7 +174,12 @@ except Exception as exc:
         # estimated wrist_x. The old .98*wrist_x threshold captured no
         # strongly weighted hand vertices (verified in run 44420554927).
         # Isolate the distal region by lateral reach and hand-level height.
-        if .48<=z<.69 and ax>wrist_x*.85 and f"hand_{side}" in allowed:
+        # The Meshy OBJ's fingers extend across a wider source A-pose
+        # region than the first threshold captured (only 156 vertices).
+        # Use the outer distal limb zone, excluding the torso by requiring
+        # substantial lateral reach. Strict post-bake hand-down validation
+        # below rejects this experiment if the mesh still points outward.
+        if .45<=z<.78 and ax>max(shoulder_x*1.55,wrist_x*.70) and f"hand_{side}" in allowed:
             allowed={f"hand_{side}"}
         candidates=sorted(((segment_dist(q,aa,bb),name) for name,aa,bb in deform if name in allowed),key=lambda item:item[0])[:2]
         distances=[max(d,1e-4) for d,_ in candidates]
