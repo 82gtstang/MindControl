@@ -65,6 +65,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Rigging failed with exit code $LASTEXITCODE" }
           if (!(Test-Path $env:OCEAN_OUTPUT)) { throw 'Rigged FBX was not exported' }
           if ((Get-Item $env:OCEAN_OUTPUT).Length -lt 1024) { throw 'FBX suspiciously small' }
+      - name: Upload failed rig for Blender inspection
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          retention-days: 7
+          name: OceanSerenity-FailedRig-Blender-Diagnostic
+          path: rig-output/OceanSerenity_FailedRig_Diagnostic.blend
+          if-no-files-found: ignore
       - name: Upload rigged model and report
         uses: actions/upload-artifact@v4
         with:
