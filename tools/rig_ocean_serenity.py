@@ -190,6 +190,25 @@ except Exception as exc:
         total=sum(weights)
         for (_,name),weight in zip(candidates,weights):
             groups[name].add([v.index],weight/total,"REPLACE")
+    # On the source OBJ the right palm is fragmented into small mesh islands.
+    # Distance weighting left 807 right-hand vertices at ~20% influence,
+    # with none above 50%, so wrist rotation could not orient that palm.
+    # Make the distal right-hand islands rigid to the right hand bone.
+    right_hand=groups["hand_R"]
+    right_candidates=[]
+    for v in body.data.vertices:
+        influence=next((a.weight for a in v.groups
+                        if a.group==right_hand.index),0.0)
+        if influence>=.15 and v.co.x>0 and abs(v.co.x)>shoulder_x*1.4:
+            right_candidates.append(v.index)
+    print("RIGHT_HAND_RIGID_COVERAGE",len(right_candidates),flush=True)
+    if len(right_candidates)<100:
+        raise RuntimeError("Insufficient right palm/finger islands to repair weights")
+    for idx in right_candidates:
+        for name,g in groups.items():
+            if name!="hand_R":
+                g.remove([idx])
+        right_hand.add([idx],1.0,"REPLACE")
     # Audit the critical waist region before skinning. Arm weights there
     # produce the ribbed geometry seen in the user-provided renders.
     arm_indices={g.index for name,g in groups.items() if name.startswith(("upperarm_","forearm_","hand_"))}
