@@ -182,7 +182,7 @@ except Exception as exc:
         # Use the outer distal limb zone, excluding the torso by requiring
         # substantial lateral reach. Strict post-bake hand-down validation
         # below rejects this experiment if the mesh still points outward.
-        if .48<=z<.69 and ax>max(shoulder_x*2.1,wrist_x*.97) and f"hand_{side}" in allowed:
+        if .48<=z<.69 and ax>max(shoulder_x*2.1,wrist_x*.90) and f"hand_{side}" in allowed:
             allowed={f"hand_{side}"}
         candidates=sorted(((segment_dist(q,aa,bb),name) for name,aa,bb in deform if name in allowed),key=lambda item:item[0])[:2]
         distances=[max(d,1e-4) for d,_ in candidates]
