@@ -187,13 +187,13 @@ for side,sign in (("L",-1),("R",1)):
     pb=rig.pose.bones["upperarm_"+side]
     rest=pb.bone.matrix_local.to_3x3()
     direction=(pb.bone.tail_local-pb.bone.head_local).normalized()
-    desired=Vector((sign*.12,0,-.993)).normalized()
+    desired=Vector((sign*.04,0,-.999)).normalized()
     correction=direction.rotation_difference(desired)
     pb.rotation_mode="QUATERNION"
     # PoseBone rotation is expressed in bone-local axes. Limit the initial
     # rest correction to prevent a full cross-body swing on this OBJ.
     local_correction=rest.to_quaternion().inverted() @ correction @ rest.to_quaternion()
-    pb.rotation_quaternion=Quaternion((1,0,0,0)).slerp(local_correction,.85)
+    pb.rotation_quaternion=Quaternion((1,0,0,0)).slerp(local_correction,1.0)
     print("ARM_POSE_CORRECTION",side,"angle_degrees",
           math.degrees(local_correction.angle),"applied_fraction",.85,flush=True)
 bpy.context.view_layer.update()
@@ -225,10 +225,10 @@ for side,sign in (("L",-1),("R",1)):
     pb=rig.pose.bones["upperarm_"+side]
     rest=pb.bone.matrix_local.to_3x3()
     direction=(pb.bone.tail_local-pb.bone.head_local).normalized()
-    desired=Vector((sign*.12,0,-.993)).normalized()
+    desired=Vector((sign*.04,0,-.999)).normalized()
     correction=direction.rotation_difference(desired)
     local_correction=rest.to_quaternion().inverted() @ correction @ rest.to_quaternion()
-    pb.rotation_quaternion=Quaternion((1,0,0,0)).slerp(local_correction,.85)
+    pb.rotation_quaternion=Quaternion((1,0,0,0)).slerp(local_correction,1.0)
 bpy.context.view_layer.update()
 posed_positions=skin_positions()
 for side,sign in (("L",-1),("R",1)):
