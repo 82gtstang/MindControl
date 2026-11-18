@@ -7,6 +7,7 @@ on:
       - 'tools/rig_ocean_serenity.py'
       - '.github/workflows/ocean-serenity-rig.yml'
       - 'tools/preview_ocean_serenity.py'
+      - 'tools/diagnose_ocean_serenity.py'
       - '.github/workflows/unreal-android.yml'
 jobs:
   rig:
@@ -65,6 +66,25 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Rigging failed with exit code $LASTEXITCODE" }
           if (!(Test-Path $env:OCEAN_OUTPUT)) { throw 'Rigged FBX was not exported' }
           if ((Get-Item $env:OCEAN_OUTPUT).Length -lt 1024) { throw 'FBX suspiciously small' }
+      - name: Inspect and render rejected Blender rig
+        if: failure()
+        shell: powershell
+        run: |
+          $file = Join-Path $env:GITHUB_WORKSPACE 'rig-output\OceanSerenity_FailedRig_Diagnostic.blend'
+          if (Test-Path $file) {
+            & $env:BLENDER_EXE -b $file -t 2 --python 'tools/diagnose_ocean_serenity.py' -- "$env:GITHUB_WORKSPACE\rig-diagnostics"
+            if ($LASTEXITCODE -ne 0) { Write-Warning "Diagnostic render exited $LASTEXITCODE" }
+          } else {
+            Write-Warning 'No saved failed rig found for inspection.'
+          }
+      - name: Upload failed rig analysis and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          retention-days: 7
+          name: OceanSerenity-FailedRig-Analysis
+          path: rig-diagnostics/*
+          if-no-files-found: warn
       - name: Upload failed rig for Blender inspection
         if: failure()
         uses: actions/upload-artifact@v4
