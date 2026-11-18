@@ -150,8 +150,11 @@ except Exception as exc:
             allowed={"head","neck"}
         elif z>=.81 and ax<shoulder_x*.82:
             allowed={"neck","chest","head"}
-        elif z>=.52 and ax>shoulder_x*.85:
-            allowed={f"upperarm_{side}",f"forearm_{side}",f"hand_{side}",f"clavicle_{side}"}
+        elif z>=.52 and ax>shoulder_x*1.18:
+            # Only outer limb vertices may be assigned to arm bones. The
+            # previous 0.85 threshold captured torso/waist panels and pulled
+            # them into fan-shaped fins when the shoulder rotated.
+            allowed={f"upperarm_{side}",f"forearm_{side}",f"hand_{side}"}
         elif z>=.71:
             allowed={"chest","spine",f"clavicle_{side}"}
         elif z>=.54:
@@ -170,6 +173,17 @@ except Exception as exc:
         total=sum(weights)
         for (_,name),weight in zip(candidates,weights):
             groups[name].add([v.index],weight/total,"REPLACE")
+    # Audit the critical waist region before skinning. Arm weights there
+    # produce the ribbed geometry seen in the user-provided renders.
+    arm_indices={g.index for name,g in groups.items() if name.startswith(("upperarm_","forearm_","hand_"))}
+    waist_arm=[]
+    for v in body.data.vertices:
+        if .52*h<v.co.z<.72*h and abs(v.co.x)<shoulder_x*1.18:
+            arm_weight=sum(a.weight for a in v.groups if a.group in arm_indices)
+            if arm_weight>.05: waist_arm.append((v.index,arm_weight))
+    print("WAIST_ARM_WEIGHT_LEAKS",len(waist_arm),flush=True)
+    if waist_arm:
+        raise RuntimeError("Torso vertices received arm weights: "+str(len(waist_arm)))
     mod=body.modifiers.new("OceanSerenitySkin","ARMATURE")
     mod.object=rig
     # Armature modifier alone deforms the mesh. Parenting without a matching
