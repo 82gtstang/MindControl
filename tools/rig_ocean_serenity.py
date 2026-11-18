@@ -346,12 +346,23 @@ dg=bpy.context.evaluated_depsgraph_get()
 evaluated=body.evaluated_get(dg).to_mesh()
 for side in ("L","R"):
     arm_groups={g.index for g in body.vertex_groups if g.name in ("upperarm_"+side,"forearm_"+side,"hand_"+side)}
+    # Automatic weights are blended; a vertex may have several arm weights
+    # without any single weight exceeding 0.55. Evaluate their sum.
     arm_indices=[]
+    max_arm_weight=0.0
+    weighted_count=0
     for v in body.data.vertices:
-        if any(g.group in arm_groups and g.weight>.55 for g in v.groups):
+        arm_weight=sum(g.weight for g in v.groups if g.group in arm_groups)
+        max_arm_weight=max(max_arm_weight,arm_weight)
+        if arm_weight>.05:
+            weighted_count+=1
+        if arm_weight>.25:
             arm_indices.append(v.index)
+    print("ARM_WEIGHT_DIAGNOSTIC",side,"groups",sorted(arm_groups),
+          "max_combined_weight",max_arm_weight,"over_5pct",weighted_count,
+          "over_25pct",len(arm_indices),flush=True)
     if len(arm_indices)<100:
-        raise RuntimeError("Insufficient arm-weighted mesh vertices on "+side+": "+str(len(arm_indices)))
+        raise RuntimeError("Arm "+side+" has no meaningful skin influence; investigate automatic weights and mesh connectivity")
     arm_vertices=[evaluated.vertices[i].co for i in arm_indices]
     x_extent=max(abs(v.x) for v in arm_vertices)
     z_mid=sorted(v.z for v in arm_vertices)[len(arm_vertices)//2]
