@@ -303,13 +303,14 @@ def pose_action(name,frames):
             rest=pb.bone.matrix_local.to_3x3()
             arm_direction=(pb.bone.tail_local-pb.bone.head_local).normalized()
             target_direction=Vector((sign*0.13,0,-0.991)).normalized()
-            world_correction=arm_direction.rotation_difference(target_direction)
-            rest_rotation=rest.to_quaternion()
-            local_correction=rest_rotation.inverted() @ world_correction @ rest_rotation
+            # The relaxed arm direction is already baked into the skeleton's
+            # REST pose above. Applying the lowering correction again here
+            # double-rotates the shoulder and points the hands upward.
+            # Animate only the additional motion relative to that rest pose.
             swing_axis=rest.inverted() @ Vector((1,0,0))
             swing=Quaternion(swing_axis,math.radians(arm_motion.get(arm_bone_name,0)))
             pb.rotation_mode="QUATERNION"
-            pb.rotation_quaternion=local_correction @ swing
+            pb.rotation_quaternion=swing
         for side in ("L","R"):
             forearm_bone_name="forearm_"+side
             pb=rig.pose.bones.get(forearm_bone_name)
