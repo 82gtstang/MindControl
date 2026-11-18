@@ -131,7 +131,8 @@ try:
         if total>.001: covered+=1
     if covered<len(body.data.vertices):
         raise RuntimeError("Automatic weights uncovered %d vertices"%(len(body.data.vertices)-covered))
-    print("SKINNING: automatic armature weights; vertices:",covered,flush=True)
+    print("SKINNING: automatic weights coverage:",covered,"; replacing with deterministic anatomical arm/leg weights for pose reliability",flush=True)
+    raise RuntimeError("Use deterministic anatomical weights to avoid arm vertices being bound to torso")
 except Exception as exc:
     weight_method="anatomical_fallback"
     print("SKINNING: automatic weights unavailable:",repr(exc),flush=True)
@@ -272,7 +273,32 @@ spin=pose_action("Spin",[
 for fc in spin.fcurves:
     if fc.data_path=='pose.bones["root"].rotation_euler':
         for key in fc.keyframe_points: key.interpolation="LINEAR"
+# Verify that the imported geometry actually follows the animated arm bones.
+# A valid action can contain keyframes yet leave the mesh stuck in its T-pose
+# when weights or the armature modifier are incorrect.
+rig.animation_data.action=bpy.data.actions["Ocean_Idle"]
+bpy.context.scene.frame_set(1)
+bpy.context.view_layer.update()
+sample=[v.index for v in body.data.vertices
+        if abs(v.co.x)>shoulder_x*1.2 and .53*h<v.co.z<.84*h]
+sample=sample[::max(1,len(sample)//500)]
+if len(sample)<5:
+    raise RuntimeError("Cannot validate arms: too few shoulder/arm vertices")
+dg=bpy.context.evaluated_depsgraph_get()
+evaluated=body.evaluated_get(dg)
+mesh_eval=evaluated.to_mesh()
+try:
+    arm_deltas=[(mesh_eval.vertices[i].co-body.data.vertices[i].co).length for i in sample]
+    mean_arm_delta=sum(arm_deltas)/len(arm_deltas)
+finally:
+    evaluated.to_mesh_clear()
+print("POSE_VALIDATION: idle arm vertex displacement %.5f, body height %.5f, sample %d"%
+      (mean_arm_delta,h,len(sample)),flush=True)
+if mean_arm_delta < h*.025:
+    raise RuntimeError("Idle pose does not deform arm vertices: verify armature skinning before exporting")
+# Restore NLA-only export; each strip becomes its own FBX animation take.
 rig.animation_data.action=None
+bpy.context.scene.frame_set(1)
 # Preserve textures through FBX texture copying when Blender finds the MTL.
 bpy.ops.object.select_all(action="DESELECT")
 body.select_set(True)
