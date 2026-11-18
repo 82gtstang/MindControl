@@ -7,6 +7,7 @@ on:
       - 'tools/rig_ocean_serenity.py'
       - '.github/workflows/ocean-serenity-rig.yml'
       - 'tools/preview_ocean_serenity.py'
+      - '.github/workflows/unreal-android.yml'
 jobs:
   rig:
     runs-on: [self-hosted, Windows, X64, unreal-5-7, android-sdk]
