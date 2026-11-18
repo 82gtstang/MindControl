@@ -70,9 +70,22 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
           $api = 'https://api.github.com/repos/82gtstang/MindControl'
-          $runs = Invoke-RestMethod -Uri "$api/actions/runs?per_page=40" -Headers $headers
-          $rig = $runs.workflow_runs | Where-Object { $_.id -eq 44203311653 -and $_.name -eq 'Ocean Serenity experimental auto-rig' -and $_.conclusion -eq 'success' -and $_.head_branch -eq 'diagnostic/android-landscape-startup' } | Select-Object -First 1
-          if (-not $rig) { throw 'No successful Ocean Serenity rigging workflow run found.' }
+          # Wait for the rig build from THIS commit, never reuse an older FBX.
+          $rig = $null
+          for ($attempt = 0; $attempt -lt 90; $attempt++) {
+            $runs = Invoke-RestMethod -Uri "$api/actions/runs?per_page=60" -Headers $headers
+            $rig = $runs.workflow_runs | Where-Object {
+              $_.name -eq 'Ocean Serenity experimental auto-rig' -and
+              $_.head_sha -eq $env:GITHUB_SHA -and
+              $_.head_branch -eq 'diagnostic/android-landscape-startup'
+            } | Select-Object -First 1
+            if ($rig -and $rig.status -eq 'completed') { break }
+            Write-Host "Waiting for rig workflow on commit $env:GITHUB_SHA ($attempt/90)"
+            Start-Sleep -Seconds 30
+          }
+          if (-not $rig -or $rig.conclusion -ne 'success') {
+            throw "Matching Ocean Serenity rig workflow did not succeed for $env:GITHUB_SHA (status=$($rig.status), result=$($rig.conclusion)). Refusing stale FBX."
+          }
           $artifacts = Invoke-RestMethod -Uri "$api/actions/runs/$($rig.id)/artifacts" -Headers $headers
           $artifact = $artifacts.artifacts | Where-Object { $_.name -eq 'OceanSerenity-Experimental-Rig-FBX' -and -not $_.expired } | Select-Object -First 1
           if (-not $artifact) { throw "No rigged FBX artifact found in workflow run $($rig.id)" }
