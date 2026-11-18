@@ -213,6 +213,17 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
  const float S=FMath::Max(.7f,FMath::Min(ViewSize.X/1600.f,ViewSize.Y/900.f));
  auto Hit=[&](float X,float Y) { return FMath::Abs(Location.X-X)<78.f*S && FMath::Abs(Location.Y-Y)<78.f*S; };
  const float W=ViewSize.X,H=ViewSize.Y;
+ // Right virtual thumb pad: a tap in its inner circle triggers jump.
+ // Keep the outer ring available for normal right-stick camera movement.
+ const FVector2D RightPadCenter(W*.875f,H*.855f);
+ const FVector2D TouchPoint(Location.X,Location.Y);
+ const float RightPadInnerRadius=66.f*S;
+ if(FVector2D::Distance(TouchPoint,RightPadCenter)<=RightPadInnerRadius)
+ {
+  Jump();
+  UE_LOG(LogTemp,Log,TEXT("MOBILE_RIGHT_PAD: center pressed, jump requested"));
+  return;
+ }
  if(Hit(W-110*S,105*S)) Jump();
  else if(Hit(W-280*S,105*S)) Attack();
  else if(Hit(W-110*S,275*S)) SpinAttack();
