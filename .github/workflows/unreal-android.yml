@@ -8,6 +8,7 @@ on:
       - 'tools/rig_ocean_serenity.py'
       - 'tools/import_ocean_serenity.py'
       - '.github/workflows/unreal-android.yml'
+      - '.github/workflows/ocean-serenity-rig.yml'
 jobs:
   package-android:
     runs-on: [self-hosted, Windows, X64, unreal-5-7, android-sdk]
