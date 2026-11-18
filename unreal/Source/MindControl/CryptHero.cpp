@@ -44,17 +44,18 @@ ACryptHero::ACryptHero()
   // do not rotate the capsule, movement directions, or follow camera.
   GetMesh()->SetRelativeRotation(FRotator(0,-90,-90));
   GetMesh()->SetRelativeScale3D(FVector(1,1,1));
-  static ConstructorHelpers::FObjectFinder<UAnimSequence> Idle(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Idle.OceanSerenityOcean_Idle"));
-  static ConstructorHelpers::FObjectFinder<UAnimSequence> Walk(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Walk.OceanSerenityOcean_Walk"));
-  static ConstructorHelpers::FObjectFinder<UAnimSequence> Run(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Run.OceanSerenityOcean_Run"));
-  static ConstructorHelpers::FObjectFinder<UAnimSequence> JumpAnim(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Jump.OceanSerenityOcean_Jump"));
-  static ConstructorHelpers::FObjectFinder<UAnimSequence> AttackAnim(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Attack.OceanSerenityOcean_Attack"));
-  static ConstructorHelpers::FObjectFinder<UAnimSequence> SpinAnim(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Spin.OceanSerenityOcean_Spin"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> Idle(TEXT("/Game/Characters/OceanSerenity/Ocean_Idle.Ocean_Idle"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> Walk(TEXT("/Game/Characters/OceanSerenity/Ocean_Walk.Ocean_Walk"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> Run(TEXT("/Game/Characters/OceanSerenity/Ocean_Run.Ocean_Run"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> JumpAnim(TEXT("/Game/Characters/OceanSerenity/Ocean_Jump.Ocean_Jump"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> AttackAnim(TEXT("/Game/Characters/OceanSerenity/Ocean_Attack.Ocean_Attack"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> SpinAnim(TEXT("/Game/Characters/OceanSerenity/Ocean_Spin.Ocean_Spin"));
   OceanIdle=Idle.Object; OceanWalk=Walk.Object; OceanRun=Run.Object;
   OceanJump=JumpAnim.Object; OceanAttack=AttackAnim.Object; OceanSpin=SpinAnim.Object;
   // Start the relaxed idle immediately; never leave the mesh in FBX reference pose.
   if (OceanIdle)
   {
+   GetMesh()->SetAnimationMode(EAnimationMode::AnimationSingleNode);
    GetMesh()->PlayAnimation(OceanIdle,true);
    ActiveOceanAnimation=OceanIdle;
   }
@@ -101,6 +102,14 @@ ACryptHero::ACryptHero()
 void ACryptHero::BeginPlay()
 {
  Super::BeginPlay();
+ if (OceanIdle && GetMesh() && GetMesh()->GetSkeletalMeshAsset())
+ {
+  GetMesh()->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+  GetMesh()->PlayAnimation(OceanIdle,true);
+  ActiveOceanAnimation=OceanIdle;
+  UE_LOG(LogTemp,Warning,TEXT("OCEAN_ANIM: BeginPlay idle started on mesh %s"),*GetNameSafe(GetMesh()->GetSkeletalMeshAsset()));
+ }
+ else UE_LOG(LogTemp,Error,TEXT("OCEAN_ANIM: missing mesh or idle; mesh=%s idle=%d"),*GetNameSafe(GetMesh()->GetSkeletalMeshAsset()),OceanIdle!=nullptr);
  SetActorLocation(FVector(-2900,0,150),false,nullptr,ETeleportType::TeleportPhysics);
  // Align the lowest point of the imported mesh with the collision capsule base.
  // Imported FBX origins are not guaranteed to match Unreal mannequin origins.
