@@ -50,11 +50,21 @@ jobs:
           $blender = $valid | Sort-Object Major,Minor -Descending | Select-Object -First 1 -ExpandProperty Path
           if (-not $blender) {
             Write-Host 'Blender 4.3+ not found; attempting unattended installation.'
-            $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
-            if (-not $winget) { throw 'winget unavailable. Install Blender 4.3+ on the runner manually.' }
-            & $winget.Source install --id BlenderFoundation.Blender --exact --silent --accept-source-agreements --accept-package-agreements --disable-interactivity
-            if ($LASTEXITCODE -ne 0) { throw "Blender installation failed (exit $LASTEXITCODE)" }
-            $candidates = @(Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
+            # Pin a known 4.3 release instead of winget's latest (5.x) MSI.
+            # The portable ZIP avoids installer privileges and winget package resolution.
+            $zipUrl = 'https://download.blender.org/release/Blender4.3/blender-4.3.2-windows-x64.zip'
+            $installRoot = Join-Path $env:RUNNER_TEMP 'blender-4.3-portable'
+            $zipFile = Join-Path $env:RUNNER_TEMP 'blender-4.3.2-windows-x64.zip'
+            New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
+            try {
+              Invoke-WebRequest -Uri $zipUrl -OutFile $zipFile -UseBasicParsing
+            } catch {
+              throw "Portable Blender 4.3.2 download failed: $($_.Exception.Message). Install Blender 4.3+ manually on the runner."
+            }
+            Expand-Archive -LiteralPath $zipFile -DestinationPath $installRoot -Force
+            $portable = Get-ChildItem $installRoot -Filter blender.exe -Recurse -File | Select-Object -First 1 -ExpandProperty FullName
+            if (-not $portable) { throw 'Portable Blender archive contained no blender.exe' }
+            $candidates = @($portable)
             $valid = @()
             foreach ($candidate in ($candidates | Select-Object -Unique)) {
               $versionLine = (& $candidate --version 2>&1 | Select-Object -First 1)
