@@ -5,10 +5,8 @@ on:
     branches: [unreal5-prototype, diagnostic/android-landscape-startup]
     paths:
       - 'unreal/**'
-      - 'tools/rig_ocean_serenity.py'
       - 'tools/import_ocean_serenity.py'
       - '.github/workflows/unreal-android.yml'
-      - '.github/workflows/ocean-serenity-rig.yml'
 jobs:
   wait-for-rig:
     runs-on: ubuntu-latest
