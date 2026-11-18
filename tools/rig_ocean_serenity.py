@@ -384,6 +384,20 @@ for side,sgn in (("L",-1),("R",1)):
     print("HAND_DOWN_CHECK",side,"vertical_to_horizontal",
           round(span_z/max(span_x,1e-6),3),
           "below_wrist",round(below_wrist,4),flush=True)
+    # Finger-specific fail gate: distal fingertips must occupy the lower
+    # portion of the hand, not the side of the A-pose forearm.
+    # The most distal 10% of hand-weighted vertices by distance from wrist
+    # must lie below the wrist in the baked, downward-pointing pose.
+    wrist=rig.data.bones["hand_"+side].head_local
+    distal=sorted(hand_verts,key=lambda p:(p-wrist).length,reverse=True)
+    fingertip_sample=distal[:max(10,len(distal)//10)]
+    below_count=sum(1 for p in fingertip_sample if p.z<wrist.z-.015*h)
+    finger_ratio=below_count/len(fingertip_sample)
+    print("FINGER_DOWN_CHECK",side,"distal_vertices",len(fingertip_sample),
+          "below_wrist_fraction",round(finger_ratio,3),flush=True)
+    if finger_ratio<.80:
+        raise RuntimeError("FINGERS_NOT_DOWN "+side+
+            ": distal hand mesh does not hang below wrist; rejecting FBX")
     if len(hand_verts)<20 or span_z<1.2*span_x or below_wrist<.025*h:
         raise RuntimeError(
             "HAND_NOT_DOWN "+side+": skinned fingers/palm are horizontal "
