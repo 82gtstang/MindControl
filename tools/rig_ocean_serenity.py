@@ -173,6 +173,47 @@ except Exception as exc:
     mod=body.modifiers.new("OceanSerenitySkin","ARMATURE")
     mod.object=rig
     body.parent=rig
+# Correct pathological automatic weights. The AI mesh is a connected surface:
+# Blender heat diffusion spreads small arm weights across the entire body,
+# leaving shoulder bones unable to deform their intended vertices.
+# Rebuild weights from spatial anatomical regions with a protected torso core.
+for group in list(body.vertex_groups):
+    body.vertex_groups.remove(group)
+groups={name:body.vertex_groups.new(name=name) for name,_,_ in deform}
+arm_names={f"{part}_{side}" for part in ("clavicle","upperarm","forearm","hand") for side in ("L","R")}
+for v in body.data.vertices:
+    q=v.co
+    z=q.z/max(h,1e-6)
+    ax=abs(q.x)
+    side="L" if q.x<0 else "R"
+    # Explicit shoulder boundary: central torso never receives arm weights.
+    # Keep arm selection spatially continuous along the original extended arms.
+    if .50<=z<=.85 and ax>shoulder_x*.94:
+        allowed={f"upperarm_{side}",f"forearm_{side}",f"hand_{side}"}
+        # At the shoulder seam, permit clavicle to blend the transition.
+        if ax<shoulder_x*1.28: allowed.add(f"clavicle_{side}")
+    elif z>=.87:
+        allowed={"head","neck"}
+    elif z>=.79:
+        allowed={"chest","neck"}
+    elif z>=.68:
+        allowed={"chest","spine"}
+    elif z>=.54:
+        allowed={"spine","pelvis"}
+    elif z>=.44:
+        allowed={"pelvis","spine"}
+    elif z>=.28:
+        allowed={f"thigh_{side}"}
+    elif z>=.08:
+        allowed={f"shin_{side}",f"thigh_{side}"}
+    else:
+        allowed={f"foot_{side}",f"shin_{side}"}
+    candidates=sorted(((segment_dist(q,aa,bb),name) for name,aa,bb in deform if name in allowed),key=lambda item:item[0])[:2]
+    raw=[1/max(dist,.008*h)**4 for dist,_ in candidates]
+    total=sum(raw)
+    for (_,name),weight in zip(candidates,raw):
+        groups[name].add([v.index],weight/total,"REPLACE")
+print("SKINNING: rebuilt localized anatomical arm weights with torso exclusion",flush=True)
 # Permanently establish a relaxed bind/rest pose BEFORE creating animation clips.
 # The original OBJ is modeled with extended arms. Animation-only corrections
 # can be lost when Unreal evaluates its reference pose, so bake the arm-lowering
