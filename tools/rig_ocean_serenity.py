@@ -173,47 +173,36 @@ except Exception as exc:
     mod=body.modifiers.new("OceanSerenitySkin","ARMATURE")
     mod.object=rig
     body.parent=rig
-# Correct pathological automatic weights. The AI mesh is a connected surface:
-# Blender heat diffusion spreads small arm weights across the entire body,
-# leaving shoulder bones unable to deform their intended vertices.
-# Rebuild weights from spatial anatomical regions with a protected torso core.
-for group in list(body.vertex_groups):
-    body.vertex_groups.remove(group)
-groups={name:body.vertex_groups.new(name=name) for name,_,_ in deform}
+# ARM RIG REBUILD: preserve the original automatic skinning for the torso,
+# hips and legs. Previous versions erased ALL weights and assigned the whole
+# model by crude height bands, tearing the body during walk animations.
+# Only vertices spatially inside the original T-pose arm regions are edited.
+groups={g.name:g for g in body.vertex_groups}
+for name,_,_,_ in bones:
+    if name!="root" and name not in groups:
+        groups[name]=body.vertex_groups.new(name=name)
 arm_names={f"{part}_{side}" for part in ("clavicle","upperarm","forearm","hand") for side in ("L","R")}
+arm_vertex_indices={"L":set(),"R":set()}
 for v in body.data.vertices:
     q=v.co
     z=q.z/max(h,1e-6)
     ax=abs(q.x)
     side="L" if q.x<0 else "R"
-    # Explicit shoulder boundary: central torso never receives arm weights.
-    # Keep arm selection spatially continuous along the original extended arms.
-    if .50<=z<=.85 and ax>shoulder_x*.94:
-        allowed={f"upperarm_{side}",f"forearm_{side}",f"hand_{side}"}
-        # At the shoulder seam, permit clavicle to blend the transition.
-        if ax<shoulder_x*1.28: allowed.add(f"clavicle_{side}")
-    elif z>=.87:
-        allowed={"head","neck"}
-    elif z>=.79:
-        allowed={"chest","neck"}
-    elif z>=.68:
-        allowed={"chest","spine"}
-    elif z>=.54:
-        allowed={"spine","pelvis"}
-    elif z>=.44:
-        allowed={"pelvis","spine"}
-    elif z>=.28:
-        allowed={f"thigh_{side}"}
-    elif z>=.08:
-        allowed={f"shin_{side}",f"thigh_{side}"}
-    else:
-        allowed={f"foot_{side}",f"shin_{side}"}
+    if not (.53<=z<=.83 and ax>shoulder_x*1.12):
+        continue
+    arm_vertex_indices[side].add(v.index)
+    # Remove existing diffuse influences for this arm vertex only.
+    for g in list(v.groups):
+        name=body.vertex_groups[g.group].name
+        if name in groups:
+            body.vertex_groups[g.group].remove([v.index])
+    allowed=(f"upperarm_{side}",f"forearm_{side}",f"hand_{side}")
     candidates=sorted(((segment_dist(q,aa,bb),name) for name,aa,bb in deform if name in allowed),key=lambda item:item[0])[:2]
     raw=[1/max(dist,.008*h)**4 for dist,_ in candidates]
     total=sum(raw)
     for (_,name),weight in zip(candidates,raw):
         groups[name].add([v.index],weight/total,"REPLACE")
-print("SKINNING: rebuilt localized anatomical arm weights with torso exclusion",flush=True)
+print("ARM_REBUILD: preserved body weights; replaced only arm region", {k:len(v) for k,v in arm_vertex_indices.items()},flush=True)
 # Permanently establish a relaxed bind/rest pose BEFORE creating animation clips.
 # The original OBJ is modeled with extended arms. Animation-only corrections
 # can be lost when Unreal evaluates its reference pose, so bake the arm-lowering
