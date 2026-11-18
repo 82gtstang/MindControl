@@ -185,6 +185,11 @@ for side,sign in (("L",-1),("R",1)):
     correction=current.rotation_difference(desired)
     pb.rotation_mode="QUATERNION"
     pb.rotation_quaternion=rest.to_quaternion().inverted() @ correction @ rest.to_quaternion()
+    # Apply the same anatomical direction correction to the forearm chain.
+    # A shoulder-only correction leaves the forearm/hand extending sideways.
+    forearm=rig.pose.bones["forearm_"+side]
+    forearm.rotation_mode="QUATERNION"
+    forearm.rotation_quaternion=(1,0,0,0)
 bpy.context.view_layer.update()
 # Capture the posed geometry as the new unposed mesh, then adopt the matching
 # armature rest matrices. This prevents Unreal from showing the old T-pose.
@@ -334,7 +339,27 @@ for side,sign in (("L",-1),("R",1)):
 # Check mesh skin remains connected to the armature.
 if not any(m.type=="ARMATURE" and m.object==rig for m in body.modifiers):
     raise RuntimeError("Armature modifier missing after relaxed-rest-pose bake")
-print("POSE_VALIDATION: both hands below shoulders and close to hips; skin modifier connected",flush=True)
+# Validate the actual deformed skin, not only the bone locations.
+# Sample each mesh vertex by its original arm weights and ensure the skin
+# corresponding to the upper/forearm has moved down beside the torso.
+dg=bpy.context.evaluated_depsgraph_get()
+evaluated=body.evaluated_get(dg).to_mesh()
+for side in ("L","R"):
+    arm_groups={g.index for g in body.vertex_groups if g.name in ("upperarm_"+side,"forearm_"+side,"hand_"+side)}
+    arm_indices=[]
+    for v in body.data.vertices:
+        if any(g.group in arm_groups and g.weight>.55 for g in v.groups):
+            arm_indices.append(v.index)
+    if len(arm_indices)<100:
+        raise RuntimeError("Insufficient arm-weighted mesh vertices on "+side+": "+str(len(arm_indices)))
+    arm_vertices=[evaluated.vertices[i].co for i in arm_indices]
+    x_extent=max(abs(v.x) for v in arm_vertices)
+    z_mid=sorted(v.z for v in arm_vertices)[len(arm_vertices)//2]
+    print("ARM_MESH_VALIDATION",side,"vertices",len(arm_indices),"max_abs_x",x_extent,"median_z",z_mid,flush=True)
+    if x_extent > .29*h:
+        raise RuntimeError("Actual arm mesh still extends sideways on "+side+": "+str(x_extent))
+body.evaluated_get(dg).to_mesh_clear()
+print("POSE_VALIDATION: both hands below shoulders, arm skin checked, and skin modifier connected",flush=True)
 # Restore NLA-only export; each strip becomes its own FBX animation take.
 rig.animation_data.action=None
 bpy.context.scene.frame_set(1)
