@@ -279,16 +279,16 @@ def pose_action(name,frames):
         # Animate relative to the relaxed rest pose only.
         for side in ("L","R"):
             for part in ("upperarm","forearm"):
-                name=part+"_"+side
-                pb=rig.pose.bones[name]
+                bone_name=part+"_"+side
+                pb=rig.pose.bones[bone_name]
                 rest=pb.bone.matrix_local.to_3x3()
                 axis=rest.inverted() @ Vector((1,0,0))
                 pb.rotation_mode="QUATERNION"
-                pb.rotation_quaternion=Quaternion(axis,math.radians(arm_motion.get(name,0)))
+                pb.rotation_quaternion=Quaternion(axis,math.radians(arm_motion.get(bone_name,0)))
         if clip_name=="Jump":
             # Lift the whole character in mid-air, not only the legs.
             jump_heights={1:0.0,7:0.18,15:0.34,23:0.10,30:0.0}
-            rig.pose.bones["root"].location.z=jump_heights.get(frame,0.0)
+            rig.pose.bones["root"].location.z=jump_heights.get(frame,0.0)*h
         for pb in rig.pose.bones:
             pb.keyframe_insert(data_path="rotation_quaternion" if pb.rotation_mode=="QUATERNION" else "rotation_euler",frame=frame,group=pb.name)
             if pb.name=="root": pb.keyframe_insert(data_path="location",frame=frame,group=pb.name)
@@ -300,6 +300,8 @@ def pose_action(name,frames):
     strip.action_frame_start=1
     strip.action_frame_end=max(f for f,_ in frames)
     strip.mute=False
+    if track.name != "Ocean_"+clip_name or strip.name != "Ocean_"+clip_name:
+        raise RuntimeError("Animation take mislabeled: "+clip_name)
     return action
 # More expressive cycles while retaining moderate joint rotations.
 # All angles are local Euler rotations; verify visually before Android packaging.
