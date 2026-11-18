@@ -295,7 +295,11 @@ for side in ("L","R"):
     indices=[v.index for v in body.data.vertices
              if any(a.group==group.index and a.weight>=.8 for a in v.groups)]
     if len(indices)<20:
-        raise RuntimeError("Too few hand vertices for palm orientation fitting: "+side)
+        print("PALM_FIT_COVERAGE",side,"strong",len(indices),flush=True)
+        indices=[v.index for v in body.data.vertices
+                 if any(a.group==group.index and a.weight>=.05 for a in v.groups)]
+    if len(indices)<20:
+        raise RuntimeError("Too few hand-weighted vertices for palm orientation fitting: "+side)
     pb=rig.pose.bones["hand_"+side]
     bpy.context.view_layer.update()
     baseline=pb.matrix.copy()
