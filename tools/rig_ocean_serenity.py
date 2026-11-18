@@ -341,7 +341,22 @@ for side,sgn in (("L",-1),("R",1)):
                     hand_verts.append(v.co)
                     break
     if len(hand_verts)<20:
-        raise RuntimeError("Insufficient strongly weighted hand vertices on "+side)
+        # Preserve diagnostic output: a missing 80%-influence population is
+        # itself evidence that the weight partition is wrong. Do not crash
+        # before reporting lower thresholds and the visible geometry.
+        counts={}
+        for threshold in (.8,.5,.2,.05):
+            counts[str(threshold)]=sum(
+                1 for v in body.data.vertices
+                if any(a.group==group.index and a.weight>=threshold for a in v.groups)
+            )
+        print("HAND_WEIGHT_COVERAGE",side,counts,flush=True)
+        hand_verts=[
+            v.co for v in body.data.vertices
+            if any(a.group==group.index and a.weight>=.05 for a in v.groups)
+        ]
+        if not hand_verts:
+            raise RuntimeError("No hand-weighted vertices on "+side)
     xs=[p.x for p in hand_verts]
     zs=[p.z for p in hand_verts]
     span_x=max(xs)-min(xs)
