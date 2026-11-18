@@ -131,8 +131,7 @@ try:
         if total>.001: covered+=1
     if covered<len(body.data.vertices):
         raise RuntimeError("Automatic weights uncovered %d vertices"%(len(body.data.vertices)-covered))
-    print("SKINNING: automatic weights coverage:",covered,"; replacing with deterministic anatomical arm/leg weights for pose reliability",flush=True)
-    raise RuntimeError("Use deterministic anatomical weights to avoid arm vertices being bound to torso")
+    print("SKINNING: retaining Blender automatic weights for",covered,"vertices",flush=True)
 except Exception as exc:
     weight_method="anatomical_fallback"
     print("SKINNING: automatic weights unavailable:",repr(exc),flush=True)
