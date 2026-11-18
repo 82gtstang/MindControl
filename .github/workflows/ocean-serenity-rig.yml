@@ -33,19 +33,23 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $candidates = @()
+          $candidates = @(Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
           $command = Get-Command blender.exe -ErrorAction SilentlyContinue
           if ($command) { $candidates += $command.Source }
-          $candidates += @(Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
-          $blender = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          $valid = @()
+          foreach ($candidate in ($candidates | Select-Object -Unique)) {
+            if (!(Test-Path $candidate)) { continue }
+            $versionLine = (& $candidate --version 2>&1 | Select-Object -First 1)
+            if ($versionLine -match 'Blender (\\d+)\\.(\\d+)') {
+              $major=[int]$Matches[1]; $minor=[int]$Matches[2]
+              if ($major -gt 4 -or ($major -eq 4 -and $minor -ge 3)) {
+                $valid += [pscustomobject]@{Path=$candidate;Major=$major;Minor=$minor}
+              }
+            }
+          }
+          $blender = $valid | Sort-Object Major,Minor -Descending | Select-Object -First 1 -ExpandProperty Path
           if (-not $blender) {
-            Write-Host 'Blender missing; attempting unattended installation via winget on the build runner.'
-            $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
-            if (-not $winget) { throw 'winget not found on runner; install Blender 4.3+ on build runner once.' }
-            & $winget.Source install --id BlenderFoundation.Blender --exact --silent --accept-source-agreements --accept-package-agreements --disable-interactivity
-            if ($LASTEXITCODE -ne 0) { throw "Blender unattended install failed ($LASTEXITCODE)" }
-            $blender = Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1
-            if (-not $blender) { throw 'Blender installation finished but blender.exe was not found' }
+            throw 'Blender 4.3+ is required. Only older installations were found. Install Blender 4.3+ on the self-hosted runner; refusing to use Blender 2.92.'
           }
           "BLENDER_EXE=$blender" | Out-File -FilePath $env:GITHUB_ENV -Append
           & $blender --version
