@@ -230,6 +230,30 @@ for side,sign in (("L",-1),("R",1)):
     local_correction=rest.to_quaternion().inverted() @ correction @ rest.to_quaternion()
     pb.rotation_quaternion=Quaternion((1,0,0,0)).slerp(local_correction,1.0)
 bpy.context.view_layer.update()
+# Align the child bones independently. Rotating only the upper arm leaves the
+# imported forearm/hand in their original A-pose and creates elbow kinks.
+# PoseBone.matrix is in armature space and Blender resolves its local basis.
+from mathutils import Matrix
+for side,sign in (("L",-1),("R",1)):
+    for part,desired in (
+        ("forearm",Vector((sign*.10,0,-.995)).normalized()),
+        ("hand",Vector((sign*.16,0,-.987)).normalized()),
+    ):
+        pb=rig.pose.bones[part+"_"+side]
+        bpy.context.view_layer.update()
+        current=(pb.tail-pb.head).normalized()
+        correction=current.rotation_difference(desired)
+        pivot=pb.head.copy()
+        transform=(Matrix.Translation(pivot) @
+                   correction.to_matrix().to_4x4() @
+                   Matrix.Translation(-pivot))
+        pb.matrix=transform @ pb.matrix
+        bpy.context.view_layer.update()
+        actual=(pb.tail-pb.head).normalized()
+        error=math.degrees(actual.angle(desired))
+        print("CHILD_ARM_ALIGNMENT",side,part,"angle_error_deg",round(error,3),flush=True)
+        if error>8:
+            raise RuntimeError("Failed to align "+part+"_"+side)
 posed_positions=skin_positions()
 for side,sign in (("L",-1),("R",1)):
     ids={g.index for g in body.vertex_groups if g.name in
