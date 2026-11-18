@@ -256,6 +256,13 @@ for side,sign in (("L",-1),("R",1)):
         original=v.co.copy()
         rotated=shoulder+correction @ (original-shoulder)
         v.co=original.lerp(rotated,min(1.,influence))
+        # The source mesh includes shoulder/arm geometry whose spread is
+        # wider than the bone axis predicts. Preserve arm thickness but
+        # smoothly pull remaining lateral outliers beside the body.
+        lateral=sign*v.co.x
+        limit=sign*shoulder.x+.16*h
+        if lateral>limit:
+            v.co.x=sign*(limit+.015*h*math.tanh((lateral-limit)/(.015*h)))
         count+=1
     print("REST_BAKE_DIRECT",side,"transformed_vertices",count,flush=True)
 bpy.context.view_layer.update()
