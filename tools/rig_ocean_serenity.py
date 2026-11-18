@@ -285,6 +285,45 @@ for side,sign in (("L",-1),("R",1)):
         print("CHILD_ARM_ALIGNMENT",side,part,"angle_error_deg",round(error,3),flush=True)
         if error>8:
             raise RuntimeError("Failed to align "+part+"_"+side)
+# Optimize the actual skinned palm shape, not a bone-angle proxy.
+# Trial rotations are evaluated on the Blender-deformed mesh before baking.
+# Keep the wrist fixed and choose a modest palm rotation independently per side.
+for side in ("L","R"):
+    group=body.vertex_groups.get("hand_"+side)
+    if group is None:
+        raise RuntimeError("Missing hand skin group: "+side)
+    indices=[v.index for v in body.data.vertices
+             if any(a.group==group.index and a.weight>=.8 for a in v.groups)]
+    if len(indices)<20:
+        raise RuntimeError("Too few hand vertices for palm orientation fitting: "+side)
+    pb=rig.pose.bones["hand_"+side]
+    bpy.context.view_layer.update()
+    baseline=pb.matrix.copy()
+    pivot=pb.head.copy()
+    best=None
+    for angle_deg in range(-45,46,5):
+        angle=math.radians(angle_deg)
+        rot=(Matrix.Translation(pivot) @
+             Matrix.Rotation(angle,4,"Y") @
+             Matrix.Translation(-pivot))
+        pb.matrix=rot @ baseline
+        bpy.context.view_layer.update()
+        sampled=skin_positions()
+        xs=[sampled[i].x for i in indices]
+        zs=[sampled[i].z for i in indices]
+        ratio=(max(zs)-min(zs))/max(max(xs)-min(xs),1e-6)
+        # Prefer a vertically elongated palm with tips below the wrist.
+        below=pivot.z-min(zs)
+        score=ratio+min(below/h,.15)*3-abs(angle_deg)*.001
+        if best is None or score>best[0]:
+            best=(score,angle_deg,ratio,below)
+    chosen=math.radians(best[1])
+    pb.matrix=(Matrix.Translation(pivot) @
+               Matrix.Rotation(chosen,4,"Y") @
+               Matrix.Translation(-pivot)) @ baseline
+    bpy.context.view_layer.update()
+    print("PALM_ORIENTATION_FIT",side,"angle_deg",best[1],
+          "ratio",round(best[2],3),"below_wrist",round(best[3],4),flush=True)
 posed_positions=skin_positions()
 for side,sign in (("L",-1),("R",1)):
     ids={g.index for g in body.vertex_groups if g.name in
