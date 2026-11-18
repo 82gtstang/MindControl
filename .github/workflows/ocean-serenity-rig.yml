@@ -44,8 +44,16 @@ jobs:
               $valid += [pscustomobject]@{Path=$candidate;Major=[int]$Matches[1];Minor=[int]$Matches[2]}
             }
           }
-          $blender = $valid | Sort-Object Major,Minor -Descending | Select-Object -First 1 -ExpandProperty Path
+          $preferred = @($valid | Where-Object { $_.Major -eq 5 -and $_.Minor -eq 3 })
+          if ($preferred.Count -gt 0) {
+            $blender = $preferred | Select-Object -First 1 -ExpandProperty Path
+            Write-Host 'Selected installed Blender 5.3 for Ocean Serenity diagnostics.'
+          } else {
+            $blender = $valid | Sort-Object Major,Minor -Descending | Select-Object -First 1 -ExpandProperty Path
+            Write-Warning 'Blender 5.3 not detected; falling back to newest installed version.'
+          }
           if (-not $blender) { throw 'No Blender installation found on the runner.' }
+          Write-Host "Blender executable: $blender"
           Write-Host 'Using existing Blender for skin-weight diagnosis; no download attempted.'
           "BLENDER_EXE=$blender" | Out-File -FilePath $env:GITHUB_ENV -Append
           & $blender --version
