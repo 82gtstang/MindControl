@@ -26,7 +26,7 @@ for obj in bpy.context.scene.objects:
     if obj.type not in {"MESH","ARMATURE"}: obj.hide_render=True
 rig.hide_render=True
 scene=bpy.context.scene
-scene.render.engine="BLENDER_EEVEE_NEXT"
+scene.render.engine="BLENDER_WORKBENCH"
 scene.render.resolution_x=900
 scene.render.resolution_y=1000
 scene.render.resolution_percentage=100
