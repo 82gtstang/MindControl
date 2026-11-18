@@ -304,6 +304,43 @@ for side,sign in (("L",-1),("R",1)):
         print("CHILD_ARM_ALIGNMENT",side,part,"angle_error_deg",round(error,3),flush=True)
         if error>8:
             raise RuntimeError("Failed to align "+part+"_"+side)
+# Fit the actual forearm skin, not only the forearm bone direction.
+# The OBJ has ~6400 visible forearm vertices stranded horizontally.
+# Rotate around the elbow, evaluate the mesh, and minimize that displacement.
+for side,sign in (("L",-1),("R",1)):
+    group=body.vertex_groups.get("forearm_"+side)
+    indices=[v.index for v in body.data.vertices
+             if any(a.group==group.index and a.weight>=.5 for a in v.groups)
+             and v.co.x*sign>.32*h and .55*h<v.co.z<.84*h]
+    print("FOREARM_FIT_COVERAGE",side,len(indices),flush=True)
+    if len(indices)<100:
+        raise RuntimeError("Forearm outlier population cannot be identified: "+side)
+    pb=rig.pose.bones["forearm_"+side]
+    bpy.context.view_layer.update()
+    baseline=pb.matrix.copy()
+    pivot=pb.head.copy()
+    best=None
+    for angle_deg in range(-110,111,10):
+        transform=(Matrix.Translation(pivot) @
+                   Matrix.Rotation(math.radians(angle_deg),4,"Y") @
+                   Matrix.Translation(-pivot))
+        pb.matrix=transform @ baseline
+        bpy.context.view_layer.update()
+        sampled=skin_positions()
+        excess=sum(max(0,abs(sampled[i].x)-.29*h) for i in indices)/len(indices)
+        # Prefer positions below elbow and penalize unnecessary rotation.
+        high=sum(max(0,sampled[i].z-pivot.z) for i in indices)/len(indices)
+        score=excess+high*.25+abs(angle_deg)*.00002
+        if best is None or score<best[0]:
+            best=(score,angle_deg,excess,high)
+    transform=(Matrix.Translation(pivot) @
+               Matrix.Rotation(math.radians(best[1]),4,"Y") @
+               Matrix.Translation(-pivot))
+    pb.matrix=transform @ baseline
+    bpy.context.view_layer.update()
+    print("FOREARM_MESH_FIT",side,"rotation_deg",best[1],
+          "horizontal_excess",round(best[2],4),
+          "above_elbow",round(best[3],4),flush=True)
 # Optimize the actual skinned palm shape, not a bone-angle proxy.
 # Trial rotations are evaluated on the Blender-deformed mesh before baking.
 # Keep the wrist fixed and choose a modest palm rotation independently per side.
