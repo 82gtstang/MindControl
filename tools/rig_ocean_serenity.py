@@ -75,7 +75,10 @@ hip_y=center_y(.49,torso_half)
 chest_y=center_y(.73,torso_half)
 shoulder_x=min(w*.22,max(torso_half*.92,w*.105))
 elbow_x=min(w*.36,max(shoulder_x+w*.10,w*.28))
-wrist_x=min(w*.46,max(elbow_x+w*.075,w*.40))
+# Mesh-fit wrist: the previous width-based wrist (~0.67m) was beyond
+# the actual palm region and rotated fingers around an empty pivot.
+# Source A-pose hand geometry spans roughly 0.40-0.60m laterally.
+wrist_x=min(w*.31,max(elbow_x+w*.035,w*.265))
 def p(x,y,z): return (x,y,z*h)
 bones=[
  ("root",None,p(0,hip_y,0),p(0,hip_y,.08)),
@@ -179,7 +182,7 @@ except Exception as exc:
         # Use the outer distal limb zone, excluding the torso by requiring
         # substantial lateral reach. Strict post-bake hand-down validation
         # below rejects this experiment if the mesh still points outward.
-        if .45<=z<.78 and ax>max(shoulder_x*1.55,wrist_x*.70) and f"hand_{side}" in allowed:
+        if .48<=z<.69 and ax>max(shoulder_x*2.25,wrist_x*.95) and f"hand_{side}" in allowed:
             allowed={f"hand_{side}"}
         candidates=sorted(((segment_dist(q,aa,bb),name) for name,aa,bb in deform if name in allowed),key=lambda item:item[0])[:2]
         distances=[max(d,1e-4) for d,_ in candidates]
