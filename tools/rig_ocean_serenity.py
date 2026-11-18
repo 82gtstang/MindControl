@@ -167,6 +167,11 @@ except Exception as exc:
             allowed={f"shin_{side}",f"thigh_{side}"}
         else:
             allowed={f"foot_{side}",f"shin_{side}"}
+        # Keep the distal palm/finger region on the hand bone. In the
+        # original A-pose the hand is the outermost portion of the limb;
+        # generic nearest-two weights let forearm bones flatten fingers.
+        if z>=.50 and z<.66 and ax>wrist_x*.98 and f"hand_{side}" in allowed:
+            allowed={f"hand_{side}"}
         candidates=sorted(((segment_dist(q,aa,bb),name) for name,aa,bb in deform if name in allowed),key=lambda item:item[0])[:2]
         distances=[max(d,1e-4) for d,_ in candidates]
         weights=[1.0/(d*d) for d in distances]
@@ -251,7 +256,7 @@ from mathutils import Matrix
 for side,sign in (("L",-1),("R",1)):
     for part,desired in (
         ("forearm",Vector((sign*.10,0,-.995)).normalized()),
-        ("hand",Vector((sign*.16,0,-.987)).normalized()),
+        ("hand",Vector((sign*.01,0,-.99995)).normalized()),
     ):
         pb=rig.pose.bones[part+"_"+side]
         bpy.context.view_layer.update()
