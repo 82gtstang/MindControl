@@ -1,0 +1,44 @@
+name: Allow VPN-only RDP to MindControl runner
+on:
+  workflow_dispatch:
+  push:
+    branches: [diagnostic/android-landscape-startup]
+    paths:
+      - '.github/workflows/allow-vpn-rdp.yml'
+jobs:
+  allow-vpn-rdp:
+    runs-on: [self-hosted, Windows, X64, unreal-5-7, android-sdk]
+    timeout-minutes: 5
+    steps:
+      - name: Configure narrowly scoped Windows Firewall RDP rule
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:COMPUTERNAME -ine 'MSI') {
+            throw "Unexpected host: $env:COMPUTERNAME. No changes made."
+          }
+          $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+          $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+          if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+            throw 'GitHub Actions runner is not elevated; cannot change Windows Firewall.'
+          }
+          $ruleName = 'MindControl-VPN-RDP'
+          $sourceSubnet = '10.10.10.0/24'
+          $targetIP = '192.168.1.34'
+          $localIPs = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop | Select-Object -ExpandProperty IPAddress)
+          if ($targetIP -notin $localIPs) {
+            throw "Expected target IP $targetIP not found on host. No changes made."
+          }
+          $rdp = Get-Service -Name TermService -ErrorAction Stop
+          Write-Host "RDP service status: $($rdp.Status)"
+          $existing = Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue
+          if ($existing) {
+            Remove-NetFirewallRule -Name $ruleName -ErrorAction Stop
+          }
+          New-NetFirewallRule -Name $ruleName -DisplayName 'MindControl RDP from FortiGate VPN only' -Enabled True -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3389 -LocalAddress $targetIP -RemoteAddress $sourceSubnet -Profile Any | Out-Null
+          $rule = Get-NetFirewallRule -Name $ruleName -ErrorAction Stop
+          $port = $rule | Get-NetFirewallPortFilter
+          $address = $rule | Get-NetFirewallAddressFilter
+          Write-Host "Configured: $($rule.DisplayName), enabled=$($rule.Enabled), action=$($rule.Action)"
+          Write-Host "Protocol=$($port.Protocol), port=$($port.LocalPort), local=$($address.LocalAddress), remote=$($address.RemoteAddress)"
+          Write-Host 'No public RDP port forwarding or internet-wide firewall rule was created.'
