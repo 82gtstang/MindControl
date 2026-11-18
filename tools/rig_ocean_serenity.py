@@ -365,10 +365,18 @@ for side,sgn in (("L",-1),("R",1)):
           "x_span",round(span_x,4),"z_span",round(span_z,4),
           "x_range",(round(min(xs),4),round(max(xs),4)),
           "z_range",(round(min(zs),4),round(max(zs),4)),flush=True)
-    # The mesh must be vertically elongated in its relaxed hand region.
-    # This is a diagnostic warning while correcting weights, not a fake pass.
-    if span_x>span_z*.85:
-        print("HAND_MESH_WARNING",side,"palm/fingers remain too horizontal",flush=True)
+    # HARD REJECTION: the actual skinned palm/fingers must hang down,
+    # not merely have a downward-pointing hand bone. Fail before FBX export.
+    wrist_z=rig.data.bones["hand_"+side].head_local.z
+    below_wrist=wrist_z-min(zs)
+    print("HAND_DOWN_CHECK",side,"vertical_to_horizontal",
+          round(span_z/max(span_x,1e-6),3),
+          "below_wrist",round(below_wrist,4),flush=True)
+    if len(hand_verts)<20 or span_z<1.2*span_x or below_wrist<.025*h:
+        raise RuntimeError(
+            "HAND_NOT_DOWN "+side+": skinned fingers/palm are horizontal "
+            "or do not extend below wrist; rejecting FBX"
+        )
 print("VISIBLE_ARM_EXTENT",len(outliers),"vertices beyond 32% of character height",flush=True)
 if outliers:
     for side,sgn in (("L",-1),("R",1)):
