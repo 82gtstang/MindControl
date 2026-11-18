@@ -232,18 +232,17 @@ for side,sign in (("L",-1),("R",1)):
     forearm.rotation_mode="QUATERNION"
     forearm.rotation_quaternion=(1,0,0,0)
 bpy.context.view_layer.update()
-# Capture the posed geometry as the new unposed mesh, then adopt the matching
-# armature rest matrices. This prevents Unreal from showing the old T-pose.
-dg=bpy.context.evaluated_depsgraph_get()
-posed=body.evaluated_get(dg).to_mesh()
-if len(posed.vertices)!=len(body.data.vertices):
-    raise RuntimeError("Arm rest-pose bake changed vertex count")
-for v in body.data.vertices:
-    v.co=posed.vertices[v.index].co.copy()
-body.evaluated_get(dg).to_mesh_clear()
-# Remove the skin modifier during rest-pose application to avoid double deformation.
+# Apply the actual ARMATURE modifier while the arms are posed.  Merely
+# copying evaluated vertex coordinates does not reliably commit deformation
+# in Blender 2.92 (especially with a parent inverse transform).
 skin=next((m for m in body.modifiers if m.type=="ARMATURE"),None)
-if skin: body.modifiers.remove(skin)
+if skin is None: raise RuntimeError("Missing armature skin before rest bake")
+bpy.ops.object.select_all(action="DESELECT")
+body.select_set(True)
+bpy.context.view_layer.objects.active=body
+bpy.ops.object.modifier_apply(modifier=skin.name)
+bpy.context.view_layer.update()
+print("REST_BAKE: applied posed armature deformation directly to base mesh",flush=True)
 bpy.ops.object.select_all(action="DESELECT")
 rig.select_set(True)
 bpy.context.view_layer.objects.active=rig
