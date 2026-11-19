@@ -27,8 +27,11 @@ try {
     } else { $line }
   }
   $lines | Set-Content -Path $requirements -Encoding UTF8
-  & $py -m pip install scikit-build-core cmake ninja
+  & $py -m pip install scikit-build-core cmake ninja pybind11
   if ($LASTEXITCODE -ne 0) { throw 'Native build tools installation failed' }
+  $pybindCmake = (& $py -m pybind11 --cmakedir | Select-Object -Last 1).Trim()
+  if (!(Test-Path $pybindCmake)) { throw 'pybind11 CMake directory not found' }
+  $env:pybind11_DIR = $pybindCmake
   & $py -m pip install --no-build-isolation -r $requirements
   if ($LASTEXITCODE -ne 0) { throw 'TripoSR requirements failed' }
   & $py -c "import torch; print('CUDA_AVAILABLE',torch.cuda.is_available()); print('TORCH_VERSION',torch.__version__); assert torch.cuda.is_available(), 'CUDA not available'"
