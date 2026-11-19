@@ -1,0 +1,55 @@
+name: Ocean Serenity free realistic human candidate
+on:
+  workflow_dispatch:
+  push:
+    branches: [diagnostic/android-landscape-startup]
+    paths:
+      - '.github/workflows/ocean-serenity-free-human.yml'
+jobs:
+  generate:
+    runs-on: [self-hosted, Windows, X64, unreal-5-7, android-sdk]
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Node and acquire CC0 human generator
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node --version
+          npm --version
+          git clone --depth 1 https://github.com/olatunde85/3d-gen.git "$env:RUNNER_TEMP\ocean-human-generator"
+      - name: Install generator and CC0 MakeHuman data
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Push-Location "$env:RUNNER_TEMP\ocean-human-generator"
+          try {
+            npm ci
+            if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
+            npm run setup-assets
+            if ($LASTEXITCODE -ne 0) { throw 'setup-assets failed' }
+          } finally { Pop-Location }
+      - name: Export realistic rigged human candidate
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dest = Join-Path $env:GITHUB_WORKSPACE 'realistic-character-candidate'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Push-Location "$env:RUNNER_TEMP\ocean-human-generator"
+          try {
+            npm run export -- --preset "The Soldier" --detail high --out "$dest"
+            if ($LASTEXITCODE -ne 0) { throw 'Character export failed' }
+          } finally { Pop-Location }
+          $models = @(Get-ChildItem $dest -Recurse -File | Where-Object { $_.Extension -in @('.fbx','.glb','.gltf') })
+          if ($models.Count -eq 0) { throw 'No exported 3D model; refusing to claim success' }
+          $models | ForEach-Object { Write-Host "EXPORTED_MODEL $($_.FullName) $($_.Length) bytes" }
+      - name: Upload source character candidate for inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: OceanSerenity-Realistic-Human-Candidate
+          path: realistic-character-candidate/**
+          retention-days: 7
+          if-no-files-found: warn
