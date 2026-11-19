@@ -51,17 +51,7 @@ try {
     $vcvars = Join-Path $installation 'VC\Auxiliary\Build\vcvarsall.bat'
     if (!(Test-Path $vcvars)) { continue }
     Get-ChildItem (Join-Path $installation 'VC\Tools\MSVC') -Directory -ErrorAction SilentlyContinue |
-      Where-Object { $_.Name -match '^14\.3\d\.\d+
-  & (Join-Path $cudaRoot 'bin\nvcc.exe') --version
-  & $py -m pip install --no-build-isolation -r $requirements
-  if ($LASTEXITCODE -ne 0) { throw 'TripoSR requirements failed' }
-  & $py -c "import torch; print('CUDA_AVAILABLE',torch.cuda.is_available()); print('TORCH_VERSION',torch.__version__); assert torch.cuda.is_available(), 'CUDA not available'"
-  if ($LASTEXITCODE -ne 0) { throw 'CUDA smoke test failed' }
-  & $py run.py --help
-  if ($LASTEXITCODE -ne 0) { throw 'TripoSR CLI smoke test failed' }
-  Write-Host 'OCEAN3D_TRIPOSR_INSTALLED'
-} finally { Pop-Location }
- -and (Test-Path (Join-Path $_.FullName 'bin\Hostx64\x64\cl.exe')) } |
+      Where-Object { $_.Name -match '^14\.3\d\.\d+$' -and (Test-Path (Join-Path $_.FullName 'bin\Hostx64\x64\cl.exe')) } |
       ForEach-Object { [pscustomobject]@{ Version = [version]$_.Name; Setup = $vcvars; Directory = $_.FullName } }
   }
   $toolset = $toolsets | Sort-Object Version -Descending | Select-Object -First 1
@@ -72,17 +62,7 @@ try {
   $compilerEnv = & $env:ComSpec /d /c $vcSetup
   if ($LASTEXITCODE -ne 0) { throw "Failed to initialize MSVC toolset $($toolset.Version)" }
   foreach ($line in $compilerEnv) {
-    if ($line -match '^([^=]+)=(.*)
-  & (Join-Path $cudaRoot 'bin\nvcc.exe') --version
-  & $py -m pip install --no-build-isolation -r $requirements
-  if ($LASTEXITCODE -ne 0) { throw 'TripoSR requirements failed' }
-  & $py -c "import torch; print('CUDA_AVAILABLE',torch.cuda.is_available()); print('TORCH_VERSION',torch.__version__); assert torch.cuda.is_available(), 'CUDA not available'"
-  if ($LASTEXITCODE -ne 0) { throw 'CUDA smoke test failed' }
-  & $py run.py --help
-  if ($LASTEXITCODE -ne 0) { throw 'TripoSR CLI smoke test failed' }
-  Write-Host 'OCEAN3D_TRIPOSR_INSTALLED'
-} finally { Pop-Location }
-) {
+    if ($line -match '^([^=]+)=(.*)$') {
       [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process')
     }
   }
