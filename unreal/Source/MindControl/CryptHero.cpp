@@ -26,15 +26,15 @@ ACryptHero::ACryptHero()
  CameraBoom->bUsePawnControlRotation = true;
  FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
  FollowCamera->SetupAttachment(CameraBoom);
- // Prefer the imported Ocean Serenity rig; retain Countess and silhouette fallbacks.
+ // Prefer the future photorealistic Ocean Serenity heroine, then the legacy rig.\n static ConstructorHelpers::FObjectFinder<USkeletalMesh> HeroineMesh(TEXT("/Game/Characters/OceanSerenityHeroine/OceanSerenityHeroine.OceanSerenityHeroine"));
  static ConstructorHelpers::FObjectFinder<USkeletalMesh> OceanMesh(TEXT("/Game/Characters/OceanSerenity/OceanSerenity.OceanSerenity"));
  // Load the licensed Countess mesh if its Fab content has been installed locally.
  static ConstructorHelpers::FObjectFinder<USkeletalMesh> CountessMesh(TEXT("/Game/ParagonCountess/Characters/Heroes/Countess/Meshes/Countess.Countess"));
- const bool bHasOcean = OceanMesh.Succeeded();
+ const bool bHasHeroine = HeroineMesh.Succeeded();\n const bool bHasOcean = bHasHeroine || OceanMesh.Succeeded();
  const bool bHasCountess = !bHasOcean && CountessMesh.Succeeded();
  if(bHasOcean)
  {
-  GetMesh()->SetSkeletalMesh(OceanMesh.Object);
+  GetMesh()->SetSkeletalMesh(bHasHeroine ? HeroineMesh.Object : OceanMesh.Object);\n  UE_LOG(LogTemp,Warning,TEXT("MindControl heroine mesh source: %s"),bHasHeroine ? TEXT("OceanSerenityHeroine") : TEXT("legacy OceanSerenity"));
   // Blender rig is grounded at its feet, unlike the usual UE mannequin
   // whose mesh origin is at capsule center. Keep Ocean at capsule base
   // and allow a little clearance above the floor.
