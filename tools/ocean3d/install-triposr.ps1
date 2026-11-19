@@ -66,6 +66,12 @@ try {
       [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process')
     }
   }
+  $runtimeLib = Join-Path $toolset.Directory 'lib\x64'
+  if (!(Test-Path (Join-Path $runtimeLib 'MSVCRT.lib') -PathType Leaf)) {
+    throw "MSVC $($toolset.Version) is missing its x64 release runtime import library: $runtimeLib\MSVCRT.lib. Repair the v143 14.39 x64/x86 build tools in Visual Studio Installer."
+  }
+  $env:LIB = $runtimeLib + ';' + $env:LIB
+  Write-Host "Verified MSVC x64 runtime import library in $runtimeLib"
   $cl = Join-Path $toolset.Directory 'bin\Hostx64\x64\cl.exe'
   $nvcc = Join-Path $cudaRoot 'bin\nvcc.exe'
   $cmakeNvcc = $nvcc.Replace('\', '/')
