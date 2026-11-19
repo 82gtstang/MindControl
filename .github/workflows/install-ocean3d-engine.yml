@@ -1,0 +1,21 @@
+name: Install Ocean3D TripoSR Engine
+on:
+  workflow_dispatch:
+  push:
+    branches: [diagnostic/android-landscape-startup]
+    paths:
+      - .github/workflows/install-ocean3d-engine.yml
+jobs:
+  install:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install and smoke test TripoSR
+        shell: powershell
+        run: |
+          & "$env:GITHUB_WORKSPACE\tools\ocean3d\install-triposr.ps1"
+          if ($LASTEXITCODE -ne 0) { throw "Install script failed: $LASTEXITCODE" }
