@@ -10,6 +10,8 @@ on:
       - 'tools/preview_ocean_serenity.py'
       - 'tools/diagnose_ocean_serenity.py'
       - '.github/workflows/unreal-android.yml'
+      - 'unreal/**'
+      - 'tools/import_ocean_serenity.py'
 jobs:
   rig:
     runs-on: [self-hosted, Windows, X64, unreal-5-7, android-sdk]
