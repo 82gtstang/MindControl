@@ -1,0 +1,41 @@
+name: Install Image to 3D Blender Add-on
+on:
+  workflow_dispatch:
+  push:
+    branches: [diagnostic/android-landscape-startup]
+    paths:
+      - .github/workflows/install-image-to-3d-blender.yml
+jobs:
+  install:
+    runs-on: [self-hosted, Windows, X64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install add-on for runner account and verify
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = Join-Path $env:GITHUB_WORKSPACE 'tools\blender_addons\image_to_3d_blender'
+          if (!(Test-Path (Join-Path $source '__init__.py'))) { throw 'Add-on source missing' }
+          $blenders = @(Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
+          $cmd = Get-Command blender.exe -ErrorAction SilentlyContinue
+          if ($cmd) { $blenders += $cmd.Source }
+          $blenders = @($blenders | Select-Object -Unique)
+          if (!$blenders.Count) { throw 'Blender not found; no installation performed' }
+          $versions = @()
+          foreach ($exe in $blenders) {
+            $v = & $exe --version 2>&1 | Select-Object -First 1
+            Write-Host "BLENDER $exe $v"
+            if ($v -match 'Blender (\d+\.\d+)') { $versions += $Matches[1] }
+          }
+          $versions = @($versions | Select-Object -Unique)
+          if (!$versions.Count) { throw 'Could not determine Blender versions' }
+          foreach ($v in $versions) {
+            $dest = Join-Path $env:APPDATA "Blender Foundation\Blender\$v\scripts\addons\image_to_3d_blender"
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            Copy-Item (Join-Path $source '__init__.py') (Join-Path $dest '__init__.py') -Force
+            Write-Host "INSTALLED $dest"
+          }
+          $env:BLENDER_USER_SCRIPTS = $null
+          $check = "import bpy; import addon_utils; addon_utils.modules_refresh(); m=addon_utils.check('image_to_3d_blender'); print('ADDON_FOUND', m); assert m[0] or any(x.__name__=='image_to_3d_blender' for x in addon_utils.modules()); addon_utils.enable('image_to_3d_blender', default_set=False); assert hasattr(bpy.types.Scene, 'image3d_settings'); print('ADDON_SMOKE_TEST_PASS')"
+          & $blenders[0] -b --factory-startup --python-expr $check
+          if ($LASTEXITCODE -ne 0) { throw "Blender add-on smoke test failed: $LASTEXITCODE" }
