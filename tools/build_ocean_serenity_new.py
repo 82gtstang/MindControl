@@ -13,11 +13,15 @@ def mat(name,color,metal=0,rough=.7):
  p=m.node_tree.nodes.get('Principled BSDF'); p.inputs['Base Color'].default_value=(*color,1)
  p.inputs['Metallic'].default_value=metal;p.inputs['Roughness'].default_value=rough
  return m
-skin=mat('Warm natural skin',(.49,.29,.23))
-cloth=mat('Ocean teal fabric',(.025,.19,.22))
+skin=mat('Fair natural skin',(.77,.58,.49),0,.53)
+# Subsurface scattering gives a more natural skin response in Blender renders.
+sp=skin.node_tree.nodes.get('Principled BSDF')
+if sp.inputs.get('Subsurface Weight'): sp.inputs['Subsurface Weight'].default_value=.18
+if sp.inputs.get('Subsurface Radius'): sp.inputs['Subsurface Radius'].default_value=(1.0,.45,.3)
+cloth=skin  # Neutral anatomical reference model; no outfit
 trim=mat('Silver trim',(.52,.59,.62),.65)
 hair=mat('Deep brown hair',(.075,.037,.026))
-boot=mat('Dark leather',(.09,.065,.055))
+boot=skin  # Bare feet for anatomical reference
 eye=mat('Iris dark',(.065,.12,.12))
 parts=[]
 def ell(name,loc,scale,material,bone):
@@ -45,6 +49,10 @@ ell('upper torso',(0,0,1.42),(.235,.145,.18),cloth,'chest')
 ell('neck skin',(0,0,1.565),(.062,.062,.085),skin,'neck')
 ell('head face',(0,-.012,1.725),(.108,.091,.155),skin,'head')
 ell('hair cap',(0,.021,1.81),(.117,.104,.085),hair,'head')
+ell('nose',(0,-.108,1.715),(.019,.026,.037),skin,'head')
+ell('upper lip',(0,-.096,1.666),(.032,.012,.009),skin,'head')
+ell('lower lip',(0,-.095,1.649),(.029,.012,.012),skin,'head')
+ell('chin',(0,-.078,1.625),(.045,.026,.026),skin,'head')
 for s,side in ((-1,'L'),(1,'R')):
  ell('eye '+side,(s*.043,-.098,1.745),(.015,.009,.011),eye,'head')
  ell('hair lock '+side,(s*.097,.043,1.67),(.035,.05,.17),hair,'head')
@@ -81,7 +89,7 @@ for s,side in ((-1,'L'),(1,'R')):
  ell('knee '+side,knee,(.074,.075,.072),cloth,'shin_'+side)
  link('boot shaft '+side,knee,ankle,.075,.062,boot,'shin_'+side)
  ell('boot foot '+side,(s*.145,-.10,.078),(.085,.17,.065),boot,'foot_'+side)
- ell('hip belt buckle '+side,(s*.15,-.128,1.055),(.022,.012,.026),trim,'pelvis')
+ ell('toe '+side,(s*.145,-.224,.056),(.062,.046,.031),skin,'foot_'+side)
 # Build skeleton. Each separate anatomical mesh component is assigned 100%
 # to its matching bone; no automatic heat weights or cross-body leakage.
 bpy.ops.object.armature_add()
@@ -121,6 +129,6 @@ bpy.ops.export_scene.fbx(filepath=str(target),use_selection=True,add_leaf_bones=
 report={'character':'Ocean Serenity rebuilt prototype','source':'new procedural geometry',
  'bones':len(rig.data.bones),'finger_bones':30,'vertices':len(body.data.vertices),
  'artifacts':[str(blend),str(target)],
- 'limitations':'Stylized realistic proportions, procedural materials; requires visual approval and animation testing'}
+ 'limitations':'Anatomical reference prototype only; NOT photorealistic, lacks seamless topology, scanned skin textures, strand hair and facial rig. Requires visual approval and animation testing'}
 target.with_suffix('.json').write_text(json.dumps(report,indent=2))
 print('REBUILT_CHARACTER_REPORT',json.dumps(report),flush=True)
