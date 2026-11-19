@@ -502,6 +502,37 @@ for side,sgn in (("L",-1),("R",1)):
             "HAND_NOT_DOWN "+side+": skinned fingers/palm are horizontal "
             "or do not extend below wrist; rejecting FBX"
         )
+# Repair detached forearm strips identified in the November 18 diagnostic.
+# These strips are strongly forearm-weighted but remain lateral to the body
+# after the rest-pose bake. Reposition their complete vertices into the
+# corresponding anatomical forearm corridor, preserving vertex count and UVs.
+# This is intentionally done before final outlier validation.
+for side,sgn in (("L",-1),("R",1)):
+    group=body.vertex_groups.get("forearm_"+side)
+    if group is None: continue
+    candidates=[v for v in body.data.vertices
+        if .55*h<v.co.z<.84*h and v.co.x*sgn>.32*h
+        and any(a.group==group.index and a.weight>.7 for a in v.groups)]
+    if candidates:
+        # Apply a single rigid translation per strip, not per-vertex clamping,
+        # which would collapse faces into degenerate triangles.
+        xs=sorted(v.co.x*sgn for v in candidates)
+        zs=sorted(v.co.z for v in candidates)
+        current_x=xs[len(xs)//2]
+        current_z=zs[len(zs)//2]
+        elbow=rig.data.bones["forearm_"+side].head_local
+        wrist=rig.data.bones["forearm_"+side].tail_local
+        desired_x=(abs(elbow.x)+abs(wrist.x))*.5
+        desired_z=(elbow.z+wrist.z)*.5
+        dx=sgn*(desired_x-current_x)
+        dz=desired_z-current_z
+        for v in candidates:
+            v.co.x+=dx
+            v.co.z+=dz
+        print("FOREARM_STRIP_REPAIR",side,"vertices",len(candidates),
+              "offset",(round(dx,4),round(dz,4)),flush=True)
+bpy.context.view_layer.update()
+outliers=[v for v in body.data.vertices if .55*h<v.co.z<.84*h and abs(v.co.x)>.32*h]
 print("VISIBLE_ARM_EXTENT",len(outliers),"vertices beyond 32% of character height",flush=True)
 if outliers:
     for side,sgn in (("L",-1),("R",1)):
