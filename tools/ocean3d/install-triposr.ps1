@@ -71,7 +71,7 @@ try {
   $cmakeNvcc = $nvcc.Replace('\', '/')
   $cmakeCl = $cl.Replace('\', '/')
   $env:CMAKE_GENERATOR = 'Ninja'
-  $env:CMAKE_ARGS = "-DCMAKE_CUDA_COMPILER=""$cmakeNvcc"" -DCMAKE_CUDA_HOST_COMPILER=""$cmakeCl"""
+  $env:CMAKE_ARGS = "-DCMAKE_TRY_COMPILE_CONFIGURATION=Release -DCMAKE_CUDA_COMPILER=""$cmakeNvcc"" -DCMAKE_CUDA_HOST_COMPILER=""$cmakeCl"""
   $env:PATH = (Join-Path $Root 'venv\Scripts') + ';' + $env:PATH
   Write-Host "CUDA host compiler: $cl"
   Write-Host "CUDA Toolkit: $cudaRoot"
