@@ -1,0 +1,38 @@
+name: Generate Ocean Serenity with TripoSR
+on:
+  workflow_dispatch:
+  push:
+    branches: [diagnostic/android-landscape-startup]
+    paths:
+      - .github/workflows/generate-ocean-serenity-triposr.yml
+      - assets/ocean3d/serenity-front.jpg
+permissions:
+  contents: read
+jobs:
+  generate:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate and validate Ocean Serenity GLB
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:LOCALAPPDATA 'Ocean3D'
+          $python = Join-Path $root 'venv\Scripts\python.exe'
+          $cli = Join-Path $root 'TripoSR-main\run.py'
+          if (!(Test-Path $python) -or !(Test-Path $cli)) { throw 'Run Install Ocean3D TripoSR Engine on this runner first.' }
+          $image = Join-Path $env:GITHUB_WORKSPACE 'assets\ocean3d\serenity-front.jpg'
+          $output = Join-Path $env:GITHUB_WORKSPACE 'ocean3d-run'
+          & $python $cli $image --device cuda:0 --chunk-size 4096 --mc-resolution 192 --output-dir $output --model-save-format glb
+          if ($LASTEXITCODE -ne 0) { throw "TripoSR generation failed ($LASTEXITCODE)" }
+          $mesh = Join-Path $output '0\mesh.glb'
+          & $python -c "import sys, trimesh; scene=trimesh.load(sys.argv[1], force='scene'); assert any(len(m.faces)>0 for m in scene.geometry.values()), 'GLB has no faces'; print('GLB_VALIDATED')" $mesh
+          if ($LASTEXITCODE -ne 0) { throw 'GLB validation failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OceanSerenity-TripoSR-GLB
+          path: |
+            ocean3d-run/0/mesh.glb
+            ocean3d-run/0/input.png
+          if-no-files-found: error
