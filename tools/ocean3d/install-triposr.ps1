@@ -1,7 +1,7 @@
 param([string]$Root = "$env:LOCALAPPDATA\Ocean3D")
 $ErrorActionPreference = 'Stop'
 New-Item -ItemType Directory -Force -Path $Root | Out-Null
-$python = (Get-Command python -ErrorAction SilentlyContinue)
+$python = Get-Command python -ErrorAction SilentlyContinue
 if (!$python) { throw 'Python not found' }
 & $python.Source -m venv (Join-Path $Root 'venv')
 if ($LASTEXITCODE -ne 0) { throw 'venv creation failed' }
@@ -17,21 +17,14 @@ if (!(Test-Path (Join-Path $source 'run.py'))) { throw 'TripoSR source not downl
 if ($LASTEXITCODE -ne 0) { throw 'PyTorch install failed' }
 Push-Location $source
 try {
-  # pip VCS dependencies require git.exe, which is absent on this Windows runner.
-  # Install GitHub-hosted Python dependencies from source archives instead.
   $requirements = Join-Path $Root 'requirements-no-git.txt'
   $lines = Get-Content 'requirements.txt' | ForEach-Object {
-    if ($_ -match '^git\+https://github\.com/([^/]+)/([^/#]+?)(?:\.git)?(?:#.*)?
-  if ($LASTEXITCODE -ne 0) { throw 'TripoSR requirements failed' }
-  & $py -c "import torch; print('CUDA_AVAILABLE',torch.cuda.is_available()); print('TORCH_VERSION',torch.__version__); assert torch.cuda.is_available(), 'CUDA not available'"
-  if ($LASTEXITCODE -ne 0) { throw 'CUDA smoke test failed' }
-  & $py run.py --help
-  if ($LASTEXITCODE -ne 0) { throw 'TripoSR CLI smoke test failed' }
-  Write-Host 'OCEAN3D_TRIPOSR_INSTALLED'
-} finally { Pop-Location }
-) {
-      'https://github.com/' + $Matches[1] + '/' + $Matches[2] + '/archive/refs/heads/main.zip'
-    } else { $_ }
+    $line = $_
+    if ($line.StartsWith('git+https://github.com/')) {
+      $repoPath = $line.Substring('git+https://github.com/'.Length).Split('#')[0]
+      if ($repoPath.EndsWith('.git')) { $repoPath = $repoPath.Substring(0, $repoPath.Length - 4) }
+      'https://github.com/' + $repoPath + '/archive/refs/heads/main.zip'
+    } else { $line }
   }
   $lines | Set-Content -Path $requirements -Encoding UTF8
   & $py -m pip install -r $requirements
