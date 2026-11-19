@@ -1,0 +1,47 @@
+name: Ocean Serenity clean rebuild
+on:
+  workflow_dispatch:
+  push:
+    branches: [diagnostic/android-landscape-startup]
+    paths:
+      - 'tools/build_ocean_serenity_new.py'
+      - '.github/workflows/ocean-serenity-rebuild.yml'
+jobs:
+  rebuild:
+    runs-on: [self-hosted, Windows, X64, unreal-5-7, android-sdk]
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find Blender
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $candidates = @(Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
+          $command = Get-Command blender.exe -ErrorAction SilentlyContinue
+          if ($command) { $candidates += $command.Source }
+          $blender = $null
+          foreach ($candidate in ($candidates | Select-Object -Unique)) {
+            if (Test-Path $candidate) { $blender = $candidate; break }
+          }
+          if (-not $blender) { throw 'Blender not found' }
+          "BLENDER_EXE=$blender" | Out-File -FilePath $env:GITHUB_ENV -Append
+          & $blender --version
+      - name: Build new Ocean Serenity model, fingers and rig
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path 'rebuilt-character' | Out-Null
+          & $env:BLENDER_EXE -b -t 2 --python 'tools/build_ocean_serenity_new.py' -- 'rebuilt-character/OceanSerenity_Rebuilt.fbx'
+          if ($LASTEXITCODE -ne 0) { throw "Blender failed: $LASTEXITCODE" }
+          if (!(Test-Path 'rebuilt-character/OceanSerenity_Rebuilt.fbx')) { throw 'FBX missing' }
+          if (!(Test-Path 'rebuilt-character/OceanSerenity_Rebuilt.blend')) { throw 'Blender project missing' }
+      - name: Upload new editable character and FBX
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: OceanSerenity-Clean-Rebuild
+          retention-days: 7
+          path: rebuilt-character/*
+          if-no-files-found: warn
