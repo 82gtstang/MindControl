@@ -5,6 +5,7 @@ on:
     branches: [diagnostic/android-landscape-startup]
     paths:
       - .github/workflows/install-ocean3d-engine.yml
+      - tools/ocean3d/install-triposr.ps1
 jobs:
   install:
     runs-on: [self-hosted, Windows, X64]
