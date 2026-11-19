@@ -13,35 +13,20 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - name: Check Node and acquire CC0 human generator
+      - name: Install Node.js 22 for character generator
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Export free realistic rigged human candidate
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           node --version
           npm --version
-          git clone --depth 1 https://github.com/olatunde85/3d-gen.git "$env:RUNNER_TEMP\ocean-human-generator"
-      - name: Install generator and CC0 MakeHuman data
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          Push-Location "$env:RUNNER_TEMP\ocean-human-generator"
-          try {
-            npm ci
-            if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
-            npm run setup-assets
-            if ($LASTEXITCODE -ne 0) { throw 'setup-assets failed' }
-          } finally { Pop-Location }
-      - name: Export realistic rigged human candidate
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
           $dest = Join-Path $env:GITHUB_WORKSPACE 'realistic-character-candidate'
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
-          Push-Location "$env:RUNNER_TEMP\ocean-human-generator"
-          try {
-            npm run export -- --preset "The Soldier" --detail high --out "$dest"
-            if ($LASTEXITCODE -ne 0) { throw 'Character export failed' }
-          } finally { Pop-Location }
+          npx -y ara3d@0.9.0 export --preset "The Soldier" --detail high --formats glb,fbx --animations idle,walk,run --out "$dest"
+          if ($LASTEXITCODE -ne 0) { throw "ara3d export failed: $LASTEXITCODE" }
           $models = @(Get-ChildItem $dest -Recurse -File | Where-Object { $_.Extension -in @('.fbx','.glb','.gltf') })
           if ($models.Count -eq 0) { throw 'No exported 3D model; refusing to claim success' }
           $models | ForEach-Object { Write-Host "EXPORTED_MODEL $($_.FullName) $($_.Length) bytes" }
