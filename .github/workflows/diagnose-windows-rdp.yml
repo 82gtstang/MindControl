@@ -1,0 +1,36 @@
+name: Diagnose Windows RDP
+on:
+  workflow_dispatch:
+  push:
+    branches: [diagnostic/android-landscape-startup]
+    paths: [.github/workflows/diagnose-windows-rdp.yml]
+jobs:
+  diagnose:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 5
+    steps:
+      - name: Read-only RDP and network diagnostics
+        shell: powershell
+        run: |
+          Write-Host '=== IPv4 LAN addresses ==='
+          Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -like '192.168.1.*' } | Select-Object InterfaceAlias,IPAddress,PrefixLength | Format-Table -AutoSize
+          Write-Host '=== RDP service ==='
+          Get-Service TermService | Select-Object Name,Status,StartType | Format-List
+          Write-Host '=== RDP listener ==='
+          Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue | Select-Object LocalAddress,LocalPort,State | Format-Table
+          Write-Host '=== RDP configuration ==='
+          $ts=Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server'
+          Write-Host "fDenyTSConnections=$($ts.fDenyTSConnections)"
+          $tcp=Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
+          Write-Host "RDP port=$($tcp.PortNumber)"
+          Write-Host '=== Firewall profiles ==='
+          Get-NetFirewallProfile | Select-Object Name,Enabled,DefaultInboundAction | Format-Table
+          Write-Host '=== Enabled inbound RDP allow rules ==='
+          Get-NetFirewallRule -Direction Inbound -Enabled True -Action Allow -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match 'Remote Desktop|RDP' -or $_.Name -match 'RDP|RemoteDesktop' } | ForEach-Object {
+            $rule=$_
+            $ports=$rule | Get-NetFirewallPortFilter
+            $addresses=$rule | Get-NetFirewallAddressFilter
+            [pscustomobject]@{Name=$rule.DisplayName;Profile=$rule.Profile;Protocol=$ports.Protocol;LocalPort=$ports.LocalPort;RemoteAddress=($addresses.RemoteAddress -join ',')}
+          } | Format-Table -AutoSize
+          Write-Host '=== Network adapter profiles ==='
+          Get-NetConnectionProfile | Select-Object InterfaceAlias,NetworkCategory,IPv4Connectivity | Format-Table
