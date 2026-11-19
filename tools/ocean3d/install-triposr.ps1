@@ -78,6 +78,25 @@ try {
   $cmakeCl = $cl.Replace('\', '/')
   $env:CMAKE_GENERATOR = 'Ninja'
   $env:CMAKE_ARGS = "-DCMAKE_TRY_COMPILE_CONFIGURATION=Release -DCMAKE_CUDA_COMPILER=""$cmakeNvcc"" -DCMAKE_CUDA_HOST_COMPILER=""$cmakeCl"""
+  # PyTorch 2.3.1's CMake export requires the legacy NVTX import library.
+  $nvtxName = 'cuda_nvtx-windows-x86_64-11.8.86-archive.zip'
+  $nvtxSha = '133c8c61904c06f1273dac35c0d602765e6a9f14175c9572b8c76b8b3d052105'
+  $nvtxZip = Join-Path $Root $nvtxName
+  if (!(Test-Path $nvtxZip) -or (Get-FileHash $nvtxZip -Algorithm SHA256).Hash -ne $nvtxSha) {
+    Invoke-WebRequest -Uri "https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvtx/windows-x86_64/$nvtxName" -OutFile $nvtxZip -UseBasicParsing
+  }
+  if ((Get-FileHash $nvtxZip -Algorithm SHA256).Hash -ne $nvtxSha) { throw 'NVIDIA NVTX archive checksum mismatch' }
+  $nvtxDir = Join-Path $Root 'nvtx-11.8.86'
+  Expand-Archive -Path $nvtxZip -DestinationPath $nvtxDir -Force
+  $nvtxHeader = Get-ChildItem $nvtxDir -Recurse -File -Filter 'nvToolsExt.h' | Select-Object -First 1
+  $nvtxLib = Get-ChildItem $nvtxDir -Recurse -File -Filter 'nvToolsExt64_1.lib' | Select-Object -First 1
+  if (!$nvtxHeader -or !$nvtxLib) { throw 'NVIDIA NVTX archive is missing the legacy header or x64 import library' }
+  $nvtxIncludePath = $nvtxHeader.DirectoryName.Replace('\', '/')
+  $nvtxLibPath = $nvtxLib.FullName.Replace('\', '/')
+  $env:CMAKE_ARGS += " -DCUDAToolkit_nvToolsExt_INCLUDE_DIR=""$nvtxIncludePath"" -DCUDA_nvToolsExt_LIBRARY=""$nvtxLibPath"""
+  $nvtxDll = Get-ChildItem $nvtxDir -Recurse -File -Filter 'nvToolsExt64_1.dll' | Select-Object -First 1
+  if ($nvtxDll) { $env:PATH = $nvtxDll.DirectoryName + ';' + $env:PATH }
+  Write-Host 'Verified legacy NVIDIA NVTX dependencies for PyTorch'
   $env:PATH = (Join-Path $Root 'venv\Scripts') + ';' + $env:PATH
   Write-Host "CUDA host compiler: $cl"
   Write-Host "CUDA Toolkit: $cudaRoot"
