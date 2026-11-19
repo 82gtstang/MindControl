@@ -51,7 +51,8 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          & $env:BLENDER_EXE -b 'rebuilt-character/OceanSerenity_Rebuilt.blend' -t 2 --python 'tools/render_ocean_serenity_new.py' -- 'rebuilt-character/previews'
+          $previewDir = Join-Path $env:GITHUB_WORKSPACE 'rebuilt-character\previews'
+          & $env:BLENDER_EXE -b 'rebuilt-character/OceanSerenity_Rebuilt.blend' -t 2 --python 'tools/render_ocean_serenity_new.py' -- "$previewDir"
           if ($LASTEXITCODE -ne 0) { throw "Blender render failed: $LASTEXITCODE" }
           foreach ($view in @('front','side','back','three_quarter')) {
             if (!(Test-Path "rebuilt-character/previews/$view.png")) { throw "Missing $view preview" }
