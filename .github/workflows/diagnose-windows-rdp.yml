@@ -34,3 +34,20 @@ jobs:
           } | Format-Table -AutoSize
           Write-Host '=== Network adapter profiles ==='
           Get-NetConnectionProfile | Select-Object InterfaceAlias,NetworkCategory,IPv4Connectivity | Format-Table
+          Write-Host '=== Firewall effective profile settings ==='
+          Get-NetFirewallProfile -PolicyStore ActiveStore | Select-Object Name,Enabled,DefaultInboundAction,AllowInboundRules | Format-Table
+          Write-Host '=== Explicit inbound block rules for RDP ==='
+          Get-NetFirewallRule -PolicyStore ActiveStore -Direction Inbound -Enabled True -Action Block -ErrorAction SilentlyContinue | ForEach-Object {
+            $rule=$_
+            $ports=$rule | Get-NetFirewallPortFilter
+            if ($ports.LocalPort -contains '3389' -or $ports.LocalPort -eq 'Any') {
+              [pscustomobject]@{Name=$rule.DisplayName;Profile=$rule.Profile;Protocol=$ports.Protocol;LocalPort=($ports.LocalPort -join ',')}
+            }
+          } | Select-Object -First 30 | Format-Table -AutoSize
+          Write-Host '=== Local TCP RDP connectivity ==='
+          Test-NetConnection 127.0.0.1 -Port 3389 -InformationLevel Detailed | Select-Object ComputerName,RemotePort,TcpTestSucceeded | Format-List
+          Write-Host '=== Default gateway and local ARP neighbor ==='
+          Get-NetIPConfiguration | Where-Object {$_.IPv4Address.IPAddress -eq '192.168.1.34'} | Select-Object InterfaceAlias,@{n='Gateway';e={$_.IPv4DefaultGateway.NextHop}} | Format-List
+          Get-NetNeighbor -IPAddress 192.168.1.78 -ErrorAction SilentlyContinue | Select-Object IPAddress,LinkLayerAddress,State | Format-Table
+          Write-Host '=== Phone reachability from PC ==='
+          Test-Connection -ComputerName 192.168.1.78 -Count 2 -ErrorAction SilentlyContinue | Select-Object Address,ResponseTime,StatusCode | Format-Table
