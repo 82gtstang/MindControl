@@ -5,6 +5,7 @@ on:
     branches: [diagnostic/android-landscape-startup]
     paths:
       - 'tools/build_ocean_serenity_new.py'
+      - 'tools/render_ocean_serenity_new.py'
       - '.github/workflows/ocean-serenity-rebuild.yml'
 jobs:
   rebuild:
@@ -37,6 +38,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Blender failed: $LASTEXITCODE" }
           if (!(Test-Path 'rebuilt-character/OceanSerenity_Rebuilt.fbx')) { throw 'FBX missing' }
           if (!(Test-Path 'rebuilt-character/OceanSerenity_Rebuilt.blend')) { throw 'Blender project missing' }
+      - name: Render actual Blender character previews
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & $env:BLENDER_EXE -b 'rebuilt-character/OceanSerenity_Rebuilt.blend' -t 2 --python 'tools/render_ocean_serenity_new.py' -- 'rebuilt-character/previews'
+          if ($LASTEXITCODE -ne 0) { throw "Blender render failed: $LASTEXITCODE" }
+          foreach ($view in @('front','side','back','three_quarter')) {
+            if (!(Test-Path "rebuilt-character/previews/$view.png")) { throw "Missing $view preview" }
+          }
       - name: Upload new editable character and FBX
         if: always()
         uses: actions/upload-artifact@v4
