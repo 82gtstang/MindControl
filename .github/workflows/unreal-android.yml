@@ -19,15 +19,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          for attempt in $(seq 1 6); do
+          for attempt in $(seq 1 30); do
             response=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs?per_page=60")
             result=$(echo "$response" | jq -r --arg sha "$GITHUB_SHA" '[.workflow_runs[] | select(.name=="Ocean Serenity experimental auto-rig" and .head_sha==$sha)] | first | if . == null then "missing" else (.status + ":" + (.conclusion // "pending")) end')
-            echo "Rig on $GITHUB_SHA: $result ($attempt/6)"
+            echo "Rig on $GITHUB_SHA: $result ($attempt/30)"
             if [ "$result" = "completed:success" ]; then exit 0; fi
             if [[ "$result" == completed:* ]]; then echo "Rig failed: $result"; exit 1; fi
             sleep 30
           done
-          echo "::error::No successful rig for this exact commit. This workflow does not automatically dispatch the rig workflow, and its push filters may prevent a matching run. Do not treat this as a successful Android build."
+          echo "::error::No successful rig for this exact commit after 15 minutes. Check rig workflow triggers and failures; do not treat this as a successful Android build."
           exit 1
   package-android:
     needs: wait-for-rig
