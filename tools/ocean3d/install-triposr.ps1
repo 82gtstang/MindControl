@@ -32,6 +32,19 @@ try {
   $pybindCmake = (& $py -m pybind11 --cmakedir | Select-Object -Last 1).Trim()
   if (!(Test-Path $pybindCmake)) { throw 'pybind11 CMake directory not found' }
   $env:pybind11_DIR = $pybindCmake
+  $cudaRoots = @()
+  if ($env:CUDA_PATH) { $cudaRoots += $env:CUDA_PATH }
+  $cudaRoots += @(Get-ChildItem 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA' -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -ExpandProperty FullName)
+  $cudaRoot = $cudaRoots | Where-Object { Test-Path (Join-Path $_ 'bin\nvcc.exe') } | Select-Object -First 1
+  if (!$cudaRoot) {
+    throw 'CUDA Toolkit nvcc.exe not found. PyTorch CUDA wheels do not include the CUDA compiler. Install NVIDIA CUDA Toolkit 12.1 with Visual Studio C++ integration on this runner, then rerun.'
+  }
+  $env:CUDA_PATH = $cudaRoot
+  $env:CUDA_HOME = $cudaRoot
+  $env:CUDAToolkit_ROOT = $cudaRoot
+  $env:PATH = (Join-Path $cudaRoot 'bin') + ';' + $env:PATH
+  Write-Host "CUDA Toolkit: $cudaRoot"
+  & (Join-Path $cudaRoot 'bin\nvcc.exe') --version
   & $py -m pip install --no-build-isolation -r $requirements
   if ($LASTEXITCODE -ne 0) { throw 'TripoSR requirements failed' }
   & $py -c "import torch; print('CUDA_AVAILABLE',torch.cuda.is_available()); print('TORCH_VERSION',torch.__version__); assert torch.cuda.is_available(), 'CUDA not available'"
