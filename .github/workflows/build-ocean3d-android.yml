@@ -1,0 +1,48 @@
+name: Build Ocean 3D Android APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [diagnostic/android-landscape-startup]
+    paths:
+      - .github/workflows/build-ocean3d-android.yml
+      - ocean3d-android/**
+jobs:
+  build:
+    runs-on: [self-hosted, Windows, X64]
+    defaults:
+      run:
+        working-directory: ocean3d-android
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Java and Android SDK
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $java = Get-ChildItem 'C:\Program Files' -Filter javac.exe -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match 'jdk-17|jdk-21|jdk-25' } | Select-Object -First 1
+          if ($java) {
+            $env:JAVA_HOME=Split-Path (Split-Path $java.FullName -Parent) -Parent
+            "JAVA_HOME=$env:JAVA_HOME" | Out-File $env:GITHUB_ENV -Append
+          }
+          $sdk = @($env:ANDROID_HOME,$env:ANDROID_SDK_ROOT,"$env:LOCALAPPDATA\Android\Sdk","C:\Android\Sdk") | Where-Object { $_ -and (Test-Path (Join-Path $_ 'platforms')) } | Select-Object -First 1
+          if (!$sdk) { throw 'Android SDK missing on runner' }
+          "ANDROID_HOME=$sdk" | Out-File $env:GITHUB_ENV -Append
+          Write-Host "SDK=$sdk"
+      - name: Build debug APK
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $gradle=Get-Command gradle -ErrorAction SilentlyContinue
+          if ($gradle) {
+            & gradle --no-daemon :app:assembleDebug
+          } elseif (Test-Path '..\gradlew.bat') {
+            & ..\gradlew.bat --no-daemon :app:assembleDebug
+          } else {
+            throw 'Gradle is not installed on the runner; cannot build APK'
+          }
+          if ($LASTEXITCODE -ne 0) { throw "Gradle build failed: $LASTEXITCODE" }
+          if (!(Test-Path 'app\build\outputs\apk\debug\app-debug.apk')) { throw 'APK missing' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ocean3D-Android-debug-APK
+          path: ocean3d-android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
