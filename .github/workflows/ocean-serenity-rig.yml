@@ -5,6 +5,7 @@ on:
     branches: [diagnostic/android-landscape-startup]
     paths:
       - 'tools/rig_ocean_serenity.py'
+      - 'tools/open3d_ocean_serenity.py'
       - '.github/workflows/ocean-serenity-rig.yml'
       - 'tools/preview_ocean_serenity.py'
       - 'tools/diagnose_ocean_serenity.py'
@@ -58,6 +59,30 @@ jobs:
           Write-Host 'Using existing Blender for skin-weight diagnosis; no download attempted.'
           "BLENDER_EXE=$blender" | Out-File -FilePath $env:GITHUB_ENV -Append
           & $blender --version
+      - name: Analyze source geometry with Open3D
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $python = Get-Command python.exe -ErrorAction SilentlyContinue
+          if ($python) {
+            $py = $python.Source
+          } else {
+            $launcher = Get-Command py.exe -ErrorAction SilentlyContinue
+            if (-not $launcher) { throw 'Python is not installed or not on PATH; Open3D step cannot run.' }
+            $py = (& $launcher.Source -3 -c "import sys; print(sys.executable)" | Select-Object -Last 1)
+          }
+          & $py -m pip install --disable-pip-version-check "open3d>=0.19,<1" numpy
+          if ($LASTEXITCODE -ne 0) { throw 'Open3D installation failed' }
+          & $py 'tools/open3d_ocean_serenity.py' "$env:OCEAN_OBJ" "$env:GITHUB_WORKSPACE\\rig-diagnostics\\open3d_source_report.json"
+          if ($LASTEXITCODE -ne 0) { throw 'Open3D source geometry analysis failed' }
+      - name: Upload Open3D geometry report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          retention-days: 7
+          name: OceanSerenity-Open3D-Geometry
+          path: rig-diagnostics/open3d_source_report.json
+          if-no-files-found: warn
       - name: Generate experimental A-pose FBX
         shell: powershell
         run: |
