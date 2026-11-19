@@ -18,10 +18,10 @@ skin=mat('Fair natural skin',(.77,.58,.49),0,.53)
 sp=skin.node_tree.nodes.get('Principled BSDF')
 if sp.inputs.get('Subsurface Weight'): sp.inputs['Subsurface Weight'].default_value=.18
 if sp.inputs.get('Subsurface Radius'): sp.inputs['Subsurface Radius'].default_value=(1.0,.45,.3)
-cloth=skin  # Neutral anatomical reference model; no outfit
+cloth=mat('Ocean blue armored bodysuit',(.025,.10,.23),.20,.42)
 trim=mat('Silver trim',(.52,.59,.62),.65)
-hair=mat('Deep brown hair',(.075,.037,.026))
-boot=skin  # Bare feet for anatomical reference
+hair=mat('Natural blonde hair',(.70,.49,.22),.08,.45)
+boot=mat('Dark navy armored boots',(.035,.055,.10),.18,.48)
 eye=mat('Iris dark',(.065,.12,.12))
 parts=[]
 def ell(name,loc,scale,material,bone):
@@ -49,6 +49,8 @@ ell('upper torso',(0,0,1.42),(.235,.145,.18),cloth,'chest')
 ell('neck skin',(0,0,1.565),(.062,.062,.085),skin,'neck')
 ell('head face',(0,-.012,1.725),(.108,.091,.155),skin,'head')
 ell('hair cap',(0,.021,1.81),(.117,.104,.085),hair,'head')
+ell('chest armor plate',(0,-.127,1.415),(.183,.028,.105),trim,'chest')
+ell('waist armor plate',(0,-.114,1.185),(.116,.025,.078),trim,'spine')
 ell('nose',(0,-.108,1.715),(.019,.026,.037),skin,'head')
 ell('upper lip',(0,-.096,1.666),(.032,.012,.009),skin,'head')
 ell('lower lip',(0,-.095,1.649),(.029,.012,.012),skin,'head')
@@ -56,15 +58,18 @@ ell('chin',(0,-.078,1.625),(.045,.026,.026),skin,'head')
 for s,side in ((-1,'L'),(1,'R')):
  ell('eye '+side,(s*.043,-.098,1.745),(.015,.009,.011),eye,'head')
  ell('hair lock '+side,(s*.097,.043,1.67),(.035,.05,.17),hair,'head')
+ ell('long blonde hair '+side,(s*.105,.060,1.54),(.045,.050,.23),hair,'head')
  shoulder=(s*.225,0,1.475);elbow=(s*.285,0,1.205);wrist=(s*.305,-.012,.985)
  bones += [('clavicle_'+side,'chest',(s*.10,0,1.49),shoulder),
  ('upperarm_'+side,'clavicle_'+side,shoulder,elbow),
  ('forearm_'+side,'upperarm_'+side,elbow,wrist),
  ('hand_'+side,'forearm_'+side,wrist,(s*.309,-.012,.875))]
  ell('shoulder '+side,shoulder,(.076,.075,.082),cloth,'upperarm_'+side)
+ ell('shoulder armor '+side,(s*.225,-.038,1.49),(.084,.063,.056),trim,'upperarm_'+side)
  link('upper arm '+side,shoulder,elbow,.070,.058,cloth,'upperarm_'+side)
+ ell('upper arm guard '+side,(s*.257,-.015,1.36),(.074,.066,.090),cloth,'upperarm_'+side)
  ell('elbow '+side,elbow,(.058,.058,.059),skin,'forearm_'+side)
- link('forearm '+side,elbow,wrist,.053,.038,skin,'forearm_'+side)
+ link('forearm '+side,elbow,wrist,.053,.038,cloth,'forearm_'+side)
  ell('palm '+side,(s*.31,-.013,.925),(.047,.026,.067),skin,'hand_'+side)
  # Five separate fingers, 3 phalanges each, downward at rest.
  for f in range(5):
@@ -89,7 +94,7 @@ for s,side in ((-1,'L'),(1,'R')):
  ell('knee '+side,knee,(.074,.075,.072),cloth,'shin_'+side)
  link('boot shaft '+side,knee,ankle,.075,.062,boot,'shin_'+side)
  ell('boot foot '+side,(s*.145,-.10,.078),(.085,.17,.065),boot,'foot_'+side)
- ell('toe '+side,(s*.145,-.224,.056),(.062,.046,.031),skin,'foot_'+side)
+ ell('toe '+side,(s*.145,-.224,.056),(.062,.046,.031),boot,'foot_'+side)
 # Build skeleton. Each separate anatomical mesh component is assigned 100%
 # to its matching bone; no automatic heat weights or cross-body leakage.
 bpy.ops.object.armature_add()
@@ -126,9 +131,9 @@ body.select_set(True);rig.select_set(True);bpy.context.view_layer.objects.active
 bpy.ops.export_scene.fbx(filepath=str(target),use_selection=True,add_leaf_bones=False,
                          apply_unit_scale=True,axis_forward='-Y',axis_up='Z',
                          bake_anim=False)
-report={'character':'Ocean Serenity rebuilt prototype','source':'new procedural geometry',
+report={'character':'Ocean Serenity new blonde armored heroine prototype','source':'new procedural geometry',
  'bones':len(rig.data.bones),'finger_bones':30,'vertices':len(body.data.vertices),
  'artifacts':[str(blend),str(target)],
- 'limitations':'Anatomical reference prototype only; NOT photorealistic, lacks seamless topology, scanned skin textures, strand hair and facial rig. Requires visual approval and animation testing'}
+ 'limitations':'Procedural armored blonde heroine prototype; NOT photorealistic, lacks seamless topology, scanned skin textures, strand hair and facial rig. Requires visual approval and animation testing'}
 target.with_suffix('.json').write_text(json.dumps(report,indent=2))
 print('REBUILT_CHARACTER_REPORT',json.dumps(report),flush=True)
