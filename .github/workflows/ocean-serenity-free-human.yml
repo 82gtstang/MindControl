@@ -25,11 +25,27 @@ jobs:
           npm --version
           $dest = Join-Path $env:GITHUB_WORKSPACE 'realistic-character-candidate'
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
-          npx -y ara3d@0.9.0 export --preset "The Soldier" --detail high --formats glb,fbx --animations idle,walk,run --out "$dest"
+          npx -y ara3d@0.9.0 export --preset "Female Executive" --detail high --formats glb,fbx --animations idle,walk,run --out "$dest"
           if ($LASTEXITCODE -ne 0) { throw "ara3d export failed: $LASTEXITCODE" }
           $models = @(Get-ChildItem $dest -Recurse -File | Where-Object { $_.Extension -in @('.fbx','.glb','.gltf') })
           if ($models.Count -eq 0) { throw 'No exported 3D model; refusing to claim success' }
           $models | ForEach-Object { Write-Host "EXPORTED_MODEL $($_.FullName) $($_.Length) bytes" }
+      - name: Verify exported mesh files are substantial
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dest = Join-Path $env:GITHUB_WORKSPACE 'realistic-character-candidate'
+          $fbx = @(Get-ChildItem $dest -Filter '*.fbx' -File)
+          $glb = @(Get-ChildItem $dest -Filter '*.glb' -File)
+          if ($fbx.Count -ne 1 -or $glb.Count -ne 1) { throw "Expected one FBX and one GLB; got $($fbx.Count) and $($glb.Count)" }
+          if ($fbx[0].Length -lt 1000000 -or $glb[0].Length -lt 1000000) { throw 'Character files unexpectedly small' }
+          $bytes = [System.IO.File]::ReadAllBytes($glb[0].FullName)
+          $magic = [System.Text.Encoding]::ASCII.GetString($bytes, 0, 4)
+          if ($magic -ne 'glTF') { throw 'GLB magic header invalid' }
+          $declaredLength = [BitConverter]::ToUInt32($bytes, 8)
+          if ($declaredLength -ne $bytes.Length) { throw 'GLB header length mismatch' }
+          Write-Host 'PASS: GLB container header, length, FBX/GLB presence and nontrivial size'
+          Write-Host 'NOT VERIFIED: shoulder/hand deformation, animation playback, photorealism, Unreal import'
       - name: Upload source character candidate for inspection
         if: always()
         uses: actions/upload-artifact@v4
