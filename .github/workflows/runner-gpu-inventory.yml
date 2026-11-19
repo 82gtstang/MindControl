@@ -1,0 +1,26 @@
+name: Runner GPU inventory
+on:
+  push:
+    branches: [diagnostic/android-landscape-startup]
+    paths: [.github/workflows/runner-gpu-inventory.yml]
+  workflow_dispatch:
+jobs:
+  gpu:
+    runs-on: [self-hosted, Windows, X64]
+    steps:
+      - name: Identify GPU and CUDA memory
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host '=== DISPLAY ADAPTERS ==='
+          Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion,PNPDeviceID | Format-List | Out-String | Write-Host
+          Write-Host '=== NVIDIA SMI ==='
+          $smi = Get-Command nvidia-smi.exe -ErrorAction SilentlyContinue
+          if (-not $smi) {
+            $path = Join-Path $env:ProgramFiles 'NVIDIA Corporation\NVSMI\nvidia-smi.exe'
+            if (Test-Path $path) { $smi = @{Source=$path} }
+          }
+          if ($smi) {
+            & $smi.Source --query-gpu=name,memory.total,driver_version --format=csv
+            if ($LASTEXITCODE -ne 0) { Write-Host 'nvidia-smi failed; driver may be missing' }
+          } else { Write-Host 'nvidia-smi unavailable; CUDA VRAM not verified' }
