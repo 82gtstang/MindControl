@@ -24,6 +24,8 @@ try {
       $repoPath = $line.Substring('git+https://github.com/'.Length).Split('#')[0]
       if ($repoPath.EndsWith('.git')) { $repoPath = $repoPath.Substring(0, $repoPath.Length - 4) }
       'https://github.com/' + $repoPath + '/archive/refs/heads/main.zip'
+    } elseif ($line.Trim() -eq 'rembg') {
+      'rembg[cpu]'
     } else { $line }
   }
   $lines | Set-Content -Path $requirements -Encoding UTF8
