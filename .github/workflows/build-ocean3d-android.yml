@@ -14,15 +14,17 @@ jobs:
         working-directory: ocean3d-android
     steps:
       - uses: actions/checkout@v4
-      - name: Configure Java and Android SDK
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Locate Android SDK
         shell: powershell
         run: |
           $ErrorActionPreference='Stop'
-          $java = Get-ChildItem 'C:\Program Files' -Filter javac.exe -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match 'jdk-17|jdk-21|jdk-25' } | Select-Object -First 1
-          if ($java) {
-            $env:JAVA_HOME=Split-Path (Split-Path $java.FullName -Parent) -Parent
-            "JAVA_HOME=$env:JAVA_HOME" | Out-File $env:GITHUB_ENV -Append
-          }
           $sdk = @($env:ANDROID_HOME,$env:ANDROID_SDK_ROOT,"$env:LOCALAPPDATA\Android\Sdk","C:\Android\Sdk") | Where-Object { $_ -and (Test-Path (Join-Path $_ 'platforms')) } | Select-Object -First 1
           if (!$sdk) { throw 'Android SDK missing on runner' }
           "ANDROID_HOME=$sdk" | Out-File $env:GITHUB_ENV -Append
@@ -31,14 +33,7 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference='Stop'
-          $gradle=Get-Command gradle -ErrorAction SilentlyContinue
-          if ($gradle) {
-            & gradle --no-daemon :app:assembleDebug
-          } elseif (Test-Path '..\gradlew.bat') {
-            & ..\gradlew.bat --no-daemon :app:assembleDebug
-          } else {
-            throw 'Gradle is not installed on the runner; cannot build APK'
-          }
+          gradle --no-daemon :app:assembleDebug
           if ($LASTEXITCODE -ne 0) { throw "Gradle build failed: $LASTEXITCODE" }
           if (!(Test-Path 'app\build\outputs\apk\debug\app-debug.apk')) { throw 'APK missing' }
       - uses: actions/upload-artifact@v4
