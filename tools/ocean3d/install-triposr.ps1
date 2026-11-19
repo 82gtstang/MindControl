@@ -27,7 +27,9 @@ try {
     } else { $line }
   }
   $lines | Set-Content -Path $requirements -Encoding UTF8
-  & $py -m pip install -r $requirements
+  & $py -m pip install scikit-build-core cmake ninja
+  if ($LASTEXITCODE -ne 0) { throw 'Native build tools installation failed' }
+  & $py -m pip install --no-build-isolation -r $requirements
   if ($LASTEXITCODE -ne 0) { throw 'TripoSR requirements failed' }
   & $py -c "import torch; print('CUDA_AVAILABLE',torch.cuda.is_available()); print('TORCH_VERSION',torch.__version__); assert torch.cuda.is_available(), 'CUDA not available'"
   if ($LASTEXITCODE -ne 0) { throw 'CUDA smoke test failed' }
