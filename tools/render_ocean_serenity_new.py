@@ -5,7 +5,7 @@ from mathutils import Vector
 args=sys.argv[sys.argv.index("--")+1:]
 out=Path(args[0]);out.mkdir(parents=True,exist_ok=True)
 scene=bpy.context.scene
-scene.render.engine='BLENDER_EEVEE_NEXT'
+scene.render.engine='BLENDER_EEVEE_NEXT' if bpy.app.version >= (4, 2, 0) else 'BLENDER_EEVEE'
 scene.render.resolution_x=900
 scene.render.resolution_y=1200
 scene.render.resolution_percentage=100
