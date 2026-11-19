@@ -23,8 +23,17 @@ jobs:
           $command = Get-Command blender.exe -ErrorAction SilentlyContinue
           if ($command) { $candidates += $command.Source }
           $blender = $null
+          $highestVersion = [version]'0.0'
           foreach ($candidate in ($candidates | Select-Object -Unique)) {
-            if (Test-Path $candidate) { $blender = $candidate; break }
+            if (!(Test-Path $candidate)) { continue }
+            $versionText = (& $candidate --version 2>&1 | Select-Object -First 1)
+            if ($versionText -match 'Blender\s+(\d+\.\d+(?:\.\d+)?)') {
+              $candidateVersion = [version]$Matches[1]
+              if ($candidateVersion -gt $highestVersion) {
+                $highestVersion = $candidateVersion
+                $blender = $candidate
+              }
+            }
           }
           if (-not $blender) { throw 'Blender not found' }
           "BLENDER_EXE=$blender" | Out-File -FilePath $env:GITHUB_ENV -Append
