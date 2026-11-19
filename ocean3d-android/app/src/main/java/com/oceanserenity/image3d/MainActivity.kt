@@ -27,11 +27,11 @@ class MainActivity : Activity() {
   layout.addView(Button(this).apply { text="Choose character image"; setOnClickListener {
    startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type="image/*"; addCategory(Intent.CATEGORY_OPENABLE) }, 1)
   } })
-  preview = ImageView(this).apply { adjustViewBounds=true; maxHeight=550 }
-  layout.addView(preview, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-  layout.addView(Button(this).apply { text="Generate Blender project"; setOnClickListener { generate() } })
-  status = TextView(this).apply { text="Select an image and enter your HTTPS AI server URL." }
+  preview = ImageView(this).apply { adjustViewBounds=true; maxHeight=260; scaleType=ImageView.ScaleType.FIT_CENTER }
+  layout.addView(preview, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 260))
+  status = TextView(this).apply { text="Select an image and enter your HTTPS AI server URL."; textSize=16f; setPadding(0,12,0,12) }
   layout.addView(status)
+  layout.addView(Button(this).apply { text="Generate Blender project"; setOnClickListener { generate() } })
   setContentView(layout)
  }
  override fun onActivityResult(requestCode:Int, resultCode:Int, data:Intent?) {
