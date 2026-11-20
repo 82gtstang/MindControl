@@ -1,5 +1,5 @@
 """Experimental A-pose auto-rig. Run with Blender 4.3+ in background mode.
-Usage: blender -b -t 2 --python rig_ocean_serenity.py -- INPUT.obj OUTPUT.fbx
+Usage: blender -b -t 2 --python rig_ocean_serenity.py -- INPUT.obj|INPUT.glb OUTPUT.fbx
 This is a first-pass anatomical estimate, not a production-quality rig.
 """
 import bpy, sys, math, json
@@ -8,11 +8,14 @@ from mathutils import Vector, Quaternion
 
 args = sys.argv[sys.argv.index("--")+1:]
 if len(args) != 2:
-    raise SystemExit("Expected OBJ input and FBX output")
+    raise SystemExit("Expected OBJ or GLB input and FBX output")
 source, target = map(Path, args)
 bpy.ops.object.select_all(action="SELECT")
 bpy.ops.object.delete(use_global=False)
-if bpy.app.version < (3, 0, 0):
+image_mesh = source.suffix.lower() == ".glb"
+if image_mesh:
+    bpy.ops.import_scene.gltf(filepath=str(source))
+elif bpy.app.version < (3, 0, 0):
     bpy.ops.import_scene.obj(filepath=str(source))
 else:
     bpy.ops.wm.obj_import(filepath=str(source))
@@ -23,9 +26,25 @@ if not meshes:
 bpy.ops.object.select_all(action="DESELECT")
 for obj in meshes: obj.select_set(True)
 bpy.context.view_layer.objects.active = meshes[0]
-bpy.ops.object.join()
+if len(meshes) > 1:
+    bpy.ops.object.join()
 body = bpy.context.object
 body.name = "OceanSerenity"
+if image_mesh:
+    for vertex in body.data.vertices:
+        x, y, z = vertex.co
+        vertex.co = (z, -x, -y)
+    for polygon in body.data.polygons:
+        polygon.use_smooth = True
+if image_mesh and not body.data.materials:
+    material = bpy.data.materials.new("OceanSerenity")
+    material.use_nodes = True
+    if body.data.color_attributes:
+        colors = material.node_tree.nodes.new("ShaderNodeVertexColor")
+        colors.layer_name = body.data.color_attributes[0].name
+        shader = material.node_tree.nodes.get("Principled BSDF")
+        material.node_tree.links.new(colors.outputs["Color"], shader.inputs["Base Color"])
+    body.data.materials.append(material)
 # Normalize the vertical axis to Z and center the body at ground.
 coords = [v.co.copy() for v in body.data.vertices]
 mins = [min(v[i] for v in coords) for i in range(3)]
@@ -79,6 +98,8 @@ elbow_x=min(w*.29,max(shoulder_x+w*.065,w*.205))
 # the actual palm region and rotated fingers around an empty pivot.
 # Source A-pose hand geometry spans roughly 0.40-0.60m laterally.
 wrist_x=min(w*.265,max(elbow_x+w*.055,w*.245))
+if image_mesh:
+    shoulder_x, elbow_x, wrist_x = w*.31, w*.37, w*.45
 def p(x,y,z): return (x,y,z*h)
 bones=[
  ("root",None,p(0,hip_y,0),p(0,hip_y,.08)),
@@ -89,12 +110,12 @@ bones=[
  ("head","neck",p(0,chest_y,.89),p(0,chest_y,.985)),
 ]
 for side,s in (("L",-1),("R",1)):
-    leg_x=torso_half*.52*s
+    leg_x=(w*.23 if image_mesh else torso_half*.52)*s
     bones += [
       (f"clavicle_{side}","chest",p(s*torso_half*.55,chest_y,.81),p(s*shoulder_x,chest_y,.79)),
       (f"upperarm_{side}",f"clavicle_{side}",p(s*shoulder_x,chest_y,.79),p(s*elbow_x,chest_y,.67)),
-      (f"forearm_{side}",f"upperarm_{side}",p(s*elbow_x,chest_y,.67),p(s*wrist_x,chest_y,.565)),
-      (f"hand_{side}",f"forearm_{side}",p(s*wrist_x,chest_y,.565),p(s*min(w*.49,wrist_x+w*.045),chest_y,.53)),
+      (f"forearm_{side}",f"upperarm_{side}",p(s*elbow_x,chest_y,.67),p(s*wrist_x,chest_y,.54 if image_mesh else .565)),
+      (f"hand_{side}",f"forearm_{side}",p(s*wrist_x,chest_y,.54 if image_mesh else .565),p(s*min(w*.49,wrist_x+w*.045),chest_y,.47 if image_mesh else .53)),
       (f"thigh_{side}","pelvis",p(leg_x,hip_y,.49),p(leg_x,hip_y,.285)),
       (f"shin_{side}",f"thigh_{side}",p(leg_x,hip_y,.285),p(leg_x,hip_y,.065)),
       (f"foot_{side}",f"shin_{side}",p(leg_x,hip_y,.065),p(leg_x,hip_y-w*.065,.035)),
@@ -118,446 +139,474 @@ def segment_dist(point,a,b):
     ab=b-a
     t=max(0,min(1,(point-a).dot(ab)/max(ab.length_squared,1e-12)))
     return (point-(a+t*ab)).length
-deform=[(name,Vector(head),Vector(tail)) for name,_,head,tail in bones if name!="root"]
-weight_method="automatic"
-try:
+if image_mesh:
     bpy.ops.object.select_all(action="DESELECT")
     body.select_set(True)
     rig.select_set(True)
-    bpy.context.view_layer.objects.active=rig
-    # Auto weights on this non-manifold OBJ assigned most vertices to foot_L.\n    # Use region-constrained anatomical weights instead.\n    raise RuntimeError("Automatic skinning disabled: verified cross-body foot influence")\n    bpy.ops.object.parent_set(type="ARMATURE_AUTO")
-    # Verify each vertex has normalized nonzero weights, and no vertices are
-    # accidentally influenced by a non-deforming control bone.
-    covered=0
-    for v in body.data.vertices:
-        total=sum(g.weight for g in v.groups if g.group<len(body.vertex_groups) and body.vertex_groups[g.group].name!="root")
-        if total>.001: covered+=1
-    if covered<len(body.data.vertices):
-        raise RuntimeError("Automatic weights uncovered %d vertices"%(len(body.data.vertices)-covered))
-    print("SKINNING: retaining Blender automatic weights for",covered,"vertices",flush=True)
-except Exception as exc:
-    weight_method="anatomical_fallback"
-    print("SKINNING: automatic weights unavailable:",repr(exc),flush=True)
-    # Clear partial automatic weights and remove any automatic armature modifier.
-    for group in list(body.vertex_groups): body.vertex_groups.remove(group)
-    for modifier in list(body.modifiers):
-        if modifier.type=="ARMATURE": body.modifiers.remove(modifier)
-    body.parent=None
-    groups={name:body.vertex_groups.new(name=name) for name,_,_ in deform}
-    for v in body.data.vertices:
-        q=v.co
-        z=q.z/max(h,1e-6)
-        ax=abs(q.x)
-        side="L" if q.x<0 else "R"
-        if z>=.87:
-            allowed={"head","neck"}
-        elif z>=.81 and ax<shoulder_x*.82:
-            allowed={"neck","chest","head"}
-        elif z>=.52 and ax>shoulder_x*1.18:
-            # Only outer limb vertices may be assigned to arm bones. The
-            # previous 0.85 threshold captured torso/waist panels and pulled
-            # them into fan-shaped fins when the shoulder rotated.
-            allowed={f"upperarm_{side}",f"forearm_{side}",f"hand_{side}"}
-        elif z>=.71:
-            allowed={"chest","spine",f"clavicle_{side}"}
-        elif z>=.54:
-            allowed={"spine","chest","pelvis"}
-        elif z>=.43:
-            allowed={"pelvis","spine",f"thigh_{side}"}
-        elif z>=.27:
-            allowed={f"thigh_{side}",f"shin_{side}"}
-        elif z>=.08:
-            allowed={f"shin_{side}",f"thigh_{side}"}
-        else:
-            allowed={f"foot_{side}",f"shin_{side}"}
-        # Keep the distal palm/finger region on the hand bone. In the
-        # original A-pose the hand is the outermost portion of the limb;
-        # generic nearest-two weights let forearm bones flatten fingers.
-        # Distal hand vertices in the source A-pose begin BEFORE the
-        # estimated wrist_x. The old .98*wrist_x threshold captured no
-        # strongly weighted hand vertices (verified in run 44420554927).
-        # Isolate the distal region by lateral reach and hand-level height.
-        # The Meshy OBJ's fingers extend across a wider source A-pose
-        # region than the first threshold captured (only 156 vertices).
-        # Use the outer distal limb zone, excluding the torso by requiring
-        # substantial lateral reach. Strict post-bake hand-down validation
-        # below rejects this experiment if the mesh still points outward.
-        if .48<=z<.69 and ax>max(shoulder_x*2.1,wrist_x*.90) and f"hand_{side}" in allowed:
-            allowed={f"hand_{side}"}
-        candidates=sorted(((segment_dist(q,aa,bb),name) for name,aa,bb in deform if name in allowed),key=lambda item:item[0])[:2]
-        distances=[max(d,1e-4) for d,_ in candidates]
-        weights=[1.0/(d*d) for d in distances]
-        total=sum(weights)
-        for (_,name),weight in zip(candidates,weights):
-            groups[name].add([v.index],weight/total,"REPLACE")
-    # On the source OBJ the right palm is fragmented into small mesh islands.
-    # Distance weighting left 807 right-hand vertices at ~20% influence,
-    # with none above 50%, so wrist rotation could not orient that palm.
-    # Make the distal right-hand islands rigid to the right hand bone.
-    right_hand=groups["hand_R"]
-    right_candidates=[]
-    for v in body.data.vertices:
-        influence=next((a.weight for a in v.groups
-                        if a.group==right_hand.index),0.0)
-        if influence>=.15 and v.co.x>0 and abs(v.co.x)>shoulder_x*1.4:
-            right_candidates.append(v.index)
-    print("RIGHT_HAND_RIGID_COVERAGE",len(right_candidates),flush=True)
-    if len(right_candidates)<100:
-        raise RuntimeError("Insufficient right palm/finger islands to repair weights")
-    for idx in right_candidates:
-        for name,g in groups.items():
-            if name!="hand_R":
-                g.remove([idx])
-        right_hand.add([idx],1.0,"REPLACE")
-    # Audit the critical waist region before skinning. Arm weights there
-    # produce the ribbed geometry seen in the user-provided renders.
-    arm_indices={g.index for name,g in groups.items() if name.startswith(("upperarm_","forearm_","hand_"))}
-    waist_arm=[]
-    for v in body.data.vertices:
-        if .52*h<v.co.z<.72*h and abs(v.co.x)<shoulder_x*1.18:
-            arm_weight=sum(a.weight for a in v.groups if a.group in arm_indices)
-            if arm_weight>.05: waist_arm.append((v.index,arm_weight))
-    print("WAIST_ARM_WEIGHT_LEAKS",len(waist_arm),flush=True)
-    if waist_arm:
-        raise RuntimeError("Torso vertices received arm weights: "+str(len(waist_arm)))
-    mod=body.modifiers.new("OceanSerenitySkin","ARMATURE")
-    mod.object=rig
-    # Armature modifier alone deforms the mesh. Parenting without a matching
-    # parent inverse can introduce an additional coordinate transform.
-    body.parent=None
-    body.matrix_world.identity()
-    rig.matrix_world.identity()
-# Fresh, non-destructive rest-pose conversion. Blender's armature modifier
-# performs the actual weighted skin deformation, including shoulders.
-# Never rotate/clamp individual vertices by hand.
-if weight_method != "automatic":
-    print("SKINNING: testing region-constrained anatomical fallback",flush=True)
-original_count=len(body.data.vertices)
-for side,sign in (("L",-1),("R",1)):
-    pb=rig.pose.bones["upperarm_"+side]
-    rest=pb.bone.matrix_local.to_3x3()
-    direction=(pb.bone.tail_local-pb.bone.head_local).normalized()
-    desired=Vector((sign*.04,0,-.999)).normalized()
-    correction=direction.rotation_difference(desired)
-    pb.rotation_mode="QUATERNION"
-    # PoseBone rotation is expressed in bone-local axes. Limit the initial
-    # rest correction to prevent a full cross-body swing on this OBJ.
-    local_correction=rest.to_quaternion().inverted() @ correction @ rest.to_quaternion()
-    # Full anatomical down pose: do not leave either upper arm in an A pose.
-    pb.rotation_quaternion=local_correction
-    print("ARM_POSE_CORRECTION",side,"angle_degrees",
-          math.degrees(local_correction.angle),"applied_fraction",1.0,flush=True)
-bpy.context.view_layer.update()
-# Measure actual shoulder skin movement BEFORE baking. Bone positions alone
-# cannot prove that the arm vertices follow the armature.
-deps=bpy.context.evaluated_depsgraph_get()
-def skin_positions():
-    evaluated=body.evaluated_get(deps)
-    mesh=evaluated.to_mesh()
-    result=[v.co.copy() for v in mesh.vertices]
-    evaluated.to_mesh_clear()
-    return result
-# The original imported mesh is still accessible in body.data.
-rest_positions=[v.co.copy() for v in body.data.vertices]
-posed_positions=skin_positions()
-# Verify the identity pose is stable before applying any shoulder rotation.
-# Catch coordinate-space and parenting errors rather than baking them.
-for pb in rig.pose.bones:
-    pb.rotation_mode="QUATERNION"
-    pb.rotation_quaternion=(1,0,0,0)
-bpy.context.view_layer.update()
-identity_positions=skin_positions()
-identity_errors=sorted((identity_positions[i]-rest_positions[i]).length for i in range(len(rest_positions)))
-print("IDENTITY_SKIN_ERROR",identity_errors[-1],identity_errors[len(identity_errors)//2],flush=True)
-if identity_errors[-1]>.005*h:
-    raise RuntimeError("Armature identity skin unexpectedly moves mesh; aborting before rest bake")
-# Restore the intended shoulder pose after the identity check.
-for side,sign in (("L",-1),("R",1)):
-    pb=rig.pose.bones["upperarm_"+side]
-    rest=pb.bone.matrix_local.to_3x3()
-    direction=(pb.bone.tail_local-pb.bone.head_local).normalized()
-    desired=Vector((sign*.04,0,-.999)).normalized()
-    correction=direction.rotation_difference(desired)
-    local_correction=rest.to_quaternion().inverted() @ correction @ rest.to_quaternion()
-    pb.rotation_quaternion=Quaternion((1,0,0,0)).slerp(local_correction,1.0)
-bpy.context.view_layer.update()
-# Align the child bones independently. Rotating only the upper arm leaves the
-# imported forearm/hand in their original A-pose and creates elbow kinks.
-# PoseBone.matrix is in armature space and Blender resolves its local basis.
-from mathutils import Matrix
-for side,sign in (("L",-1),("R",1)):
-    for part,desired in (
-        ("forearm",Vector((sign*.10,0,-.995)).normalized()),
-        ("hand",Vector((sign*.01,0,-.99995)).normalized()),
-    ):
-        pb=rig.pose.bones[part+"_"+side]
-        bpy.context.view_layer.update()
-        current=(pb.tail-pb.head).normalized()
-        correction=current.rotation_difference(desired)
-        pivot=pb.head.copy()
-        transform=(Matrix.Translation(pivot) @
-                   correction.to_matrix().to_4x4() @
-                   Matrix.Translation(-pivot))
-        pb.matrix=transform @ pb.matrix
-        bpy.context.view_layer.update()
-        actual=(pb.tail-pb.head).normalized()
-        error=math.degrees(actual.angle(desired))
-        print("CHILD_ARM_ALIGNMENT",side,part,"angle_error_deg",round(error,3),flush=True)
-        if error>8:
-            raise RuntimeError("Failed to align "+part+"_"+side)
-# Fit the actual forearm skin, not only the forearm bone direction.
-# The OBJ has ~6400 visible forearm vertices stranded horizontally.
-# Rotate around the elbow, evaluate the mesh, and minimize that displacement.
-for side,sign in (("L",-1),("R",1)):
-    group=body.vertex_groups.get("forearm_"+side)
-    indices=[v.index for v in body.data.vertices
-             if any(a.group==group.index and a.weight>=.5 for a in v.groups)
-             and v.co.x*sign>.32*h and .55*h<v.co.z<.84*h]
-    print("FOREARM_FIT_COVERAGE",side,len(indices),flush=True)
-    if len(indices)<100:
-        raise RuntimeError("Forearm outlier population cannot be identified: "+side)
-    pb=rig.pose.bones["forearm_"+side]
+    bpy.context.view_layer.objects.active = rig
+    deform_bones = [(name, Vector(head), Vector(tail)) for name, _, head, tail in bones if name != "root"]
+    groups = {name: body.vertex_groups.new(name=name) for name, _, _ in deform_bones}
+    for vertex in body.data.vertices:
+        px, _, pz = vertex.co
+        side = "L" if px < 0 else "R"
+        distances = []
+        for name, head, tail in deform_bones:
+            if name.endswith(("_L", "_R")) and not name.endswith("_" + side):
+                continue
+            distance = segment_dist(vertex.co, head, tail)
+            if name.startswith(("thigh_", "shin_", "foot_")) and abs(px) > w*.36 and pz > h*.44:
+                distance += h*.15
+            distances.append((distance, name))
+        nearest = sorted(distances)[:3]
+        weights = [(1 / max(distance, h*.008)**4, name) for distance, name in nearest]
+        total = sum(weight for weight, _ in weights)
+        for weight, name in weights:
+            groups[name].add([vertex.index], weight / total, "REPLACE")
+    skin = body.modifiers.new("Ocean Serenity skin", "ARMATURE")
+    skin.object = rig
+    body.parent = rig
+    weight_method = "image_mesh_distance"
+else:
+    deform=[(name,Vector(head),Vector(tail)) for name,_,head,tail in bones if name!="root"]
+    weight_method="automatic"
+    try:
+        bpy.ops.object.select_all(action="DESELECT")
+        body.select_set(True)
+        rig.select_set(True)
+        bpy.context.view_layer.objects.active=rig
+        # Auto weights on this non-manifold OBJ assigned most vertices to foot_L.\n    # Use region-constrained anatomical weights instead.\n    raise RuntimeError("Automatic skinning disabled: verified cross-body foot influence")\n    bpy.ops.object.parent_set(type="ARMATURE_AUTO")
+        # Verify each vertex has normalized nonzero weights, and no vertices are
+        # accidentally influenced by a non-deforming control bone.
+        covered=0
+        for v in body.data.vertices:
+            total=sum(g.weight for g in v.groups if g.group<len(body.vertex_groups) and body.vertex_groups[g.group].name!="root")
+            if total>.001: covered+=1
+        if covered<len(body.data.vertices):
+            raise RuntimeError("Automatic weights uncovered %d vertices"%(len(body.data.vertices)-covered))
+        print("SKINNING: retaining Blender automatic weights for",covered,"vertices",flush=True)
+    except Exception as exc:
+        weight_method="anatomical_fallback"
+        print("SKINNING: automatic weights unavailable:",repr(exc),flush=True)
+        # Clear partial automatic weights and remove any automatic armature modifier.
+        for group in list(body.vertex_groups): body.vertex_groups.remove(group)
+        for modifier in list(body.modifiers):
+            if modifier.type=="ARMATURE": body.modifiers.remove(modifier)
+        body.parent=None
+        groups={name:body.vertex_groups.new(name=name) for name,_,_ in deform}
+        for v in body.data.vertices:
+            q=v.co
+            z=q.z/max(h,1e-6)
+            ax=abs(q.x)
+            side="L" if q.x<0 else "R"
+            if z>=.87:
+                allowed={"head","neck"}
+            elif z>=.81 and ax<shoulder_x*.82:
+                allowed={"neck","chest","head"}
+            elif z>=.52 and ax>shoulder_x*1.18:
+                # Only outer limb vertices may be assigned to arm bones. The
+                # previous 0.85 threshold captured torso/waist panels and pulled
+                # them into fan-shaped fins when the shoulder rotated.
+                allowed={f"upperarm_{side}",f"forearm_{side}",f"hand_{side}"}
+            elif z>=.71:
+                allowed={"chest","spine",f"clavicle_{side}"}
+            elif z>=.54:
+                allowed={"spine","chest","pelvis"}
+            elif z>=.43:
+                allowed={"pelvis","spine",f"thigh_{side}"}
+            elif z>=.27:
+                allowed={f"thigh_{side}",f"shin_{side}"}
+            elif z>=.08:
+                allowed={f"shin_{side}",f"thigh_{side}"}
+            else:
+                allowed={f"foot_{side}",f"shin_{side}"}
+            # Keep the distal palm/finger region on the hand bone. In the
+            # original A-pose the hand is the outermost portion of the limb;
+            # generic nearest-two weights let forearm bones flatten fingers.
+            # Distal hand vertices in the source A-pose begin BEFORE the
+            # estimated wrist_x. The old .98*wrist_x threshold captured no
+            # strongly weighted hand vertices (verified in run 44420554927).
+            # Isolate the distal region by lateral reach and hand-level height.
+            # The Meshy OBJ's fingers extend across a wider source A-pose
+            # region than the first threshold captured (only 156 vertices).
+            # Use the outer distal limb zone, excluding the torso by requiring
+            # substantial lateral reach. Strict post-bake hand-down validation
+            # below rejects this experiment if the mesh still points outward.
+            if .48<=z<.69 and ax>max(shoulder_x*2.1,wrist_x*.90) and f"hand_{side}" in allowed:
+                allowed={f"hand_{side}"}
+            candidates=sorted(((segment_dist(q,aa,bb),name) for name,aa,bb in deform if name in allowed),key=lambda item:item[0])[:2]
+            distances=[max(d,1e-4) for d,_ in candidates]
+            weights=[1.0/(d*d) for d in distances]
+            total=sum(weights)
+            for (_,name),weight in zip(candidates,weights):
+                groups[name].add([v.index],weight/total,"REPLACE")
+        # On the source OBJ the right palm is fragmented into small mesh islands.
+        # Distance weighting left 807 right-hand vertices at ~20% influence,
+        # with none above 50%, so wrist rotation could not orient that palm.
+        # Make the distal right-hand islands rigid to the right hand bone.
+        right_hand=groups["hand_R"]
+        right_candidates=[]
+        for v in body.data.vertices:
+            influence=next((a.weight for a in v.groups
+                            if a.group==right_hand.index),0.0)
+            if influence>=.15 and v.co.x>0 and abs(v.co.x)>shoulder_x*1.4:
+                right_candidates.append(v.index)
+        print("RIGHT_HAND_RIGID_COVERAGE",len(right_candidates),flush=True)
+        if len(right_candidates)<100:
+            raise RuntimeError("Insufficient right palm/finger islands to repair weights")
+        for idx in right_candidates:
+            for name,g in groups.items():
+                if name!="hand_R":
+                    g.remove([idx])
+            right_hand.add([idx],1.0,"REPLACE")
+        # Audit the critical waist region before skinning. Arm weights there
+        # produce the ribbed geometry seen in the user-provided renders.
+        arm_indices={g.index for name,g in groups.items() if name.startswith(("upperarm_","forearm_","hand_"))}
+        waist_arm=[]
+        for v in body.data.vertices:
+            if .52*h<v.co.z<.72*h and abs(v.co.x)<shoulder_x*1.18:
+                arm_weight=sum(a.weight for a in v.groups if a.group in arm_indices)
+                if arm_weight>.05: waist_arm.append((v.index,arm_weight))
+        print("WAIST_ARM_WEIGHT_LEAKS",len(waist_arm),flush=True)
+        if waist_arm:
+            raise RuntimeError("Torso vertices received arm weights: "+str(len(waist_arm)))
+        mod=body.modifiers.new("OceanSerenitySkin","ARMATURE")
+        mod.object=rig
+        # Armature modifier alone deforms the mesh. Parenting without a matching
+        # parent inverse can introduce an additional coordinate transform.
+        body.parent=None
+        body.matrix_world.identity()
+        rig.matrix_world.identity()
+    # Fresh, non-destructive rest-pose conversion. Blender's armature modifier
+    # performs the actual weighted skin deformation, including shoulders.
+    # Never rotate/clamp individual vertices by hand.
+    if weight_method != "automatic":
+        print("SKINNING: testing region-constrained anatomical fallback",flush=True)
+    original_count=len(body.data.vertices)
+    for side,sign in (("L",-1),("R",1)):
+        pb=rig.pose.bones["upperarm_"+side]
+        rest=pb.bone.matrix_local.to_3x3()
+        direction=(pb.bone.tail_local-pb.bone.head_local).normalized()
+        desired=Vector((sign*.04,0,-.999)).normalized()
+        correction=direction.rotation_difference(desired)
+        pb.rotation_mode="QUATERNION"
+        # PoseBone rotation is expressed in bone-local axes. Limit the initial
+        # rest correction to prevent a full cross-body swing on this OBJ.
+        local_correction=rest.to_quaternion().inverted() @ correction @ rest.to_quaternion()
+        # Full anatomical down pose: do not leave either upper arm in an A pose.
+        pb.rotation_quaternion=local_correction
+        print("ARM_POSE_CORRECTION",side,"angle_degrees",
+              math.degrees(local_correction.angle),"applied_fraction",1.0,flush=True)
     bpy.context.view_layer.update()
-    baseline=pb.matrix.copy()
-    pivot=pb.head.copy()
-    best=None
-    for angle_deg in range(-110,111,10):
+    # Measure actual shoulder skin movement BEFORE baking. Bone positions alone
+    # cannot prove that the arm vertices follow the armature.
+    deps=bpy.context.evaluated_depsgraph_get()
+    def skin_positions():
+        evaluated=body.evaluated_get(deps)
+        mesh=evaluated.to_mesh()
+        result=[v.co.copy() for v in mesh.vertices]
+        evaluated.to_mesh_clear()
+        return result
+    # The original imported mesh is still accessible in body.data.
+    rest_positions=[v.co.copy() for v in body.data.vertices]
+    posed_positions=skin_positions()
+    # Verify the identity pose is stable before applying any shoulder rotation.
+    # Catch coordinate-space and parenting errors rather than baking them.
+    for pb in rig.pose.bones:
+        pb.rotation_mode="QUATERNION"
+        pb.rotation_quaternion=(1,0,0,0)
+    bpy.context.view_layer.update()
+    identity_positions=skin_positions()
+    identity_errors=sorted((identity_positions[i]-rest_positions[i]).length for i in range(len(rest_positions)))
+    print("IDENTITY_SKIN_ERROR",identity_errors[-1],identity_errors[len(identity_errors)//2],flush=True)
+    if identity_errors[-1]>.005*h:
+        raise RuntimeError("Armature identity skin unexpectedly moves mesh; aborting before rest bake")
+    # Restore the intended shoulder pose after the identity check.
+    for side,sign in (("L",-1),("R",1)):
+        pb=rig.pose.bones["upperarm_"+side]
+        rest=pb.bone.matrix_local.to_3x3()
+        direction=(pb.bone.tail_local-pb.bone.head_local).normalized()
+        desired=Vector((sign*.04,0,-.999)).normalized()
+        correction=direction.rotation_difference(desired)
+        local_correction=rest.to_quaternion().inverted() @ correction @ rest.to_quaternion()
+        pb.rotation_quaternion=Quaternion((1,0,0,0)).slerp(local_correction,1.0)
+    bpy.context.view_layer.update()
+    # Align the child bones independently. Rotating only the upper arm leaves the
+    # imported forearm/hand in their original A-pose and creates elbow kinks.
+    # PoseBone.matrix is in armature space and Blender resolves its local basis.
+    from mathutils import Matrix
+    for side,sign in (("L",-1),("R",1)):
+        for part,desired in (
+            ("forearm",Vector((sign*.10,0,-.995)).normalized()),
+            ("hand",Vector((sign*.01,0,-.99995)).normalized()),
+        ):
+            pb=rig.pose.bones[part+"_"+side]
+            bpy.context.view_layer.update()
+            current=(pb.tail-pb.head).normalized()
+            correction=current.rotation_difference(desired)
+            pivot=pb.head.copy()
+            transform=(Matrix.Translation(pivot) @
+                       correction.to_matrix().to_4x4() @
+                       Matrix.Translation(-pivot))
+            pb.matrix=transform @ pb.matrix
+            bpy.context.view_layer.update()
+            actual=(pb.tail-pb.head).normalized()
+            error=math.degrees(actual.angle(desired))
+            print("CHILD_ARM_ALIGNMENT",side,part,"angle_error_deg",round(error,3),flush=True)
+            if error>8:
+                raise RuntimeError("Failed to align "+part+"_"+side)
+    # Fit the actual forearm skin, not only the forearm bone direction.
+    # The OBJ has ~6400 visible forearm vertices stranded horizontally.
+    # Rotate around the elbow, evaluate the mesh, and minimize that displacement.
+    for side,sign in (("L",-1),("R",1)):
+        group=body.vertex_groups.get("forearm_"+side)
+        indices=[v.index for v in body.data.vertices
+                 if any(a.group==group.index and a.weight>=.5 for a in v.groups)
+                 and v.co.x*sign>.32*h and .55*h<v.co.z<.84*h]
+        print("FOREARM_FIT_COVERAGE",side,len(indices),flush=True)
+        if len(indices)<100:
+            raise RuntimeError("Forearm outlier population cannot be identified: "+side)
+        pb=rig.pose.bones["forearm_"+side]
+        bpy.context.view_layer.update()
+        baseline=pb.matrix.copy()
+        pivot=pb.head.copy()
+        best=None
+        for angle_deg in range(-110,111,10):
+            transform=(Matrix.Translation(pivot) @
+                       Matrix.Rotation(math.radians(angle_deg),4,"Y") @
+                       Matrix.Translation(-pivot))
+            pb.matrix=transform @ baseline
+            bpy.context.view_layer.update()
+            sampled=skin_positions()
+            excess=sum(max(0,abs(sampled[i].x)-.29*h) for i in indices)/len(indices)
+            # Prefer positions below elbow and penalize unnecessary rotation.
+            high=sum(max(0,sampled[i].z-pivot.z) for i in indices)/len(indices)
+            score=excess+high*.25+abs(angle_deg)*.00002
+            if best is None or score<best[0]:
+                best=(score,angle_deg,excess,high)
         transform=(Matrix.Translation(pivot) @
-                   Matrix.Rotation(math.radians(angle_deg),4,"Y") @
+                   Matrix.Rotation(math.radians(best[1]),4,"Y") @
                    Matrix.Translation(-pivot))
         pb.matrix=transform @ baseline
         bpy.context.view_layer.update()
-        sampled=skin_positions()
-        excess=sum(max(0,abs(sampled[i].x)-.29*h) for i in indices)/len(indices)
-        # Prefer positions below elbow and penalize unnecessary rotation.
-        high=sum(max(0,sampled[i].z-pivot.z) for i in indices)/len(indices)
-        score=excess+high*.25+abs(angle_deg)*.00002
-        if best is None or score<best[0]:
-            best=(score,angle_deg,excess,high)
-    transform=(Matrix.Translation(pivot) @
-               Matrix.Rotation(math.radians(best[1]),4,"Y") @
-               Matrix.Translation(-pivot))
-    pb.matrix=transform @ baseline
-    bpy.context.view_layer.update()
-    print("FOREARM_MESH_FIT",side,"rotation_deg",best[1],
-          "horizontal_excess",round(best[2],4),
-          "above_elbow",round(best[3],4),flush=True)
-# Optimize the actual skinned palm shape, not a bone-angle proxy.
-# Trial rotations are evaluated on the Blender-deformed mesh before baking.
-# Keep the wrist fixed and choose a modest palm rotation independently per side.
-for side in ("L","R"):
-    group=body.vertex_groups.get("hand_"+side)
-    if group is None:
-        raise RuntimeError("Missing hand skin group: "+side)
-    indices=[v.index for v in body.data.vertices
-             if any(a.group==group.index and a.weight>=.8 for a in v.groups)]
-    if len(indices)<20:
-        print("PALM_FIT_COVERAGE",side,"strong",len(indices),flush=True)
+        print("FOREARM_MESH_FIT",side,"rotation_deg",best[1],
+              "horizontal_excess",round(best[2],4),
+              "above_elbow",round(best[3],4),flush=True)
+    # Optimize the actual skinned palm shape, not a bone-angle proxy.
+    # Trial rotations are evaluated on the Blender-deformed mesh before baking.
+    # Keep the wrist fixed and choose a modest palm rotation independently per side.
+    for side in ("L","R"):
+        group=body.vertex_groups.get("hand_"+side)
+        if group is None:
+            raise RuntimeError("Missing hand skin group: "+side)
         indices=[v.index for v in body.data.vertices
-                 if any(a.group==group.index and a.weight>=.05 for a in v.groups)]
-    if len(indices)<20:
-        raise RuntimeError("Too few hand-weighted vertices for palm orientation fitting: "+side)
-    pb=rig.pose.bones["hand_"+side]
-    bpy.context.view_layer.update()
-    baseline=pb.matrix.copy()
-    pivot=pb.head.copy()
-    best=None
-    for angle_deg in range(-45,46,5):
-        angle=math.radians(angle_deg)
-        rot=(Matrix.Translation(pivot) @
-             Matrix.Rotation(angle,4,"Y") @
-             Matrix.Translation(-pivot))
-        pb.matrix=rot @ baseline
+                 if any(a.group==group.index and a.weight>=.8 for a in v.groups)]
+        if len(indices)<20:
+            print("PALM_FIT_COVERAGE",side,"strong",len(indices),flush=True)
+            indices=[v.index for v in body.data.vertices
+                     if any(a.group==group.index and a.weight>=.05 for a in v.groups)]
+        if len(indices)<20:
+            raise RuntimeError("Too few hand-weighted vertices for palm orientation fitting: "+side)
+        pb=rig.pose.bones["hand_"+side]
         bpy.context.view_layer.update()
-        sampled=skin_positions()
-        xs=[sampled[i].x for i in indices]
-        zs=[sampled[i].z for i in indices]
-        ratio=(max(zs)-min(zs))/max(max(xs)-min(xs),1e-6)
-        # Prefer a vertically elongated palm with tips below the wrist.
-        below=pivot.z-min(zs)
-        score=ratio+min(below/h,.15)*3-abs(angle_deg)*.001
-        if best is None or score>best[0]:
-            best=(score,angle_deg,ratio,below)
-    chosen=math.radians(best[1])
-    pb.matrix=(Matrix.Translation(pivot) @
-               Matrix.Rotation(chosen,4,"Y") @
-               Matrix.Translation(-pivot)) @ baseline
-    bpy.context.view_layer.update()
-    print("PALM_ORIENTATION_FIT",side,"angle_deg",best[1],
-          "ratio",round(best[2],3),"below_wrist",round(best[3],4),flush=True)
-posed_positions=skin_positions()
-for side,sign in (("L",-1),("R",1)):
-    ids={g.index for g in body.vertex_groups if g.name in
-         ("upperarm_"+side,"forearm_"+side,"hand_"+side)}
-    strong=[]
-    for v in body.data.vertices:
-        strength=sum(g.weight for g in v.groups if g.group in ids)
-        if strength>.70: strong.append(v.index)
-    if len(strong)<100:
-        counts={}
-        for group in body.vertex_groups:
-            if group.name.endswith("_"+side):
-                counts[group.name]=sum(1 for v in body.data.vertices
-                    for g in v.groups if g.group==group.index and g.weight>.10)
-        print("ARM_WEIGHT_DIAGNOSTIC",side,"strong",len(strong),
-              "groups_above_10pct",json.dumps(counts),flush=True)
-        raise RuntimeError("Arm "+side+" has fewer than 100 strongly weighted vertices; reject deformed rig")
-    movements=sorted((posed_positions[i]-rest_positions[i]).length for i in strong)
-    median=movements[len(movements)//2]
-    print("SHOULDER_SKIN_PROBE",side,"strong_vertices",len(strong),
-          "median_displacement",median,"max_displacement",movements[-1],flush=True)
-    if median<.04*h:
-        raise RuntimeError("Arm "+side+" bone rotated but weighted skin barely moved")
-# Bake the evaluated *skinned* geometry, not approximated vertex rotations.
-# The armature's new rest pose is then made identical to that geometry.
-skin=next((m for m in body.modifiers if m.type=="ARMATURE" and m.object==rig),None)
-if skin is None: raise RuntimeError("Armature modifier missing before rest bake")
-bpy.ops.object.select_all(action="DESELECT")
-body.select_set(True)
-bpy.context.view_layer.objects.active=body
-bpy.ops.object.modifier_apply(modifier=skin.name)
-if len(body.data.vertices)!=original_count:
-    raise RuntimeError("Rest bake unexpectedly changed vertex count")
-bpy.ops.object.select_all(action="DESELECT")
-rig.select_set(True)
-bpy.context.view_layer.objects.active=rig
-bpy.ops.object.mode_set(mode="POSE")
-bpy.ops.pose.armature_apply(selected=False)
-bpy.ops.object.mode_set(mode="OBJECT")
-for pb in rig.pose.bones:
-    pb.rotation_mode="XYZ"
-    pb.rotation_euler=(0,0,0)
-skin=body.modifiers.new("OceanSerenitySkin","ARMATURE")
-skin.object=rig
-bpy.context.view_layer.update()
-for side in ("L","R"):
-    shoulder=rig.data.bones["upperarm_"+side].head_local
-    wrist=rig.data.bones["forearm_"+side].tail_local
-    hand=rig.data.bones["hand_"+side].tail_local
-    print("REST_BAKE",side,"shoulder",tuple(shoulder),"wrist",tuple(wrist),"hand",tuple(hand),flush=True)
-    if hand.z>shoulder.z-.15*h or abs(hand.x)>abs(shoulder.x)+.16*h:
-        raise RuntimeError("Rest pose arm remains extended on "+side)
-print("REST_BAKE: Blender evaluated skin applied; rest skeleton synchronized",flush=True)
-# Validate visible mesh, not just bones. Extended arms must not be accepted.
-outliers=[v for v in body.data.vertices if .55*h<v.co.z<.84*h and abs(v.co.x)>.32*h]
-# A bone pointing down is not proof that its skinned palm and fingers do.
-# Inspect the actual evaluated/rest-baked hand geometry and reject outward
-# fingertips, which the prior arm-extent test did not cover.
-for side,sgn in (("L",-1),("R",1)):
-    group=body.vertex_groups.get("hand_"+side)
-    hand_verts=[]
-    if group:
+        baseline=pb.matrix.copy()
+        pivot=pb.head.copy()
+        best=None
+        for angle_deg in range(-45,46,5):
+            angle=math.radians(angle_deg)
+            rot=(Matrix.Translation(pivot) @
+                 Matrix.Rotation(angle,4,"Y") @
+                 Matrix.Translation(-pivot))
+            pb.matrix=rot @ baseline
+            bpy.context.view_layer.update()
+            sampled=skin_positions()
+            xs=[sampled[i].x for i in indices]
+            zs=[sampled[i].z for i in indices]
+            ratio=(max(zs)-min(zs))/max(max(xs)-min(xs),1e-6)
+            # Prefer a vertically elongated palm with tips below the wrist.
+            below=pivot.z-min(zs)
+            score=ratio+min(below/h,.15)*3-abs(angle_deg)*.001
+            if best is None or score>best[0]:
+                best=(score,angle_deg,ratio,below)
+        chosen=math.radians(best[1])
+        pb.matrix=(Matrix.Translation(pivot) @
+                   Matrix.Rotation(chosen,4,"Y") @
+                   Matrix.Translation(-pivot)) @ baseline
+        bpy.context.view_layer.update()
+        print("PALM_ORIENTATION_FIT",side,"angle_deg",best[1],
+              "ratio",round(best[2],3),"below_wrist",round(best[3],4),flush=True)
+    posed_positions=skin_positions()
+    for side,sign in (("L",-1),("R",1)):
+        ids={g.index for g in body.vertex_groups if g.name in
+             ("upperarm_"+side,"forearm_"+side,"hand_"+side)}
+        strong=[]
         for v in body.data.vertices:
-            for assignment in v.groups:
-                if assignment.group==group.index and assignment.weight>=.8:
-                    hand_verts.append(v.co)
-                    break
-    if len(hand_verts)<20:
-        # Preserve diagnostic output: a missing 80%-influence population is
-        # itself evidence that the weight partition is wrong. Do not crash
-        # before reporting lower thresholds and the visible geometry.
-        counts={}
-        for threshold in (.8,.5,.2,.05):
-            counts[str(threshold)]=sum(
-                1 for v in body.data.vertices
-                if any(a.group==group.index and a.weight>=threshold for a in v.groups)
-            )
-        print("HAND_WEIGHT_COVERAGE",side,counts,flush=True)
-        hand_verts=[
-            v.co for v in body.data.vertices
-            if any(a.group==group.index and a.weight>=.05 for a in v.groups)
-        ]
-        if not hand_verts:
-            raise RuntimeError("No hand-weighted vertices on "+side)
-    xs=[p.x for p in hand_verts]
-    zs=[p.z for p in hand_verts]
-    span_x=max(xs)-min(xs)
-    span_z=max(zs)-min(zs)
-    print("HAND_MESH_GEOMETRY",side,"vertices",len(hand_verts),
-          "x_span",round(span_x,4),"z_span",round(span_z,4),
-          "x_range",(round(min(xs),4),round(max(xs),4)),
-          "z_range",(round(min(zs),4),round(max(zs),4)),flush=True)
-    # HARD REJECTION: the actual skinned palm/fingers must hang down,
-    # not merely have a downward-pointing hand bone. Fail before FBX export.
-    wrist_z=rig.data.bones["hand_"+side].head_local.z
-    below_wrist=wrist_z-min(zs)
-    print("HAND_DOWN_CHECK",side,"vertical_to_horizontal",
-          round(span_z/max(span_x,1e-6),3),
-          "below_wrist",round(below_wrist,4),flush=True)
-    # Finger-specific fail gate: distal fingertips must occupy the lower
-    # portion of the hand, not the side of the A-pose forearm.
-    # The most distal 10% of hand-weighted vertices by distance from wrist
-    # must lie below the wrist in the baked, downward-pointing pose.
-    wrist=rig.data.bones["hand_"+side].head_local
-    distal=sorted(hand_verts,key=lambda p:(p-wrist).length,reverse=True)
-    fingertip_sample=distal[:max(10,len(distal)//10)]
-    below_count=sum(1 for p in fingertip_sample if p.z<wrist.z-.015*h)
-    finger_ratio=below_count/len(fingertip_sample)
-    print("FINGER_DOWN_CHECK",side,"distal_vertices",len(fingertip_sample),
-          "below_wrist_fraction",round(finger_ratio,3),flush=True)
-    if finger_ratio<.80:
-        raise RuntimeError("FINGERS_NOT_DOWN "+side+
-            ": distal hand mesh does not hang below wrist; rejecting FBX")
-    if len(hand_verts)<20 or span_z<1.2*span_x or below_wrist<.025*h:
-        raise RuntimeError(
-            "HAND_NOT_DOWN "+side+": skinned fingers/palm are horizontal "
-            "or do not extend below wrist; rejecting FBX"
-        )
-# Repair detached forearm strips identified in the November 18 diagnostic.
-# These strips are strongly forearm-weighted but remain lateral to the body
-# after the rest-pose bake. Reposition their complete vertices into the
-# corresponding anatomical forearm corridor, preserving vertex count and UVs.
-# This is intentionally done before final outlier validation.
-for side,sgn in (("L",-1),("R",1)):
-    group=body.vertex_groups.get("forearm_"+side)
-    if group is None: continue
-    candidates=[v for v in body.data.vertices
-        if .55*h<v.co.z<.84*h and v.co.x*sgn>.32*h
-        and any(a.group==group.index and a.weight>.7 for a in v.groups)]
-    if candidates:
-        # Apply a single rigid translation per strip, not per-vertex clamping,
-        # which would collapse faces into degenerate triangles.
-        xs=sorted(v.co.x*sgn for v in candidates)
-        zs=sorted(v.co.z for v in candidates)
-        current_x=xs[len(xs)//2]
-        current_z=zs[len(zs)//2]
-        elbow=rig.data.bones["forearm_"+side].head_local
+            strength=sum(g.weight for g in v.groups if g.group in ids)
+            if strength>.70: strong.append(v.index)
+        if len(strong)<100:
+            counts={}
+            for group in body.vertex_groups:
+                if group.name.endswith("_"+side):
+                    counts[group.name]=sum(1 for v in body.data.vertices
+                        for g in v.groups if g.group==group.index and g.weight>.10)
+            print("ARM_WEIGHT_DIAGNOSTIC",side,"strong",len(strong),
+                  "groups_above_10pct",json.dumps(counts),flush=True)
+            raise RuntimeError("Arm "+side+" has fewer than 100 strongly weighted vertices; reject deformed rig")
+        movements=sorted((posed_positions[i]-rest_positions[i]).length for i in strong)
+        median=movements[len(movements)//2]
+        print("SHOULDER_SKIN_PROBE",side,"strong_vertices",len(strong),
+              "median_displacement",median,"max_displacement",movements[-1],flush=True)
+        if median<.04*h:
+            raise RuntimeError("Arm "+side+" bone rotated but weighted skin barely moved")
+    # Bake the evaluated *skinned* geometry, not approximated vertex rotations.
+    # The armature's new rest pose is then made identical to that geometry.
+    skin=next((m for m in body.modifiers if m.type=="ARMATURE" and m.object==rig),None)
+    if skin is None: raise RuntimeError("Armature modifier missing before rest bake")
+    bpy.ops.object.select_all(action="DESELECT")
+    body.select_set(True)
+    bpy.context.view_layer.objects.active=body
+    bpy.ops.object.modifier_apply(modifier=skin.name)
+    if len(body.data.vertices)!=original_count:
+        raise RuntimeError("Rest bake unexpectedly changed vertex count")
+    bpy.ops.object.select_all(action="DESELECT")
+    rig.select_set(True)
+    bpy.context.view_layer.objects.active=rig
+    bpy.ops.object.mode_set(mode="POSE")
+    bpy.ops.pose.armature_apply(selected=False)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    for pb in rig.pose.bones:
+        pb.rotation_mode="XYZ"
+        pb.rotation_euler=(0,0,0)
+    skin=body.modifiers.new("OceanSerenitySkin","ARMATURE")
+    skin.object=rig
+    bpy.context.view_layer.update()
+    for side in ("L","R"):
+        shoulder=rig.data.bones["upperarm_"+side].head_local
         wrist=rig.data.bones["forearm_"+side].tail_local
-        desired_x=(abs(elbow.x)+abs(wrist.x))*.5
-        desired_z=(elbow.z+wrist.z)*.5
-        dx=sgn*(desired_x-current_x)
-        dz=desired_z-current_z
-        for v in candidates:
-            v.co.x+=dx
-            v.co.z+=dz
-        print("FOREARM_STRIP_REPAIR",side,"vertices",len(candidates),
-              "offset",(round(dx,4),round(dz,4)),flush=True)
-bpy.context.view_layer.update()
-outliers=[v for v in body.data.vertices if .55*h<v.co.z<.84*h and abs(v.co.x)>.32*h]
-print("VISIBLE_ARM_EXTENT",len(outliers),"vertices beyond 32% of character height",flush=True)
-if outliers:
+        hand=rig.data.bones["hand_"+side].tail_local
+        print("REST_BAKE",side,"shoulder",tuple(shoulder),"wrist",tuple(wrist),"hand",tuple(hand),flush=True)
+        if hand.z>shoulder.z-.15*h or abs(hand.x)>abs(shoulder.x)+.16*h:
+            raise RuntimeError("Rest pose arm remains extended on "+side)
+    print("REST_BAKE: Blender evaluated skin applied; rest skeleton synchronized",flush=True)
+    # Validate visible mesh, not just bones. Extended arms must not be accepted.
+    outliers=[v for v in body.data.vertices if .55*h<v.co.z<.84*h and abs(v.co.x)>.32*h]
+    # A bone pointing down is not proof that its skinned palm and fingers do.
+    # Inspect the actual evaluated/rest-baked hand geometry and reject outward
+    # fingertips, which the prior arm-extent test did not cover.
     for side,sgn in (("L",-1),("R",1)):
-        affected=[v for v in outliers if v.co.x*sgn>0]
-        if not affected: continue
-        by_group={}
-        for v in affected:
-            strongest=max(v.groups,key=lambda g:g.weight) if v.groups else None
-            group_name=body.vertex_groups[strongest.group].name if strongest else "UNWEIGHTED"
-            by_group[group_name]=by_group.get(group_name,0)+1
-        print("ARM_OUTLIER_DIAGNOSTIC",side,"count",len(affected),
-              "x_range",[min(v.co.x for v in affected),max(v.co.x for v in affected)],
-              "z_range",[min(v.co.z for v in affected),max(v.co.z for v in affected)],
-              "dominant_groups",json.dumps(by_group,sort_keys=True),flush=True)
-    print("ARM_OUTLIER_SAMPLES",[(v.index,tuple(round(float(a),3) for a in v.co))
-         for v in outliers[::max(1,len(outliers)//12)][:12]],flush=True)
-if len(outliers)>80:
-    # Preserve the failed rig for Blender inspection instead of exporting a
-    # broken FBX. This file retains the evaluated mesh and weight groups.
-    diagnostic=target.with_name("OceanSerenity_FailedRig_Diagnostic.blend")
-    diagnostic.parent.mkdir(parents=True,exist_ok=True)
-    bpy.ops.wm.save_as_mainfile(filepath=str(diagnostic))
-    print("FAILED_RIG_DIAGNOSTIC",str(diagnostic),flush=True)
-    raise RuntimeError("Visible arm mesh remains extended after rest bake: %d outlier vertices. Rejecting FBX."%len(outliers))
+        group=body.vertex_groups.get("hand_"+side)
+        hand_verts=[]
+        if group:
+            for v in body.data.vertices:
+                for assignment in v.groups:
+                    if assignment.group==group.index and assignment.weight>=.8:
+                        hand_verts.append(v.co)
+                        break
+        if len(hand_verts)<20:
+            # Preserve diagnostic output: a missing 80%-influence population is
+            # itself evidence that the weight partition is wrong. Do not crash
+            # before reporting lower thresholds and the visible geometry.
+            counts={}
+            for threshold in (.8,.5,.2,.05):
+                counts[str(threshold)]=sum(
+                    1 for v in body.data.vertices
+                    if any(a.group==group.index and a.weight>=threshold for a in v.groups)
+                )
+            print("HAND_WEIGHT_COVERAGE",side,counts,flush=True)
+            hand_verts=[
+                v.co for v in body.data.vertices
+                if any(a.group==group.index and a.weight>=.05 for a in v.groups)
+            ]
+            if not hand_verts:
+                raise RuntimeError("No hand-weighted vertices on "+side)
+        xs=[p.x for p in hand_verts]
+        zs=[p.z for p in hand_verts]
+        span_x=max(xs)-min(xs)
+        span_z=max(zs)-min(zs)
+        print("HAND_MESH_GEOMETRY",side,"vertices",len(hand_verts),
+              "x_span",round(span_x,4),"z_span",round(span_z,4),
+              "x_range",(round(min(xs),4),round(max(xs),4)),
+              "z_range",(round(min(zs),4),round(max(zs),4)),flush=True)
+        # HARD REJECTION: the actual skinned palm/fingers must hang down,
+        # not merely have a downward-pointing hand bone. Fail before FBX export.
+        wrist_z=rig.data.bones["hand_"+side].head_local.z
+        below_wrist=wrist_z-min(zs)
+        print("HAND_DOWN_CHECK",side,"vertical_to_horizontal",
+              round(span_z/max(span_x,1e-6),3),
+              "below_wrist",round(below_wrist,4),flush=True)
+        # Finger-specific fail gate: distal fingertips must occupy the lower
+        # portion of the hand, not the side of the A-pose forearm.
+        # The most distal 10% of hand-weighted vertices by distance from wrist
+        # must lie below the wrist in the baked, downward-pointing pose.
+        wrist=rig.data.bones["hand_"+side].head_local
+        distal=sorted(hand_verts,key=lambda p:(p-wrist).length,reverse=True)
+        fingertip_sample=distal[:max(10,len(distal)//10)]
+        below_count=sum(1 for p in fingertip_sample if p.z<wrist.z-.015*h)
+        finger_ratio=below_count/len(fingertip_sample)
+        print("FINGER_DOWN_CHECK",side,"distal_vertices",len(fingertip_sample),
+              "below_wrist_fraction",round(finger_ratio,3),flush=True)
+        if finger_ratio<.80:
+            raise RuntimeError("FINGERS_NOT_DOWN "+side+
+                ": distal hand mesh does not hang below wrist; rejecting FBX")
+        if len(hand_verts)<20 or span_z<1.2*span_x or below_wrist<.025*h:
+            raise RuntimeError(
+                "HAND_NOT_DOWN "+side+": skinned fingers/palm are horizontal "
+                "or do not extend below wrist; rejecting FBX"
+            )
+    # Repair detached forearm strips identified in the November 18 diagnostic.
+    # These strips are strongly forearm-weighted but remain lateral to the body
+    # after the rest-pose bake. Reposition their complete vertices into the
+    # corresponding anatomical forearm corridor, preserving vertex count and UVs.
+    # This is intentionally done before final outlier validation.
+    for side,sgn in (("L",-1),("R",1)):
+        group=body.vertex_groups.get("forearm_"+side)
+        if group is None: continue
+        candidates=[v for v in body.data.vertices
+            if .55*h<v.co.z<.84*h and v.co.x*sgn>.32*h
+            and any(a.group==group.index and a.weight>.7 for a in v.groups)]
+        if candidates:
+            # Apply a single rigid translation per strip, not per-vertex clamping,
+            # which would collapse faces into degenerate triangles.
+            xs=sorted(v.co.x*sgn for v in candidates)
+            zs=sorted(v.co.z for v in candidates)
+            current_x=xs[len(xs)//2]
+            current_z=zs[len(zs)//2]
+            elbow=rig.data.bones["forearm_"+side].head_local
+            wrist=rig.data.bones["forearm_"+side].tail_local
+            desired_x=(abs(elbow.x)+abs(wrist.x))*.5
+            desired_z=(elbow.z+wrist.z)*.5
+            dx=sgn*(desired_x-current_x)
+            dz=desired_z-current_z
+            for v in candidates:
+                v.co.x+=dx
+                v.co.z+=dz
+            print("FOREARM_STRIP_REPAIR",side,"vertices",len(candidates),
+                  "offset",(round(dx,4),round(dz,4)),flush=True)
+    bpy.context.view_layer.update()
+    outliers=[v for v in body.data.vertices if .55*h<v.co.z<.84*h and abs(v.co.x)>.32*h]
+    print("VISIBLE_ARM_EXTENT",len(outliers),"vertices beyond 32% of character height",flush=True)
+    if outliers:
+        for side,sgn in (("L",-1),("R",1)):
+            affected=[v for v in outliers if v.co.x*sgn>0]
+            if not affected: continue
+            by_group={}
+            for v in affected:
+                strongest=max(v.groups,key=lambda g:g.weight) if v.groups else None
+                group_name=body.vertex_groups[strongest.group].name if strongest else "UNWEIGHTED"
+                by_group[group_name]=by_group.get(group_name,0)+1
+            print("ARM_OUTLIER_DIAGNOSTIC",side,"count",len(affected),
+                  "x_range",[min(v.co.x for v in affected),max(v.co.x for v in affected)],
+                  "z_range",[min(v.co.z for v in affected),max(v.co.z for v in affected)],
+                  "dominant_groups",json.dumps(by_group,sort_keys=True),flush=True)
+        print("ARM_OUTLIER_SAMPLES",[(v.index,tuple(round(float(a),3) for a in v.co))
+             for v in outliers[::max(1,len(outliers)//12)][:12]],flush=True)
+    if len(outliers)>80:
+        # Preserve the failed rig for Blender inspection instead of exporting a
+        # broken FBX. This file retains the evaluated mesh and weight groups.
+        diagnostic=target.with_name("OceanSerenity_FailedRig_Diagnostic.blend")
+        diagnostic.parent.mkdir(parents=True,exist_ok=True)
+        bpy.ops.wm.save_as_mainfile(filepath=str(diagnostic))
+        print("FAILED_RIG_DIAGNOSTIC",str(diagnostic),flush=True)
+        raise RuntimeError("Visible arm mesh remains extended after rest bake: %d outlier vertices. Rejecting FBX."%len(outliers))
 
 # Generate distinct baked motion clips on the experimental humanoid rig.
 # All actions share the same rest pose and skeleton for Unreal retarget-free playback.
@@ -689,3 +738,4 @@ report={"source":str(source),"fbx":str(target),"vertices":len(body.data.vertices
         "bones":len(bones),"height":h,"width":w,"weight_method":weight_method,"warning":"Experimental automatic skinning; inspect rendered shoulder geometry before use"}
 target.with_suffix(".json").write_text(json.dumps(report,indent=2))
 print("RIG_REPORT "+json.dumps(report))
+

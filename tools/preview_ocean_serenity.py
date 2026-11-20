@@ -20,7 +20,7 @@ scene.render.engine="BLENDER_WORKBENCH"
 scene.render.resolution_x=720;scene.render.resolution_y=900;scene.render.resolution_percentage=100
 scene.render.image_settings.file_format="PNG"
 scene.display.shading.light="STUDIO"
-scene.display.shading.color_type="MATERIAL"
+scene.display.shading.color_type="VERTEX"
 scene.render.film_transparent=False
 points=[o.matrix_world@Vector(corner) for o in meshes for corner in o.bound_box]
 lo=Vector(tuple(min(p[i] for p in points) for i in range(3)))
@@ -205,3 +205,4 @@ if not images:
 print("Rendered",len(images),"PNG files",flush=True)
 (out/"diagnostics.json").write_text(json.dumps(report,indent=2))
 print("Saved animation previews:",out)
+

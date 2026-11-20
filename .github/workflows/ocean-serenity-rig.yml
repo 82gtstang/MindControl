@@ -18,20 +18,26 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
-      - name: Download Ocean Serenity OBJ
+      - name: Download the image-based Ocean Serenity mesh
         shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $url = 'https://github.com/82gtstang/MindControl/releases/download/ocean-serenity-test/Ocean_Serenity_Blender_Starter.zip'
-          $dir = Join-Path $env:RUNNER_TEMP 'OceanSerenityRig'
+          $dir = Join-Path $env:RUNNER_TEMP "OceanSerenityImage-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
-          Invoke-WebRequest -Uri $url -OutFile (Join-Path $dir 'source.zip')
-          Expand-Archive -Path (Join-Path $dir 'source.zip') -DestinationPath (Join-Path $dir 'input') -Force
-          $obj = Get-ChildItem (Join-Path $dir 'input') -Filter '*.obj' -Recurse -File | Select-Object -First 1
-          if (-not $obj) { throw 'No OBJ in Ocean Serenity release ZIP' }
-          "OCEAN_OBJ=$($obj.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $archive = Join-Path $dir 'source.zip'
+          $url = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/artifacts/14571937439/zip"
+          Invoke-WebRequest -Uri $url -Headers @{ Authorization = "Bearer $env:GH_TOKEN" } -OutFile $archive
+          $expected = 'b1f3ac4c1ed31816f6b41e7351769a2719f6c88a449db0ccb8d35cddff95fcd4'
+          if ((Get-FileHash -Algorithm SHA256 -Path $archive).Hash -ine $expected) { throw 'Image mesh artifact checksum mismatch' }
+          Expand-Archive -LiteralPath $archive -DestinationPath $dir -Force
+          $mesh = Join-Path $dir 'mesh.glb'
+          if (!(Test-Path -LiteralPath $mesh)) { throw 'Image mesh artifact does not contain mesh.glb' }
+          "OCEAN_MESH=$mesh" | Out-File -FilePath $env:GITHUB_ENV -Append
           "OCEAN_OUTPUT=$(Join-Path $env:GITHUB_WORKSPACE 'rig-output\OceanSerenity.fbx')" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Find Blender for skin diagnostics
         shell: powershell
@@ -75,7 +81,7 @@ jobs:
           }
           & $py -m pip install --disable-pip-version-check "open3d>=0.19,<1" numpy
           if ($LASTEXITCODE -ne 0) { throw 'Open3D installation failed' }
-          & $py 'tools/open3d_ocean_serenity.py' "$env:OCEAN_OBJ" "$env:GITHUB_WORKSPACE\\rig-diagnostics\\open3d_source_report.json"
+          & $py 'tools/open3d_ocean_serenity.py' "$env:OCEAN_MESH" "$env:GITHUB_WORKSPACE\\rig-diagnostics\\open3d_source_report.json"
           if ($LASTEXITCODE -ne 0) { throw 'Open3D source geometry analysis failed' }
       - name: Upload Open3D geometry report
         if: always()
@@ -85,11 +91,11 @@ jobs:
           name: OceanSerenity-Open3D-Geometry
           path: rig-diagnostics/open3d_source_report.json
           if-no-files-found: warn
-      - name: Generate experimental A-pose FBX
+      - name: Rig the image-based mesh and export FBX
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          & $env:BLENDER_EXE -b -t 2 --python 'tools/rig_ocean_serenity.py' -- "$env:OCEAN_OBJ" "$env:OCEAN_OUTPUT"
+          & $env:BLENDER_EXE -b -t 2 --python-exit-code 1 --python 'tools/rig_ocean_serenity.py' -- "$env:OCEAN_MESH" "$env:OCEAN_OUTPUT"
           if ($LASTEXITCODE -ne 0) { throw "Rigging failed with exit code $LASTEXITCODE" }
           if (!(Test-Path $env:OCEAN_OUTPUT)) { throw 'Rigged FBX was not exported' }
           if ((Get-Item $env:OCEAN_OUTPUT).Length -lt 1024) { throw 'FBX suspiciously small' }
@@ -131,7 +137,7 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          & $env:BLENDER_EXE -b -t 2 --python 'tools/preview_ocean_serenity.py' -- "$env:OCEAN_OUTPUT" "$env:GITHUB_WORKSPACE\\rig-preview"
+          & $env:BLENDER_EXE -b -t 2 --python-exit-code 1 --python 'tools/preview_ocean_serenity.py' -- "$env:OCEAN_OUTPUT" "$env:GITHUB_WORKSPACE\\rig-preview"
           if ($LASTEXITCODE -ne 0) { throw "Animation preview render failed ($LASTEXITCODE)" }
           $images = @(Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE "rig-preview") -Filter *.png -File -ErrorAction SilentlyContinue)
           Write-Host "Preview PNG count: $($images.Count)"
