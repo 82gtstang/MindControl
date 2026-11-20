@@ -22,6 +22,7 @@ options.set_editor_property("import_animations",True)
 options.set_editor_property("import_materials",True)
 options.set_editor_property("import_textures",True)
 options.set_editor_property("mesh_type_to_import",unreal.FBXImportType.FBXIT_SKELETAL_MESH)
+options.skeletal_mesh_import_data.set_editor_property("import_morph_targets", True)
 task.options=options
 asset_tools.import_asset_tasks([task])
 meshes=[]

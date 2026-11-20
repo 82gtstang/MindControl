@@ -158,6 +158,7 @@ void ACryptHero::Tick(float DeltaSeconds)
  {
   GetMesh()->PlayAnimation(Desired,bLoop);
   ActiveOceanAnimation=Desired;
+  GetMesh()->SetMorphTarget(TEXT("OceanRunLeftLeg"), Desired == OceanRun ? 1.f : 0.f);
  }
 }
 void ACryptHero::PlayOceanAction(UAnimSequence* Sequence,float Duration)
@@ -166,6 +167,7 @@ void ACryptHero::PlayOceanAction(UAnimSequence* Sequence,float Duration)
  ActiveOceanAnimation=Sequence;
  OceanActionTime=Duration;
  GetMesh()->PlayAnimation(Sequence,false);
+ GetMesh()->SetMorphTarget(TEXT("OceanRunLeftLeg"), 0.f);
 }
 void ACryptHero::SetupPlayerInputComponent(UInputComponent* Input)
 {

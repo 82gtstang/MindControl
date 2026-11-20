@@ -730,6 +730,11 @@ body.select_set(True)
 rig.select_set(True)
 bpy.context.view_layer.objects.active=rig
 target.parent.mkdir(parents=True,exist_ok=True)
+if image_mesh:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from ocean_run_contour import add_run_contour
+    add_run_contour(body)
+
 bpy.ops.export_scene.fbx(filepath=str(target),use_selection=True,
     object_types={"ARMATURE","MESH"},add_leaf_bones=False,
     bake_anim=True,bake_anim_use_nla_strips=True,bake_anim_use_all_actions=False,
