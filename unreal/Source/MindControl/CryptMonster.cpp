@@ -40,5 +40,15 @@ void ACryptMonster::TakeHit(float Damage)
   if(ACryptHero* Hero=Cast<ACryptHero>(UGameplayStatics::GetPlayerPawn(this,0)))
    Hero->DefeatedRoadRaider();
  }
- Destroy();
+ RestoreState(0.f,GetActorLocation());
+}
+
+void ACryptMonster::RestoreState(float SavedHealth,const FVector& Location)
+{
+ Health=FMath::Clamp(SavedHealth,0.f,3.f);
+ SetActorLocation(Location,false,nullptr,ETeleportType::TeleportPhysics);
+ const bool bAlive=Health>0.f;
+ SetActorHiddenInGame(!bAlive);
+ SetActorEnableCollision(bAlive);
+ SetActorTickEnabled(bAlive);
 }

@@ -19,6 +19,13 @@ public:
  void Configure(int32 QuestIndex, bool bQuestGiver);
  int32 QuestIndex = INDEX_NONE;
  bool bQuestGiver = false;
+ int32 ObjectiveId = INDEX_NONE;
+ bool bCollected = false;
+ void SetCollected(bool bValue)
+ {
+  bCollected=bValue;
+  SetActorHiddenInGame(bCollected);
+ }
 
 private:
  UPROPERTY() USceneComponent* VisualRoot;

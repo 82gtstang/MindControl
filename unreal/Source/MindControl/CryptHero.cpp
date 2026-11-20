@@ -1,10 +1,13 @@
 #include "CryptHero.h"
 #include "CryptMonster.h"
 #include "CryptTownActor.h"
+#include "CryptSaveGame.h"
+#include "CryptHudLayout.h"
 #include "Materials/MaterialInterface.h"
 #include "EngineUtils.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "GameFramework/Controller.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/InputComponent.h"
 #include "InputCoreTypes.h"
@@ -215,6 +218,8 @@ void ACryptHero::SetupPlayerInputComponent(UInputComponent* Input)
  Input->BindAction("Interact",IE_Pressed,this,&ACryptHero::Interact);
  Input->BindKey(EKeys::Tab,IE_Pressed,this,&ACryptHero::ToggleInventory);
  Input->BindKey(EKeys::R,IE_Pressed,this,&ACryptHero::CycleWeapon);
+ Input->BindKey(EKeys::F5,IE_Pressed,this,&ACryptHero::SaveProgress);
+ Input->BindKey(EKeys::F9,IE_Pressed,this,&ACryptHero::RestoreProgress);
 }
 void ACryptHero::MoveForward(float V) { if(FMath::Abs(V)>.01f) AddMovementInput(FRotationMatrix(FRotator(0,GetControlRotation().Yaw,0)).GetUnitAxis(EAxis::X),V); }
 void ACryptHero::MoveRight(float V) { if(FMath::Abs(V)>.01f) AddMovementInput(FRotationMatrix(FRotator(0,GetControlRotation().Yaw,0)).GetUnitAxis(EAxis::Y),V); }
@@ -246,7 +251,7 @@ ACryptTownActor* ACryptHero::GetInteractionTarget() const
  double Closest=FMath::Square(325.0);
  for(TActorIterator<ACryptTownActor> It(GetWorld());It;++It)
  {
-  if(It->QuestIndex<0 || It->QuestIndex>=CryptQuests::Count) continue;
+  if(It->QuestIndex<0 || It->QuestIndex>=CryptQuests::Count || It->bCollected) continue;
   if(!It->bQuestGiver && QuestState[It->QuestIndex]!=1) continue;
   const double Distance=FVector::DistSquared(GetActorLocation(),It->GetActorLocation());
   if(Distance<Closest)
@@ -298,7 +303,7 @@ void ACryptHero::Interact()
  {
   QuestProgress[Index]=FMath::Min(QuestProgress[Index]+1,Quest.Target);
   Dialogue=FString::Printf(TEXT("%s (%d/%d)"),Quest.Objective,QuestProgress[Index],Quest.Target);
-  Target->Destroy();
+  Target->SetCollected(true);
  }
  else if(QuestState[Index]==0)
  {
@@ -382,22 +387,125 @@ float ACryptHero::WeaponReach() const
  return EquippedWeapon==ECryptWeapon::Spear?365.f:260.f;
 }
 
+namespace
+{
+ const TCHAR* SaveSlot=TEXT("MindControl_Adventure");
+}
+
+void ACryptHero::SaveProgress()
+{
+ if(GetActorLocation().Z < -1000)
+ {
+  SaveStatus=TEXT("Move back onto solid ground before saving.");
+  return;
+ }
+ auto* Save=Cast<UCryptSaveGame>(UGameplayStatics::CreateSaveGameObject(UCryptSaveGame::StaticClass()));
+ if(!Save)
+ {
+  SaveStatus=TEXT("Could not create a save.");
+  return;
+ }
+ Save->HeroLocation=GetActorLocation();
+ Save->HeroRotation=GetActorRotation();
+ Save->ViewRotation=GetControlRotation();
+ Save->Treasure=TreasureCount;
+ Save->Weapons=ActiveWeaponMask;
+ Save->Equipped=static_cast<uint8>(EquippedWeapon);
+ Save->QuestStates.Append(QuestState,CryptQuests::Count);
+ Save->QuestCounts.Append(QuestProgress,CryptQuests::Count);
+ for(TActorIterator<ACryptTownActor> It(GetWorld());It;++It)
+  if(It->ObjectiveId!=INDEX_NONE && It->bCollected) Save->CollectedObjectives.Add(It->ObjectiveId);
+ for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
+ {
+  if(It->SaveId==INDEX_NONE) continue;
+  Save->EnemyHealth.Add(It->SaveId,It->GetRemainingHealth());
+  Save->EnemyLocations.Add(It->SaveId,It->GetActorLocation());
+ }
+ SaveStatus=UGameplayStatics::SaveGameToSlot(Save,SaveSlot,0)?TEXT("Adventure saved."):TEXT("Could not write the save.");
+}
+
+void ACryptHero::RestoreProgress()
+{
+ const auto* Save=Cast<UCryptSaveGame>(UGameplayStatics::LoadGameFromSlot(SaveSlot,0));
+ if(!Save)
+ {
+  SaveStatus=TEXT("No readable save was found.");
+  return;
+ }
+ if(Save->Version!=1 || Save->QuestStates.Num()!=CryptQuests::Count ||
+    Save->QuestCounts.Num()!=CryptQuests::Count || Save->HeroLocation.ContainsNaN() ||
+    Save->HeroRotation.ContainsNaN() || Save->ViewRotation.ContainsNaN())
+ {
+  SaveStatus=TEXT("This save cannot be restored.");
+  return;
+ }
+ if(!TeleportTo(Save->HeroLocation,Save->HeroRotation,false,true))
+ {
+  SaveStatus=TEXT("Could not return to the saved location.");
+  return;
+ }
+ GetCharacterMovement()->StopMovementImmediately();
+ if(AController* PC=GetController()) PC->SetControlRotation(Save->ViewRotation);
+ TreasureCount=FMath::Max(0,Save->Treasure);
+ ActiveWeaponMask=(Save->Weapons&15)|1;
+ EquipWeapon(ECryptWeapon::Unarmed);
+ if(Save->Equipped<=static_cast<uint8>(ECryptWeapon::Spear))
+  EquipWeapon(static_cast<ECryptWeapon>(Save->Equipped));
+ for(int32 Index=0;Index<CryptQuests::Count;++Index)
+ {
+  QuestState[Index]=FMath::Min<uint8>(Save->QuestStates[Index],2);
+  QuestProgress[Index]=FMath::Clamp(Save->QuestCounts[Index],0,CryptQuests::Data[Index].Target);
+ }
+ for(TActorIterator<ACryptTownActor> It(GetWorld());It;++It)
+  if(It->ObjectiveId!=INDEX_NONE) It->SetCollected(Save->CollectedObjectives.Contains(It->ObjectiveId));
+ for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
+ {
+  const float* Health=Save->EnemyHealth.Find(It->SaveId);
+  const FVector* Location=Save->EnemyLocations.Find(It->SaveId);
+  if(Health && Location && FMath::IsFinite(*Health) && !Location->ContainsNaN())
+   It->RestoreState(*Health,*Location);
+ }
+ Dialogue.Reset();
+ SaveStatus=TEXT("Adventure restored.");
+}
+
+void ACryptHero::GetQuestMapMarkers(TArray<FCryptQuestMarker>& Markers) const
+{
+ for(TActorIterator<ACryptTownActor> It(GetWorld());It;++It)
+ {
+  const int32 Index=It->QuestIndex;
+  if(Index<0 || Index>=CryptQuests::Count || QuestState[Index]!=1 || It->bCollected) continue;
+  const bool bReturn=QuestProgress[Index]>=CryptQuests::Data[Index].Target;
+  if(It->bQuestGiver==bReturn) Markers.Add({It->GetActorLocation(),Index});
+ }
+ if(QuestState[0]==1 && QuestProgress[0]<CryptQuests::Data[0].Target)
+  for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
+   if(It->bRoadRaider && It->GetRemainingHealth()>0.f) Markers.Add({It->GetActorLocation(),0});
+}
+
 void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
 {
  if(!GEngine || !GEngine->GameViewport) return;
  FVector2D ViewSize;
  GEngine->GameViewport->GetViewportSize(ViewSize);
  if(ViewSize.X<=0 || ViewSize.Y<=0) return;
- const float S=FMath::Max(.7f,FMath::Min(ViewSize.X/1600.f,ViewSize.Y/900.f));
- auto Hit=[&](float X,float Y) { return FMath::Abs(Location.X-X)<78.f*S && FMath::Abs(Location.Y-Y)<78.f*S; };
  const float W=ViewSize.X,H=ViewSize.Y;
- if(Hit(W-280*S,275*S))
+ const FCryptHudLayout Layout(W,H);
+ const float S=Layout.Scale;
+ const FVector2D TouchPoint(Location.X,Location.Y);
+ if(Layout.Hit(TouchPoint,Layout.Bag))
  {
   ToggleInventory();
   return;
  }
  if(bInventoryOpen)
  {
+  if(Location.Y>=H*.67f && Location.Y<=H*.75f)
+  {
+   if(Location.X>=W*.25f && Location.X<W*.425f) SaveProgress();
+   else if(Location.X>=W*.445f && Location.X<=W*.62f) RestoreProgress();
+   return;
+  }
   for(int32 Index=0;Index<4;++Index)
   {
    const float Y=H*.30f+Index*H*.10f;
@@ -406,7 +514,7 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
   }
   return;
  }
- if(Hit(110*S,210*S) && !GetInteractionLabel().IsEmpty())
+ if(Layout.Hit(TouchPoint,Layout.Interact) && !GetInteractionLabel().IsEmpty())
  {
   Interact();
   return;
@@ -414,7 +522,6 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
  // Right virtual thumb pad: a tap in its inner circle triggers jump.
  // Keep the outer ring available for normal right-stick camera movement.
  const FVector2D RightPadCenter(W*.875f,H*.855f);
- const FVector2D TouchPoint(Location.X,Location.Y);
  const float RightPadInnerRadius=66.f*S;
  if(FVector2D::Distance(TouchPoint,RightPadCenter)<=RightPadInnerRadius)
  {
@@ -422,7 +529,7 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
   UE_LOG(LogTemp,Log,TEXT("MOBILE_RIGHT_PAD: center pressed, jump requested"));
   return;
  }
- if(Hit(W-110*S,105*S)) Jump();
- else if(Hit(W-280*S,105*S)) Attack();
- else if(Hit(W-110*S,275*S)) SpinAttack();
+ if(Layout.Hit(TouchPoint,Layout.Jump)) Jump();
+ else if(Layout.Hit(TouchPoint,Layout.Attack)) Attack();
+ else if(Layout.Hit(TouchPoint,Layout.Spin)) SpinAttack();
 }

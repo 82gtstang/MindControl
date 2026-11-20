@@ -3,6 +3,7 @@
 #include "CryptMonster.h"
 #include "CryptMobileHUD.h"
 #include "CryptTownActor.h"
+#include "CryptWorldLayout.h"
 #include "ProceduralMeshComponent.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/StaticMesh.h"
@@ -23,38 +24,66 @@ namespace
   const float North=FMath::SmoothStep(1000.f,2700.f,Y)
    * (350.f*FMath::Exp(-FMath::Square((X+3300.f)/1450.f))+
      550.f*FMath::Exp(-FMath::Square((X-4375.f)/1100.f)));
-  return -20.f+South*(WestHill+EastHill-Valley)+North;
+  float Height=-20.f+South*(WestHill+EastHill-Valley)+North;
+  const float Edge=FMath::Max(FMath::Abs(X)/5600.f,FMath::Abs(Y)/5100.f);
+  Height+=760.f*FMath::SmoothStep(.96f,1.16f,Edge);
+  for(const auto& River : CryptWorld::Rivers)
+  {
+   if(Y<River.Start || Y>River.End) continue;
+   const float Bank=1.f-FMath::SmoothStep(River.Width*.84f,River.Width*1.75f,FMath::Abs(X-River.X(Y)));
+   const float EndBlend=FMath::SmoothStep(0.f,180.f,FMath::Min(Y-River.Start,River.End-Y));
+   Height=FMath::Lerp(Height,River.Height(Y)-58.f,Bank*EndBlend);
+  }
+  return Height;
  }
 
- void CreateTerrain(UWorld* World,UMaterialInterface* Grass)
+ UProceduralMeshComponent* CreateSurface(UWorld* World,const TCHAR* Name,bool bCollision)
  {
   AActor* Ground=World->SpawnActor<AActor>();
-  if(!Ground) return;
-  auto* Surface=NewObject<UProceduralMeshComponent>(Ground,TEXT("GroundSurface"));
+  if(!Ground) return nullptr;
+  auto* Surface=NewObject<UProceduralMeshComponent>(Ground,FName(Name));
   Ground->AddInstanceComponent(Surface);
   Surface->SetMobility(EComponentMobility::Static);
   Ground->SetRootComponent(Surface);
   Surface->RegisterComponent();
-  Surface->SetCollisionProfileName(TEXT("BlockAll"));
-  Surface->bUseComplexAsSimpleCollision=true;
-  constexpr int32 Columns=110;
-  constexpr int32 Rows=100;
+  Surface->SetCollisionProfileName(bCollision?TEXT("BlockAll"):TEXT("NoCollision"));
+  Surface->bUseComplexAsSimpleCollision=bCollision;
+  return Surface;
+ }
+
+ bool IsDirt(float X,float Y)
+ {
+  if(X>-3500.f && X<3100.f && FMath::Abs(Y+1650.f+180.f*FMath::Sin(X/860.f))<125.f)
+   return true;
+  for(const auto& River : CryptWorld::Rivers)
+   if(Y>River.Start && Y<River.End && FMath::Abs(X-River.X(Y))<River.Width*1.45f)
+    return true;
+  return false;
+ }
+
+ void CreateTerrain(UWorld* World,UMaterialInterface* Grass,UMaterialInterface* Dirt)
+ {
+  auto* Surface=CreateSurface(World,TEXT("GroundSurface"),true);
+  if(!Surface) return;
+  constexpr int32 Columns=132;
+  constexpr int32 Rows=120;
   constexpr int32 Stride=Columns+1;
   TArray<FVector> Vertices,Normals;
   TArray<FVector2D> UVs;
   TArray<FProcMeshTangent> Tangents;
-  TArray<int32> Triangles;
+  TArray<int32> Triangles,DirtTriangles;
   Vertices.Reserve(Stride*(Rows+1));
   Normals.Reserve(Stride*(Rows+1));
   UVs.Reserve(Stride*(Rows+1));
   Tangents.Reserve(Stride*(Rows+1));
   Triangles.Reserve(Columns*Rows*6);
+  DirtTriangles.Reserve(Columns*Rows);
   for(int32 Row=0;Row<=Rows;++Row)
   {
-   const float Y=-5000.f+100.f*Row;
+   const float Y=-6000.f+100.f*Row;
    for(int32 Column=0;Column<=Columns;++Column)
    {
-    const float X=-5500.f+100.f*Column;
+    const float X=-6600.f+100.f*Column;
     const float Dx=(TerrainHeight(X+5,Y)-TerrainHeight(X-5,Y))*.1f;
     const float Dy=(TerrainHeight(X,Y+5)-TerrainHeight(X,Y-5))*.1f;
     Vertices.Emplace(X,Y,TerrainHeight(X,Y));
@@ -67,12 +96,62 @@ namespace
      const int32 B=A+1;
      const int32 C=A+Stride;
      const int32 D=C+1;
-     Triangles.Append({A,C,B,B,C,D});
+     auto& Section=(Dirt && IsDirt(X+50.f,Y+50.f))?DirtTriangles:Triangles;
+     Section.Append({A,C,B,B,C,D});
     }
    }
   }
   Surface->CreateMeshSection_LinearColor(0,Vertices,Triangles,Normals,UVs,{},Tangents,true);
   if(Grass) Surface->SetMaterial(0,Grass);
+  if(!DirtTriangles.IsEmpty())
+  {
+   Surface->CreateMeshSection_LinearColor(1,Vertices,DirtTriangles,Normals,UVs,{},Tangents,true);
+   Surface->SetMaterial(1,Dirt);
+  }
+ }
+
+ void CreateWater(UWorld* World,UMaterialInterface* RiverMaterial,UMaterialInterface* FallsMaterial)
+ {
+  if(!RiverMaterial || !FallsMaterial) return;
+  for(const auto& River : CryptWorld::Rivers)
+  {
+   auto* Surface=CreateSurface(World,TEXT("RiverSurface"),false);
+   if(!Surface) continue;
+   constexpr int32 Samples=120;
+   TArray<FVector> Vertices,Normals;
+   TArray<FVector2D> UVs;
+   TArray<FProcMeshTangent> Tangents;
+   TArray<int32> Stream,Falls;
+   for(int32 Index=0;Index<=Samples;++Index)
+   {
+    const float T=float(Index)/Samples;
+    const float Y=FMath::Lerp(River.Start+150.f,River.End-150.f,T);
+    const float X=River.X(Y);
+    const float Z=River.Height(Y);
+    const float HalfWidth=River.Width*.87f*FMath::Lerp(.40f,1.f,FMath::SmoothStep(0.f,.07f,FMath::Min(T,1.f-T)));
+    const float Slope=(River.Height(Y+5)-River.Height(Y-5))*.1f;
+    for(int32 Side=0;Side<2;++Side)
+    {
+     Vertices.Emplace(X+(Side==0?-HalfWidth:HalfWidth),Y,Z);
+     Normals.Add(FVector(0,-Slope,1).GetSafeNormal());
+     UVs.Emplace(Side,(River.End-Y)/220.f);
+     Tangents.Emplace(FVector::ForwardVector,false);
+    }
+    if(Index<Samples)
+    {
+     auto& Section=(River.bFalls && T>=.46f && T<=.54f)?Falls:Stream;
+     const int32 A=Index*2;
+     Section.Append({A,A+2,A+1,A+1,A+2,A+3});
+    }
+   }
+   Surface->CreateMeshSection_LinearColor(0,Vertices,Stream,Normals,UVs,{},Tangents,false);
+   Surface->SetMaterial(0,RiverMaterial);
+   if(!Falls.IsEmpty())
+   {
+    Surface->CreateMeshSection_LinearColor(1,Vertices,Falls,Normals,UVs,{},Tangents,false);
+    Surface->SetMaterial(1,FallsMaterial);
+   }
+  }
  }
 }
 
@@ -94,9 +173,31 @@ void ACryptGameMode::BeginPlay()
  Super::BeginPlay();
  // World units are centimeters; cubes are 100 cm per side.
  UMaterialInterface* Grass=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Grass.M_Grass"));
- CreateTerrain(GetWorld(),Grass);
+ UMaterialInterface* Dirt=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Dirt.M_Dirt"));
+ UMaterialInterface* Cobble=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Cobblestone.M_Cobblestone"));
+ UMaterialInterface* River=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_River.M_River"));
+ UMaterialInterface* Falls=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Waterfall.M_Waterfall"));
+ CreateTerrain(GetWorld(),Grass,Dirt);
+ CreateWater(GetWorld(),River,Falls);
+ // Keep movement inside the finished terrain while the surrounding hills continue past the boundary.
+ for(const float Side : {-1.f,1.f})
+ {
+  for(const bool bAlongX : {false,true})
+  {
+   auto* Boundary=GetWorld()->SpawnActor<AStaticMeshActor>(
+     FVector(bAlongX?0.f:Side*6020.f,bAlongX?Side*5480.f:0.f,375),FRotator::ZeroRotator);
+   if(!Boundary) continue;
+   auto* Collision=Boundary->GetStaticMeshComponent();
+   Collision->SetMobility(EComponentMobility::Movable);
+   Collision->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube")));
+   Collision->SetCollisionProfileName(TEXT("BlockAll"));
+   Boundary->SetActorScale3D(bAlongX?FVector(125,1,28):FVector(1,115,28));
+   Boundary->SetActorHiddenInGame(true);
+   Collision->SetMobility(EComponentMobility::Static);
+  }
+ }
  UMaterialInterface* Stone=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_CastleStone.M_CastleStone"));
- PlaceBlock(FVector(0,0,-8),FVector(110,4,.12),FRotator::ZeroRotator,Stone); // main road
+ PlaceBlock(FVector(0,0,-8),FVector(110,4,.12),FRotator::ZeroRotator,Cobble?Cobble:Stone); // main road
  // Wilderness stones and ruined pillars beside the approach.
  for(int32 i=0;i<10;++i)
  {
@@ -156,7 +257,10 @@ void ACryptGameMode::BeginPlay()
  {
   const FVector P(-1650.f+i*680.f,(i%2==0?220.f:-260.f),120.f);
   if(ACryptMonster* Raider=GetWorld()->SpawnActor<ACryptMonster>(P,FRotator::ZeroRotator))
+  {
    Raider->bRoadRaider=true;
+   Raider->SaveId=i;
+  }
   else
    UE_LOG(LogTemp,Warning,TEXT("MindControl: failed to spawn monster %d"),i);
  }
@@ -173,7 +277,8 @@ void ACryptGameMode::BeginPlay()
  PlaceBlock(FVector(-700,3200,180),FVector(1.5f,30,5));
  PlaceBlock(FVector(2700,3200,180),FVector(1.5f,30,5));
  for(int32 i=0;i<5;++i)
-  GetWorld()->SpawnActor<ACryptMonster>(FVector(200+i*380.f,3000.f+(i%2)*300.f,120.f),FRotator::ZeroRotator);
+  if(ACryptMonster* Guardian=GetWorld()->SpawnActor<ACryptMonster>(FVector(200+i*380.f,3000.f+(i%2)*300.f,120.f),FRotator::ZeroRotator))
+   Guardian->SaveId=100+i;
  // Roadside timber fences, lantern posts, rubble, and a village square.
  for(int32 i=0;i<26;++i)
  {
@@ -208,12 +313,12 @@ void ACryptGameMode::BeginPlay()
  }
  // A cobbled village square with market stalls and stone benches.
  // Square paving top = +19 cm, above road top = -2 cm; avoid near-coplanar surfaces.
- PlaceBlock(FVector(2400,0,12),FVector(22,18,.14f),FRotator::ZeroRotator,Stone);
+ PlaceBlock(FVector(2400,0,12),FVector(22,18,.14f),FRotator::ZeroRotator,Cobble?Cobble:Stone);
  for(int32 i=0;i<9;++i)
  {
   const float X=1600.f+(i%3)*750.f;
   const float Y=-650.f+(i/3)*650.f;
-  PlaceBlock(FVector(X,Y,18),FVector(1.4f,1.4f,.22f));
+  PlaceBlock(FVector(X,Y,18),FVector(1.4f,1.4f,.22f),FRotator::ZeroRotator,Cobble?Cobble:Stone);
  }
  for(int32 i=0;i<4;++i)
  {
@@ -255,22 +360,25 @@ void ACryptGameMode::BeginPlay()
   PlaceBlock(FVector(X,Y,12),FVector(.35f+(i%3)*.2f,.5f,.35f));
  }
  // Place the townspeople along the square, then put their objectives on accessible terrain.
- const auto SpawnQuestActor=[this](int32 Quest,bool bGiver,FVector Location)
+ const auto SpawnQuestActor=[this](int32 Quest,bool bGiver,FVector Location,int32 ObjectiveId=INDEX_NONE)
  {
   if(ACryptTownActor* Actor=GetWorld()->SpawnActor<ACryptTownActor>(Location,FRotator(0,180,0)))
+  {
    Actor->Configure(Quest,bGiver);
+   Actor->ObjectiveId=ObjectiveId;
+  }
  };
  for(int32 Index=0;Index<5;++Index)
   SpawnQuestActor(Index,true,FVector(1450.f+400.f*Index,185.f,19.f));
 
- const auto SpawnTerrainObjective=[&](int32 Quest,float X,float Y)
+ const auto SpawnTerrainObjective=[&](int32 Quest,float X,float Y,int32 ObjectiveId)
  {
-  SpawnQuestActor(Quest,false,FVector(X,Y,TerrainHeight(X,Y)));
+  SpawnQuestActor(Quest,false,FVector(X,Y,TerrainHeight(X,Y)),ObjectiveId);
  };
- SpawnTerrainObjective(1,-430.f,-2000.f);
- SpawnTerrainObjective(1,250.f,-2360.f);
- SpawnTerrainObjective(1,720.f,-2750.f);
- SpawnQuestActor(2,false,FVector(1020,3110,-7));
- SpawnTerrainObjective(3,-3300.f,-2780.f);
- SpawnTerrainObjective(4,2450.f,-2330.f);
+ SpawnTerrainObjective(1,-430.f,-2000.f,10);
+ SpawnTerrainObjective(1,250.f,-2360.f,11);
+ SpawnTerrainObjective(1,720.f,-2750.f,12);
+ SpawnQuestActor(2,false,FVector(1020,3110,-7),20);
+ SpawnTerrainObjective(3,-3300.f,-2780.f,30);
+ SpawnTerrainObjective(4,2450.f,-2330.f,40);
 }

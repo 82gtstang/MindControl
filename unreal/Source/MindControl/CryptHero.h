@@ -3,6 +3,12 @@
 #include "GameFramework/Character.h"
 #include "CryptQuestData.h"
 #include "CryptHero.generated.h"
+struct FCryptQuestMarker
+{
+ FVector Location;
+ int32 QuestIndex;
+};
+
 UCLASS()
 class MINDCONTROL_API ACryptHero : public ACharacter
 {
@@ -20,6 +26,10 @@ public:
  bool OwnsWeapon(ECryptWeapon Weapon) const;
  FString GetQuestJournal() const;
  FString GetInteractionLabel() const;
+ void SaveProgress();
+ void RestoreProgress();
+ void GetQuestMapMarkers(TArray<FCryptQuestMarker>& Markers) const;
+ FString SaveStatus;
  FString Dialogue;
  ECryptWeapon EquippedWeapon = ECryptWeapon::Unarmed;
  UPROPERTY(BlueprintReadOnly) bool bSwordEquipped = false;

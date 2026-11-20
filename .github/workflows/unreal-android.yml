@@ -162,7 +162,7 @@ jobs:
             Write-Warning 'Known UE 5.7 post-save Content Browser assertion detected; mesh file exists. Continuing to cook for asset validation.'
           }
           Write-Host "Ocean Serenity skeletal mesh asset exists: $mesh"
-      - name: Import castle and grass materials
+      - name: Import environment materials
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -184,7 +184,10 @@ jobs:
             ('-abslog="{0}"' -f $log)
           )
           $process = Start-Process -FilePath $editor -ArgumentList $arguments -Wait -PassThru
-          if ($process.ExitCode -ne 0 -or !(Test-Path (Join-Path $materials 'M_Grass.uasset')) -or !(Test-Path (Join-Path $materials 'M_CastleStone.uasset'))) {
+          $missing = @('M_Grass','M_CastleStone','M_Cobblestone','M_Dirt','M_River','M_Waterfall') | Where-Object {
+            !(Test-Path (Join-Path $materials "$_.uasset"))
+          }
+          if ($process.ExitCode -ne 0 -or $missing) {
             if (Test-Path $log) { Get-Content $log -Tail 100 }
             throw "Environment material import failed with exit code $($process.ExitCode)"
           }

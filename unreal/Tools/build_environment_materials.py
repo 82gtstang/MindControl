@@ -89,8 +89,8 @@ def grass_material(color, normal):
     MATERIALS.recompile_material(asset)
 
 
-def stone_material(color):
-    asset = material("M_CastleStone")
+def projected_material(color, name, size):
+    asset = material(name)
     position = node(asset, unreal.MaterialExpressionWorldPosition)
     normal = node(asset, unreal.MaterialExpressionPixelNormalWS)
     photo = node(asset, unreal.MaterialExpressionTextureObject)
@@ -104,16 +104,43 @@ def stone_material(color):
         custom_inputs.append(custom_input)
     projection.set_editor_property("inputs", custom_inputs)
     projection.set_editor_property("code", """
-float3 coordinates = P / 275.0;
+float3 coordinates = P / TILING;
 float3 weights = pow(abs(N), 4.0);
 weights /= max(dot(weights, float3(1, 1, 1)), 0.001);
 return Texture2DSample(Stone, StoneSampler, coordinates.yz).rgb * weights.x
      + Texture2DSample(Stone, StoneSampler, coordinates.xz).rgb * weights.y
      + Texture2DSample(Stone, StoneSampler, coordinates.xy).rgb * weights.z;
-""")
+""".replace("TILING", str(float(size))))
     for expression, input_name in ((position, "P"), (normal, "N"), (photo, "Stone")):
         connect(expression, "", projection, input_name)
     output(projection, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    MATERIALS.recompile_material(asset)
+
+
+def water_material(name, waterfall):
+    asset = material(name)
+    uv = node(asset, unreal.MaterialExpressionTextureCoordinate)
+    time = node(asset, unreal.MaterialExpressionTime)
+    waves = node(asset, unreal.MaterialExpressionCustom)
+    waves.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    inputs = []
+    for label in ("UV", "Clock"):
+        item = unreal.CustomInput()
+        item.set_editor_property("input_name", label)
+        inputs.append(item)
+    waves.set_editor_property("inputs", inputs)
+    waves.set_editor_property("code", """
+float t = Clock * SPEED;
+float crossflow = sin(UV.x * 47.0 + UV.y * 6.0 - t);
+float ripples = sin(UV.y * 10.0 - t * 2.0 + crossflow * 0.65);
+float edge = smoothstep(0.72, 0.99, abs(UV.x * 2.0 - 1.0));
+float foam = smoothstep(0.72, 0.98, ripples * 0.58 + crossflow * 0.42 + BIAS);
+float3 body = lerp(float3(0.022, 0.095, 0.12), float3(0.10, 0.33, 0.36), ripples * 0.28 + 0.45);
+return lerp(body, float3(0.72, 0.87, 0.85), saturate(foam * 0.82 + edge * 0.65));
+""".replace("SPEED", "4.8" if waterfall else "1.8").replace("BIAS", "0.42" if waterfall else "0.0"))
+    connect(uv, "", waves, "UV")
+    connect(time, "", waves, "Clock")
+    output(waves, "", unreal.MaterialProperty.MP_BASE_COLOR)
     MATERIALS.recompile_material(asset)
 
 
@@ -122,6 +149,12 @@ with TemporaryDirectory() as directory:
     grass_normal = texture(directory, "sparse_grass", "nor_dx", "52bf18e78e2b24c9d0900012ba4c70ee1805fa2ddd32dfc87a7bcc127324af33")
     stone = texture(directory, "stone_wall", "diff", "390969aead48d9a10ac731a5e0af8761cc4ed89faa02ba775b913930b4398d87")
     grass_material(grass, grass_normal)
-    stone_material(stone)
+    cobble = texture(directory, "cobblestone_floor_001", "diff", "893d3e7b4506c5935cbc6aca5b914d637bd4464484bcaa5d69e2ee205bb9ae9c")
+    dirt = texture(directory, "dirt", "diff", "6ce6ca7e28ed046f7f93fa60dcb29f8cf42cd5a539adc5676675acccfa34efd3")
+    projected_material(stone, "M_CastleStone", 275)
+    projected_material(cobble, "M_Cobblestone", 210)
+    projected_material(dirt, "M_Dirt", 320)
+    water_material("M_River", False)
+    water_material("M_Waterfall", True)
     if not ASSETS.save_directory(DESTINATION, only_if_is_dirty=False, recursive=True):
         raise RuntimeError("Could not save the environment materials")
