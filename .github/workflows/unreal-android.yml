@@ -20,7 +20,7 @@ jobs:
         shell: bash
         run: |
           for attempt in $(seq 1 30); do
-            response=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs?per_page=60")
+            response=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/ocean-serenity-rig.yml/runs?head_sha=$GITHUB_SHA&per_page=60")
             result=$(echo "$response" | jq -r --arg sha "$GITHUB_SHA" '[.workflow_runs[] | select(.name=="Ocean Serenity experimental auto-rig" and .head_sha==$sha)] | first | if . == null then "missing" else (.status + ":" + (.conclusion // "pending")) end')
             echo "Rig on $GITHUB_SHA: $result ($attempt/30)"
             if [ "$result" = "completed:success" ]; then exit 0; fi
@@ -35,6 +35,7 @@ jobs:
     timeout-minutes: 240
     permissions:
       contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
       - name: Verify Unreal 5.7 and Android toolchain
@@ -93,7 +94,7 @@ jobs:
           $api = 'https://api.github.com/repos/82gtstang/MindControl'
           # The ubuntu-latest wait-for-rig job already validated the matching
           # commit. Do not block the self-hosted Windows runner here.
-          $runs = Invoke-RestMethod -Uri "$api/actions/runs?per_page=60" -Headers $headers
+          $runs = Invoke-RestMethod -Uri "$api/actions/workflows/ocean-serenity-rig.yml/runs?head_sha=$env:GITHUB_SHA&per_page=60" -Headers $headers
           $rig = $runs.workflow_runs | Where-Object {
             $_.name -eq 'Ocean Serenity experimental auto-rig' -and
             $_.head_sha -eq $env:GITHUB_SHA -and
