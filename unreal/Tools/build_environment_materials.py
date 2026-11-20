@@ -83,7 +83,7 @@ def grass_material(color, normal):
         sample = node(asset, unreal.MaterialExpressionTextureSample)
         sample.set_editor_property("texture", image)
         sample.set_editor_property("sampler_type", sampler)
-        connect(uv, "", sample, "UVs")
+        connect(uv, "", sample, "")
         output(sample, "RGB", property_name)
     MATERIALS.recompile_material(asset)
 
@@ -91,7 +91,7 @@ def grass_material(color, normal):
 def stone_material(color):
     asset = material("M_CastleStone")
     position = node(asset, unreal.MaterialExpressionWorldPosition)
-    normal = node(asset, unreal.MaterialExpressionVertexNormalWS)
+    normal = node(asset, unreal.MaterialExpressionPixelNormalWS)
     photo = node(asset, unreal.MaterialExpressionTextureObject)
     photo.set_editor_property("texture", color)
     projection = node(asset, unreal.MaterialExpressionCustom)
