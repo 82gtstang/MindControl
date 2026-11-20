@@ -10,6 +10,7 @@ public:
  ACryptMonster();
  virtual void Tick(float DeltaSeconds) override;
  void TakeHit(float Damage);
+ bool bRoadRaider=false;
 protected:
  UPROPERTY(VisibleAnywhere) class USphereComponent* Collision;
  UPROPERTY(VisibleAnywhere) class UStaticMeshComponent* Body;

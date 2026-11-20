@@ -2,6 +2,8 @@
 #include "CryptHero.h"
 #include "CryptMonster.h"
 #include "CryptMobileHUD.h"
+#include "CryptTownActor.h"
+#include "ProceduralMeshComponent.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
@@ -10,6 +12,70 @@
 #include "Engine/Engine.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+namespace
+{
+ float TerrainHeight(float X,float Y)
+ {
+  const float South=FMath::SmoothStep(1100.f,2300.f,-Y);
+  const float WestHill=660.f*FMath::Exp(-FMath::Square((X+3250.f)/1700.f)-FMath::Square((Y+2800.f)/1100.f));
+  const float EastHill=550.f*FMath::Exp(-FMath::Square((X-3400.f)/1500.f)-FMath::Square((Y+2950.f)/1200.f));
+  const float Valley=380.f*FMath::Exp(-FMath::Square((X-350.f)/1950.f)-FMath::Square((Y+2750.f)/1300.f));
+  const float North=FMath::SmoothStep(1000.f,2700.f,Y)
+   * (350.f*FMath::Exp(-FMath::Square((X+3300.f)/1450.f))+
+     550.f*FMath::Exp(-FMath::Square((X-4375.f)/1100.f)));
+  return -20.f+South*(WestHill+EastHill-Valley)+North;
+ }
+
+ void CreateTerrain(UWorld* World,UMaterialInterface* Grass)
+ {
+  AActor* Ground=World->SpawnActor<AActor>();
+  if(!Ground) return;
+  auto* Surface=NewObject<UProceduralMeshComponent>(Ground,TEXT("GroundSurface"));
+  Ground->AddInstanceComponent(Surface);
+  Surface->SetMobility(EComponentMobility::Static);
+  Ground->SetRootComponent(Surface);
+  Surface->RegisterComponent();
+  Surface->SetCollisionProfileName(TEXT("BlockAll"));
+  Surface->bUseComplexAsSimpleCollision=true;
+  constexpr int32 Columns=110;
+  constexpr int32 Rows=100;
+  constexpr int32 Stride=Columns+1;
+  TArray<FVector> Vertices,Normals;
+  TArray<FVector2D> UVs;
+  TArray<FProcMeshTangent> Tangents;
+  TArray<int32> Triangles;
+  Vertices.Reserve(Stride*(Rows+1));
+  Normals.Reserve(Stride*(Rows+1));
+  UVs.Reserve(Stride*(Rows+1));
+  Tangents.Reserve(Stride*(Rows+1));
+  Triangles.Reserve(Columns*Rows*6);
+  for(int32 Row=0;Row<=Rows;++Row)
+  {
+   const float Y=-5000.f+100.f*Row;
+   for(int32 Column=0;Column<=Columns;++Column)
+   {
+    const float X=-5500.f+100.f*Column;
+    const float Dx=(TerrainHeight(X+5,Y)-TerrainHeight(X-5,Y))*.1f;
+    const float Dy=(TerrainHeight(X,Y+5)-TerrainHeight(X,Y-5))*.1f;
+    Vertices.Emplace(X,Y,TerrainHeight(X,Y));
+    Normals.Add(FVector(-Dx,-Dy,1).GetSafeNormal());
+    Tangents.Emplace(FVector(1,0,Dx).GetSafeNormal(),false);
+    UVs.Emplace(float(Column)/Columns,float(Row)/Rows);
+    if(Row<Rows && Column<Columns)
+    {
+     const int32 A=Row*Stride+Column;
+     const int32 B=A+1;
+     const int32 C=A+Stride;
+     const int32 D=C+1;
+     Triangles.Append({A,C,B,B,C,D});
+    }
+   }
+  }
+  Surface->CreateMeshSection_LinearColor(0,Vertices,Triangles,Normals,UVs,{},Tangents,true);
+  if(Grass) Surface->SetMaterial(0,Grass);
+ }
+}
+
 ACryptGameMode::ACryptGameMode() { DefaultPawnClass = ACryptHero::StaticClass(); HUDClass = ACryptMobileHUD::StaticClass(); }
 void ACryptGameMode::PlaceBlock(const FVector& Location,const FVector& Scale,const FRotator& Rotation,UMaterialInterface* Material,UStaticMesh* Mesh)
 {
@@ -26,33 +92,27 @@ void ACryptGameMode::PlaceBlock(const FVector& Location,const FVector& Scale,con
 void ACryptGameMode::BeginPlay()
 {
  Super::BeginPlay();
- // Stateless stability build: no persisted startup flags or data-file writes.
- UE_LOG(LogTemp,Warning,TEXT("MindControl stability test: no saved startup state"));
- if(GEngine) GEngine->AddOnScreenDebugMessage(-1,8.f,FColor::Yellow,TEXT("MindControl - detailed world prototype"));
- // The world can be re-enabled explicitly for future diagnostics.
- if(true) // Diagnostic: generate basic collision ground and world on launch
- {
  // World units are centimeters; cubes are 100 cm per side.
  UMaterialInterface* Grass=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Grass.M_Grass"));
- PlaceBlock(FVector(0,0,-70),FVector(110,70,1),FRotator::ZeroRotator,Grass); // walkable ground
- PlaceBlock(FVector(0,0,-8),FVector(110,4,.12)); // main road
+ CreateTerrain(GetWorld(),Grass);
+ UMaterialInterface* Stone=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_CastleStone.M_CastleStone"));
+ PlaceBlock(FVector(0,0,-8),FVector(110,4,.12),FRotator::ZeroRotator,Stone); // main road
  // Wilderness stones and ruined pillars beside the approach.
  for(int32 i=0;i<10;++i)
  {
   const float X=-3100+i*420.f;
   const float Y=(i%2==0?1.f:-1.f)*(600.f+(i%3)*220.f);
-  PlaceBlock(FVector(X,Y,75),FVector(1.2f,1.2f,2.5f+(i%3)));
+  PlaceBlock(FVector(X,Y,75),FVector(1.2f,1.2f,2.5f+(i%3)),FRotator::ZeroRotator,Stone);
  }
  // Six houses in two rows, leaving the road unobstructed.
  for(int32 i=0;i<6;++i)
  {
   const float X=750+(i/2)*650.f;
   const float Y=(i%2==0?850.f:-850.f);
-  PlaceBlock(FVector(X,Y,160),FVector(4.0f,4.2f,3.2f));
+  PlaceBlock(FVector(X,Y,160),FVector(4.0f,4.2f,3.2f),FRotator::ZeroRotator,Stone);
   PlaceBlock(FVector(X,Y,340),FVector(4.8f,4.8f,.45f));
  }
  // Castle masonry uses world-space projection across the different wall sizes.
- UMaterialInterface* Stone=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_CastleStone.M_CastleStone"));
  UStaticMesh* Cylinder=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
  const auto Masonry=[this,Stone](const FVector& Location,const FVector& Scale,const FRotator& Rotation=FRotator::ZeroRotator,UStaticMesh* Mesh=nullptr)
  {
@@ -95,12 +155,14 @@ void ACryptGameMode::BeginPlay()
  for(int32 i=0;i<3;++i)
  {
   const FVector P(-1650.f+i*680.f,(i%2==0?220.f:-260.f),120.f);
-  if(!GetWorld()->SpawnActor<ACryptMonster>(P,FRotator::ZeroRotator))
+  if(ACryptMonster* Raider=GetWorld()->SpawnActor<ACryptMonster>(P,FRotator::ZeroRotator))
+   Raider->bRoadRaider=true;
+  else
    UE_LOG(LogTemp,Warning,TEXT("MindControl: failed to spawn monster %d"),i);
  }
  // Open-air stone dungeon: a walk-in ruin with pillars, treasure marker and guardians.
  // Raise dungeon paving above terrain (terrain top = -20 cm) to avoid coplanar Z-fighting.
- PlaceBlock(FVector(1000,3200,-57),FVector(36,30,1));
+ PlaceBlock(FVector(1000,3200,-57),FVector(36,30,1),FRotator::ZeroRotator,Stone);
  for(int32 i=0;i<8;++i)
  {
   const float X=-600.f+(i%4)*950.f;
@@ -146,7 +208,7 @@ void ACryptGameMode::BeginPlay()
  }
  // A cobbled village square with market stalls and stone benches.
  // Square paving top = +19 cm, above road top = -2 cm; avoid near-coplanar surfaces.
- PlaceBlock(FVector(2400,0,12),FVector(22,18,.14f));
+ PlaceBlock(FVector(2400,0,12),FVector(22,18,.14f),FRotator::ZeroRotator,Stone);
  for(int32 i=0;i<9;++i)
  {
   const float X=1600.f+(i%3)*750.f;
@@ -192,7 +254,23 @@ void ACryptGameMode::BeginPlay()
   const float Y=1900.f+(i*491%2400);
   PlaceBlock(FVector(X,Y,12),FVector(.35f+(i%3)*.2f,.5f,.35f));
  }
- UE_LOG(LogTemp,Display,TEXT("MindControl: detailed world generation completed"));
- if(GEngine) GEngine->AddOnScreenDebugMessage(-1,15.f,FColor::Green,TEXT("Mind Control: town is ahead - follow the road"));
- }
+ // Place the townspeople along the square, then put their objectives on accessible terrain.
+ const auto SpawnQuestActor=[this](int32 Quest,bool bGiver,FVector Location)
+ {
+  if(ACryptTownActor* Actor=GetWorld()->SpawnActor<ACryptTownActor>(Location,FRotator(0,180,0)))
+   Actor->Configure(Quest,bGiver);
+ };
+ for(int32 Index=0;Index<5;++Index)
+  SpawnQuestActor(Index,true,FVector(1450.f+400.f*Index,185.f,19.f));
+
+ const auto SpawnTerrainObjective=[&](int32 Quest,float X,float Y)
+ {
+  SpawnQuestActor(Quest,false,FVector(X,Y,TerrainHeight(X,Y)));
+ };
+ SpawnTerrainObjective(1,-430.f,-2000.f);
+ SpawnTerrainObjective(1,250.f,-2360.f);
+ SpawnTerrainObjective(1,720.f,-2750.f);
+ SpawnQuestActor(2,false,FVector(1020,3110,-7));
+ SpawnTerrainObjective(3,-3300.f,-2780.f);
+ SpawnTerrainObjective(4,2450.f,-2330.f);
 }

@@ -32,6 +32,13 @@ void ACryptMonster::Tick(float Dt)
 }
 void ACryptMonster::TakeHit(float Damage)
 {
+ if(Health<=0.f) return;
  Health-=Damage;
- if(Health<=0.f) Destroy();
+ if(Health>0.f) return;
+ if(bRoadRaider)
+ {
+  if(ACryptHero* Hero=Cast<ACryptHero>(UGameplayStatics::GetPlayerPawn(this,0)))
+   Hero->DefeatedRoadRaider();
+ }
+ Destroy();
 }

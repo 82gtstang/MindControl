@@ -1,6 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "CryptQuestData.h"
 #include "CryptHero.generated.h"
 UCLASS()
 class MINDCONTROL_API ACryptHero : public ACharacter
@@ -14,6 +15,13 @@ public:
  UFUNCTION(BlueprintCallable) void SpinAttack();
  UFUNCTION(BlueprintCallable) void Interact();
  UFUNCTION(BlueprintCallable) void EquipSword(bool bEquip);
+ void DefeatedRoadRaider();
+ void EquipWeapon(ECryptWeapon Weapon);
+ bool OwnsWeapon(ECryptWeapon Weapon) const;
+ FString GetQuestJournal() const;
+ FString GetInteractionLabel() const;
+ FString Dialogue;
+ ECryptWeapon EquippedWeapon = ECryptWeapon::Unarmed;
  UPROPERTY(BlueprintReadOnly) bool bSwordEquipped = false;
  UPROPERTY(BlueprintReadOnly) int32 TreasureCount = 0;
  UPROPERTY(BlueprintReadOnly) bool bInventoryOpen = false;
@@ -29,7 +37,17 @@ protected:
  UPROPERTY() class USpringArmComponent* CameraBoom;
  UPROPERTY() class UCameraComponent* FollowCamera;
  UPROPERTY() class UStaticMeshComponent* SwordVisual;
+ UPROPERTY() class UStaticMeshComponent* WeaponHead;
+ UPROPERTY() class UStaticMeshComponent* WeaponGrip;
+ class ACryptTownActor* GetInteractionTarget() const;
+ int32 ActiveWeaponMask = 1;
+ int32 QuestProgress[CryptQuests::Count] = {};
+ uint8 QuestState[CryptQuests::Count] = {};
+ float WeaponDamage() const;
+ float WeaponReach() const;
+ void CycleWeapon();
  float AttackCooldown = 0;
+ float DialogueTime = 0.f;
  UPROPERTY() class UAnimSequence* OceanIdle = nullptr;
  UPROPERTY() class UAnimSequence* OceanWalk = nullptr;
  UPROPERTY() class UAnimSequence* OceanRun = nullptr;

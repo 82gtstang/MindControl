@@ -1,10 +1,13 @@
 #include "CryptHero.h"
 #include "CryptMonster.h"
+#include "CryptTownActor.h"
+#include "Materials/MaterialInterface.h"
 #include "EngineUtils.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/InputComponent.h"
+#include "InputCoreTypes.h"
 #include "Components/StaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/StaticMesh.h"
@@ -104,10 +107,31 @@ ACryptHero::ACryptHero()
  SwordVisual->SetVisibility(false);
  static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
  if(Cube.Succeeded()) SwordVisual->SetStaticMesh(Cube.Object);
+ SwordVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+ WeaponHead=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponHead"));
+ WeaponGrip=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponGrip"));
+ for(UStaticMeshComponent* Part : {WeaponHead,WeaponGrip})
+ {
+  Part->SetupAttachment(GetMesh(),TEXT("hand_rSocket"));
+  Part->SetStaticMesh(Cube.Object);
+  Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+  Part->SetVisibility(false);
+ }
 }
 void ACryptHero::BeginPlay()
 {
  Super::BeginPlay();
+ const FName Hand = GetMesh()->DoesSocketExist(TEXT("hand_rSocket")) ? FName(TEXT("hand_rSocket")) : FName(TEXT("hand_r"));
+ for(UStaticMeshComponent* Part : {SwordVisual,WeaponHead,WeaponGrip})
+ {
+  if(GetMesh()->DoesSocketExist(Hand))
+  {
+   Part->AttachToComponent(GetMesh(),FAttachmentTransformRules::SnapToTargetNotIncludingScale,Hand);
+   Part->SetAbsolute(false,false,true);
+  }
+  else
+   Part->AttachToComponent(GetRootComponent(),FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+ }
  if (OceanIdle && GetMesh() && GetMesh()->GetSkeletalMeshAsset())
  {
   GetMesh()->SetAnimationMode(EAnimationMode::AnimationSingleNode);
@@ -136,6 +160,11 @@ void ACryptHero::Tick(float DeltaSeconds)
 {
  Super::Tick(DeltaSeconds);
  AttackCooldown=FMath::Max(0.f,AttackCooldown-DeltaSeconds);
+ if(DialogueTime>0.f)
+ {
+  DialogueTime-=DeltaSeconds;
+  if(DialogueTime<=0.f) Dialogue.Reset();
+ }
  if (!OceanIdle || !GetMesh()) return;
  if (OceanActionTime > 0.f) OceanActionTime=FMath::Max(0.f,OceanActionTime-DeltaSeconds);
  UAnimSequence* Desired=OceanIdle;
@@ -184,6 +213,8 @@ void ACryptHero::SetupPlayerInputComponent(UInputComponent* Input)
  Input->BindAction("Attack",IE_Pressed,this,&ACryptHero::Attack);
  Input->BindAction("Spin",IE_Pressed,this,&ACryptHero::SpinAttack);
  Input->BindAction("Interact",IE_Pressed,this,&ACryptHero::Interact);
+ Input->BindKey(EKeys::Tab,IE_Pressed,this,&ACryptHero::ToggleInventory);
+ Input->BindKey(EKeys::R,IE_Pressed,this,&ACryptHero::CycleWeapon);
 }
 void ACryptHero::MoveForward(float V) { if(FMath::Abs(V)>.01f) AddMovementInput(FRotationMatrix(FRotator(0,GetControlRotation().Yaw,0)).GetUnitAxis(EAxis::X),V); }
 void ACryptHero::MoveRight(float V) { if(FMath::Abs(V)>.01f) AddMovementInput(FRotationMatrix(FRotator(0,GetControlRotation().Yaw,0)).GetUnitAxis(EAxis::Y),V); }
@@ -197,8 +228,8 @@ void ACryptHero::Attack()
  for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
  {
   const FVector Offset=It->GetActorLocation()-GetActorLocation();
-  if(Offset.Size()<260.f && FVector::DotProduct(GetActorForwardVector(),Offset.GetSafeNormal())>.25f)
-   It->TakeHit(bSwordEquipped?2.f:1.f);
+  if(Offset.Size()<WeaponReach() && FVector::DotProduct(GetActorForwardVector(),Offset.GetSafeNormal())>.25f)
+   It->TakeHit(WeaponDamage());
  }
 }
 void ACryptHero::SpinAttack()
@@ -207,10 +238,149 @@ void ACryptHero::SpinAttack()
  AttackCooldown=1.2f;
  PlayOceanAction(OceanSpin,1.2f);
  for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
-  if(FVector::Dist(It->GetActorLocation(),GetActorLocation())<300.f) It->TakeHit(bSwordEquipped?2.f:1.f);
+  if(FVector::Dist(It->GetActorLocation(),GetActorLocation())<WeaponReach()+40.f) It->TakeHit(WeaponDamage());
 }
-void ACryptHero::Interact() { /* Trace for treasure and dungeon portal actors to be implemented */ }
-void ACryptHero::EquipSword(bool bEquip) { bSwordEquipped=bEquip; SwordVisual->SetVisibility(bEquip); }
+ACryptTownActor* ACryptHero::GetInteractionTarget() const
+{
+ ACryptTownActor* Nearest=nullptr;
+ double Closest=FMath::Square(325.0);
+ for(TActorIterator<ACryptTownActor> It(GetWorld());It;++It)
+ {
+  if(It->QuestIndex<0 || It->QuestIndex>=CryptQuests::Count) continue;
+  if(!It->bQuestGiver && QuestState[It->QuestIndex]!=1) continue;
+  const double Distance=FVector::DistSquared(GetActorLocation(),It->GetActorLocation());
+  if(Distance<Closest)
+  {
+   Closest=Distance;
+   Nearest=*It;
+  }
+ }
+ return Nearest;
+}
+
+FString ACryptHero::GetInteractionLabel() const
+{
+ if(const ACryptTownActor* Target=GetInteractionTarget())
+  return Target->bQuestGiver ? FString(CryptQuests::Data[Target->QuestIndex].Giver) : FString(TEXT("Inspect objective"));
+ return {};
+}
+
+FString ACryptHero::GetQuestJournal() const
+{
+ FString Journal;
+ for(int32 Index=0;Index<CryptQuests::Count;++Index)
+ {
+  const auto& Quest=CryptQuests::Data[Index];
+  if(QuestState[Index]==1)
+  {
+   if(QuestProgress[Index]>=Quest.Target)
+    Journal+=FString::Printf(TEXT("%s: return to %s\n"),Quest.Title,Quest.Giver);
+   else
+    Journal+=FString::Printf(TEXT("%s (%d/%d)\n"),Quest.Objective,QuestProgress[Index],Quest.Target);
+  }
+  else if(QuestState[Index]==2)
+   Journal+=FString::Printf(TEXT("%s: complete\n"),Quest.Title);
+ }
+ return Journal.IsEmpty() ? FString(TEXT("Talk to a townsperson to begin.")) : Journal;
+}
+
+void ACryptHero::Interact()
+{
+ ACryptTownActor* Target=GetInteractionTarget();
+ if(!Target)
+ {
+  Dialogue.Reset();
+  return;
+ }
+ const int32 Index=Target->QuestIndex;
+ const auto& Quest=CryptQuests::Data[Index];
+ if(!Target->bQuestGiver)
+ {
+  QuestProgress[Index]=FMath::Min(QuestProgress[Index]+1,Quest.Target);
+  Dialogue=FString::Printf(TEXT("%s (%d/%d)"),Quest.Objective,QuestProgress[Index],Quest.Target);
+  Target->Destroy();
+ }
+ else if(QuestState[Index]==0)
+ {
+  QuestState[Index]=1;
+  Dialogue=FString::Printf(TEXT("%s: %s"),Quest.Giver,Quest.Offer);
+ }
+ else if(QuestState[Index]==1 && QuestProgress[Index]>=Quest.Target)
+ {
+  QuestState[Index]=2;
+  AddTreasure(Quest.Treasure);
+  ActiveWeaponMask|=1<<static_cast<int32>(Quest.Reward);
+  Dialogue=FString::Printf(TEXT("%s: %s"),Quest.Giver,Quest.Thanks);
+ }
+ else
+  Dialogue=FString::Printf(TEXT("%s: %s"),Quest.Giver,QuestState[Index]==2?Quest.Thanks:Quest.Objective);
+ DialogueTime=7.f;
+}
+
+void ACryptHero::DefeatedRoadRaider()
+{
+ QuestProgress[0]=FMath::Min(QuestProgress[0]+1,CryptQuests::Data[0].Target);
+}
+
+bool ACryptHero::OwnsWeapon(ECryptWeapon Weapon) const
+{
+ return (ActiveWeaponMask & (1<<static_cast<int32>(Weapon)))!=0;
+}
+
+void ACryptHero::EquipWeapon(ECryptWeapon Weapon)
+{
+ if(!OwnsWeapon(Weapon)) return;
+ EquippedWeapon=Weapon;
+ bSwordEquipped=Weapon==ECryptWeapon::Sword;
+ const bool bArmed=Weapon!=ECryptWeapon::Unarmed;
+ for(UStaticMeshComponent* Part : {SwordVisual,WeaponHead,WeaponGrip})
+  Part->SetVisibility(bArmed);
+ if(!bArmed) return;
+ const bool bSpear=Weapon==ECryptWeapon::Spear;
+ const bool bAxe=Weapon==ECryptWeapon::Axe;
+ const FVector Anchor=SwordVisual->GetAttachParent()==GetRootComponent()?FVector(24,44,0):FVector::ZeroVector;
+ // Relative attachment offsets follow the hand; world scale keeps real weapon sizes.
+ const float ParentScale=FMath::Max(.001f,float(SwordVisual->GetAttachParent()->GetComponentScale().Z));
+ const auto Place=[&](UStaticMeshComponent* Part,FVector Offset,FVector Scale,FRotator Rotation=FRotator::ZeroRotator)
+ {
+  Part->SetRelativeLocationAndRotation(Anchor+Offset/ParentScale,Rotation);
+  Part->SetWorldScale3D(Scale);
+ };
+ Place(SwordVisual,FVector(0,0,bSpear?27.f:38.f),bSpear?FVector(.035,.035,1.65):FVector(.045,bAxe?.055:.105,bAxe?.75:.72));
+ Place(WeaponHead,FVector(0,bAxe?10.f:0.f,bSpear?116.f:(bAxe?72.f:8.f)),
+  bSpear?FVector(.035,.10,.22):(bAxe?FVector(.05,.30,.23):FVector(.09,.31,.055)),bSpear?FRotator(0,0,25):FRotator::ZeroRotator);
+ Place(WeaponGrip,FVector(0,0,-3),FVector(.075,.075,.22));
+}
+
+void ACryptHero::EquipSword(bool bEquip)
+{
+ if(bEquip) ActiveWeaponMask|=1<<static_cast<int32>(ECryptWeapon::Sword);
+ EquipWeapon(bEquip?ECryptWeapon::Sword:ECryptWeapon::Unarmed);
+}
+
+void ACryptHero::CycleWeapon()
+{
+ for(int32 Offset=1;Offset<=4;++Offset)
+ {
+  const auto Weapon=static_cast<ECryptWeapon>((static_cast<int32>(EquippedWeapon)+Offset)%4);
+  if(OwnsWeapon(Weapon))
+  {
+   EquipWeapon(Weapon);
+   return;
+  }
+ }
+}
+
+float ACryptHero::WeaponDamage() const
+{
+ if(EquippedWeapon==ECryptWeapon::Axe) return 3.f;
+ return EquippedWeapon==ECryptWeapon::Unarmed?1.f:2.f;
+}
+
+float ACryptHero::WeaponReach() const
+{
+ return EquippedWeapon==ECryptWeapon::Spear?365.f:260.f;
+}
 
 void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
 {
@@ -221,6 +391,26 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
  const float S=FMath::Max(.7f,FMath::Min(ViewSize.X/1600.f,ViewSize.Y/900.f));
  auto Hit=[&](float X,float Y) { return FMath::Abs(Location.X-X)<78.f*S && FMath::Abs(Location.Y-Y)<78.f*S; };
  const float W=ViewSize.X,H=ViewSize.Y;
+ if(Hit(W-280*S,275*S))
+ {
+  ToggleInventory();
+  return;
+ }
+ if(bInventoryOpen)
+ {
+  for(int32 Index=0;Index<4;++Index)
+  {
+   const float Y=H*.30f+Index*H*.10f;
+   if(Location.X>=W*.25f && Location.X<=W*.62f && FMath::Abs(Location.Y-Y)<H*.045f)
+    EquipWeapon(static_cast<ECryptWeapon>(Index));
+  }
+  return;
+ }
+ if(Hit(110*S,210*S) && !GetInteractionLabel().IsEmpty())
+ {
+  Interact();
+  return;
+ }
  // Right virtual thumb pad: a tap in its inner circle triggers jump.
  // Keep the outer ring available for normal right-stick camera movement.
  const FVector2D RightPadCenter(W*.875f,H*.855f);
@@ -235,5 +425,4 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
  if(Hit(W-110*S,105*S)) Jump();
  else if(Hit(W-280*S,105*S)) Attack();
  else if(Hit(W-110*S,275*S)) SpinAttack();
- else if(Hit(W-280*S,275*S)) ToggleInventory();
 }
