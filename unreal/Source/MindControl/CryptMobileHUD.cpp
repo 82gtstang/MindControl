@@ -3,6 +3,8 @@
 #include "CryptHudLayout.h"
 #include "CryptWorldLayout.h"
 #include "Engine/Canvas.h"
+#include "GameFramework/PlayerController.h"
+#include <initializer_list>
 
 void ACryptMobileHUD::DrawHUD()
 {
@@ -13,25 +15,142 @@ void ACryptMobileHUD::DrawHUD()
  const float S=Layout.Scale;
  const FLinearColor Panel(.035f,.055f,.08f,.9f);
  const FLinearColor Gold(.96f,.79f,.44f);
- const auto Button=[&](const FVector2D& Center,const TCHAR* Label)
+ const FLinearColor Bronze(.53f,.37f,.21f,.95f);
+ const FLinearColor Ink(.061f,.083f,.099f,.97f);
+ enum class EIcon { Fist, Sword, Axe, Spear, Jump, Spin, Bag, Talk, Save, Restore, Castle, Town };
+ const auto Stroke=[&](FVector2D A,FVector2D B,FLinearColor Color,float Width=1.6f)
  {
-  const float R=Layout.Radius;
-  DrawRect(Panel,Center.X-R,Center.Y-R,R*2,R*2);
-  float Width=0,Height=0;
-  GetTextSize(Label,Width,Height,nullptr,1.1f*S);
-  DrawText(Label,FLinearColor::White,Center.X-Width*.5,Center.Y-Height*.5,nullptr,1.1f*S,false);
+  DrawLine(A.X,A.Y,B.X,B.Y,Color,Width*S);
  };
- Button(Layout.Jump,TEXT("JUMP"));
- Button(Layout.Attack,TEXT("ATTACK"));
- Button(Layout.Spin,TEXT("SPIN"));
- Button(Layout.Bag,TEXT("BAG"));
-
+ const auto Frame=[&](float X,float Y,float Width,float Height,FLinearColor Fill,FLinearColor Border)
+ {
+  const float T=FMath::Max(1.f,1.4f*S);
+  DrawRect(FLinearColor(.005f,.009f,.012f,.62f),X+3*S,Y+4*S,Width,Height);
+  DrawRect(Border,X,Y,Width,Height);
+  DrawRect(Fill,X+T,Y+T,Width-2*T,Height-2*T);
+  DrawRect(FLinearColor(.86f,.67f,.38f,.70f),X+T,Y+T,FMath::Min(Width-2*T,18.f*S),T);
+  DrawRect(FLinearColor(.86f,.67f,.38f,.70f),X+Width-19.4f*S,Y+Height-2*T,18*S,T);
+ };
+ const auto Icon=[&](EIcon Shape,FVector2D Center,float Size,FLinearColor Color)
+ {
+  const auto Segment=[&](float X1,float Y1,float X2,float Y2)
+  {
+   Stroke(Center+FVector2D(X1,Y1)*Size,Center+FVector2D(X2,Y2)*Size,Color,1.85f);
+  };
+  const auto Path=[&](std::initializer_list<FVector2D> Points)
+  {
+   auto Previous=Points.begin();
+   for(auto Next=Previous+1;Next!=Points.end();++Next,++Previous)
+    Stroke(Center+*Previous*Size,Center+*Next*Size,Color,1.8f);
+  };
+  switch(Shape)
+  {
+   case EIcon::Fist:
+    Path({{-.7,.65},{-.86,-.1},{-.55,-.69},{.48,-.78},{.81,-.4},{.72,.2},{.39,.65},{-.7,.65}});
+    Path({{-.58,.2},{-.23,-.16},{.38,-.07},{.65,.16}});
+    for(int32 Knuckle=0;Knuckle<3;++Knuckle) Segment(-.45f+.32f*Knuckle,-.68f,-.35f+.32f*Knuckle,-.28f);
+    break;
+   case EIcon::Sword:
+    Path({{-.25,.06},{.71,-.86},{.88,-.78},{.12,.36}});
+    Segment(-.43,.06,.22,.57); Segment(-.08,.31,-.61,.86);
+    break;
+   case EIcon::Axe:
+    Segment(-.61,.84,.45,-.74);
+    Path({{.25,-.44},{-.15,-.81},{.45,-.87},{.89,-.48},{.67,.06},{.25,-.44}});
+    break;
+   case EIcon::Spear:
+    Segment(-.69,.86,.51,-.46);
+    Path({{.35,-.31},{.38,-.69},{.86,-.87},{.75,-.35},{.35,-.31}});
+    break;
+   case EIcon::Jump:
+    Path({{-.63,-.17},{0,-.79},{.63,-.17}});
+    Segment(0,-.76,0,.57); Segment(-.55,.70,.55,.70);
+    break;
+   case EIcon::Spin:
+    Path({{.72,-.54},{.28,-.83},{-.33,-.79},{-.77,-.39},{-.80,.25},{-.42,.71},{.17,.82},{.73,.44}});
+    Path({{.78,-.92},{.77,-.51},{.34,-.46}});
+    break;
+   case EIcon::Bag:
+    Path({{-.63,-.29},{-.49,-.01},{-.83,.37},{-.66,.77},{.66,.77},{.83,.37},{.48,-.01},{.63,-.29},{-.63,-.29}});
+    Path({{-.55,-.34},{-.67,-.72},{.66,-.72},{.55,-.34}}); Segment(-.43,-.08,.43,-.08);
+    break;
+   case EIcon::Talk:
+    Path({{-.8,-.62},{.8,-.62},{.8,.37},{.06,.37},{-.48,.78},{-.44,.37},{-.8,.37},{-.8,-.62}});
+    Segment(-.53,-.23,.54,-.23); Segment(-.53,.03,.30,.03);
+    break;
+   case EIcon::Save:
+    Path({{-.73,-.62},{.52,-.62},{.74,-.4},{.74,.68},{-.73,.68},{-.73,-.62}});
+    Path({{-.42,-.62},{-.42,-.12},{.36,-.12},{.36,-.62}}); Segment(-.29,.36,.29,.36);
+    break;
+   case EIcon::Restore:
+    Path({{.72,-.45},{.24,-.78},{-.42,-.72},{-.72,-.25},{-.66,.33},{-.19,.74},{.40,.67},{.76,.26}});
+    Path({{-.77,-.70},{-.73,-.24},{-.29,-.29}});
+    break;
+   case EIcon::Castle:
+    Path({{-.84,.69},{-.84,-.58},{-.51,-.58},{-.51,-.23},{-.16,-.23},{-.16,-.58},{.17,-.58},{.17,-.23},{.51,-.23},{.51,-.58},{.84,-.58},{.84,.69},{-.84,.69}});
+    Path({{-.25,.66},{-.25,.19},{.25,.19},{.25,.66}});
+    break;
+   case EIcon::Town:
+    Path({{-.82,-.12},{0,-.78},{.82,-.12},{.54,-.12},{.54,.69},{-.54,.69},{-.54,-.12},{-.82,-.12}});
+    Path({{-.18,.69},{-.18,.19},{.19,.19},{.19,.69}});
+    break;
+  }
+ };
+ const auto WeaponIcon=[](ECryptWeapon Weapon)
+ {
+  switch(Weapon)
+  {
+   case ECryptWeapon::Sword:return EIcon::Sword;
+   case ECryptWeapon::Axe:return EIcon::Axe;
+   case ECryptWeapon::Spear:return EIcon::Spear;
+   default:return EIcon::Fist;
+  }
+ };
+ const auto WeaponName=[](ECryptWeapon Weapon)
+ {
+  switch(Weapon)
+  {
+   case ECryptWeapon::Sword:return TEXT("Longsword");
+   case ECryptWeapon::Axe:return TEXT("Battle axe");
+   case ECryptWeapon::Spear:return TEXT("Spear");
+   default:return TEXT("Unarmed");
+  }
+ };
  const ACryptHero* Hero=Cast<ACryptHero>(GetOwningPawn());
  if(!Hero) return;
 
+ const auto& Trail=Hero->GetStrikeTrail();
+ const float Strength=Hero->GetStrikeStrength();
+ const bool bArmed=Hero->EquippedWeapon!=ECryptWeapon::Unarmed;
+ const FLinearColor Glow=bArmed?FLinearColor(.78f,.91f,1.f):FLinearColor(1.f,.70f,.38f);
+ if(const APlayerController* Controller=GetOwningPlayerController())
+ {
+  for(int32 Index=1;Index<Trail.Num();++Index)
+  {
+   FVector2D A,B;
+   if(!Controller->ProjectWorldLocationToScreen(Trail[Index-1],A) || !Controller->ProjectWorldLocationToScreen(Trail[Index],B)) continue;
+   const float Opacity=Strength*float(Index)/Trail.Num();
+   Stroke(A,B,Glow.CopyWithNewOpacity(.30f*Opacity),bArmed?8.f:4.f);
+   Stroke(A,B,Glow.CopyWithNewOpacity(.90f*Opacity),bArmed?2.8f:1.8f);
+  }
+ }
+ const auto Button=[&](const FVector2D& Center,EIcon Shape,const TCHAR* Label,bool bSelected=false)
+ {
+  const float R=Layout.Radius;
+  Frame(Center.X-R,Center.Y-R,2*R,2*R,bSelected?FLinearColor(.24f,.16f,.085f,.96f):Ink,bSelected?Gold:Bronze);
+  Icon(Shape,Center-FVector2D(0,R*.17f),R*.33f,Gold);
+  float Width=0,Height=0;
+  GetTextSize(Label,Width,Height,nullptr,.90f*S);
+  DrawText(Label,FLinearColor::White,Center.X-Width*.5,Center.Y+R*.43f-Height*.5,nullptr,.90f*S,false);
+ };
+ Button(Layout.Jump,EIcon::Jump,TEXT("JUMP"));
+ Button(Layout.Attack,WeaponIcon(Hero->EquippedWeapon),bArmed?TEXT("ATTACK"):TEXT("PUNCH"),Strength>.1f);
+ Button(Layout.Spin,EIcon::Spin,TEXT("SPIN"));
+ Button(Layout.Bag,EIcon::Bag,TEXT("BAG"),Hero->bInventoryOpen);
+
  const FVector2D Origin=Layout.MapOrigin,Size=Layout.MapSize;
  const FLinearColor RiverColor(.31f,.72f,.88f);
- DrawRect(FLinearColor(.057f,.10f,.067f,.94f),Origin.X,Origin.Y,Size.X,Size.Y);
+ Frame(Origin.X,Origin.Y,Size.X,Size.Y,FLinearColor(.068f,.115f,.080f,.97f),Bronze);
  const auto ToMap=[&](const FVector& Location)
  {
   const FVector2D Unit=CryptWorld::MapPoint(Location);
@@ -41,6 +160,21 @@ void ACryptMobileHUD::DrawHUD()
  {
   DrawLine(A.X,A.Y,B.X,B.Y,Color,Thickness*S);
  };
+ for(const FVector2D Hill : {FVector2D(-3250,-2800),FVector2D(3400,-2950),FVector2D(-3300,3200),FVector2D(4330,3200)})
+ {
+  for(int32 Ring=1;Ring<=3;++Ring)
+  {
+   const float Radius=Ring*390.f;
+   FVector2D Prior=ToMap(FVector(Hill.X+Radius,Hill.Y,0));
+   for(int32 Step=1;Step<=20;++Step)
+   {
+    const float Angle=2*PI*Step/20.f;
+    const FVector2D Point=ToMap(FVector(Hill.X+Radius*FMath::Cos(Angle),Hill.Y+Radius*.71f*FMath::Sin(Angle),0));
+    MapLine(Prior,Point,FLinearColor(.22f,.33f,.18f,.72f),.8f);
+    Prior=Point;
+   }
+  }
+ }
  MapLine(ToMap(FVector(-5500,0,0)),ToMap(FVector(5500,0,0)),FLinearColor(.58f,.53f,.38f),2.f);
  for(const auto& River : CryptWorld::Rivers)
  {
@@ -53,16 +187,16 @@ void ACryptMobileHUD::DrawHUD()
    Previous=Point;
   }
  }
- const auto Landmark=[&](FVector2D World,const TCHAR* Label,float OffsetY)
+ const auto Landmark=[&](FVector2D World,const TCHAR* Label,float OffsetY,EIcon Shape)
  {
   const FVector2D Point=ToMap(FVector(World.X,World.Y,0));
-  DrawRect(FLinearColor(.83f,.85f,.76f),Point.X-3*S,Point.Y-3*S,6*S,6*S);
+  Icon(Shape,Point,5.7f*S,Gold);
   float Width=0,Height=0;
   GetTextSize(Label,Width,Height,nullptr,.87f*S);
   DrawText(Label,FLinearColor::White,Point.X-Width*.72f,Point.Y+OffsetY*S,nullptr,.87f*S,false);
  };
- Landmark(CryptWorld::Town,TEXT("Town"),7.f);
- Landmark(CryptWorld::Castle,TEXT("Castle"),-23.f);
+ Landmark(CryptWorld::Town,TEXT("Town"),7.f,EIcon::Town);
+ Landmark(CryptWorld::Castle,TEXT("Castle"),-23.f,EIcon::Castle);
  DrawText(TEXT("N"),FLinearColor::White,Origin.X+9*S,Origin.Y+4*S,nullptr,.9f*S,false);
 
  TArray<FCryptQuestMarker> Markers;
@@ -89,27 +223,35 @@ void ACryptMobileHUD::DrawHUD()
  MapLine(Left,Right,FLinearColor::White,2.f);
  MapLine(Right,Tip,FLinearColor::White,2.f);
 
- DrawText(FString::Printf(TEXT("Treasure: %d"),Hero->TreasureCount),Gold,30*S,25*S,nullptr,1.3f*S,false);
+ Frame(20*S,12*S,210*S,44*S,Ink,Bronze);
+ Icon(WeaponIcon(Hero->EquippedWeapon),FVector2D(38*S,33*S),10*S,Gold);
+ DrawText(WeaponName(Hero->EquippedWeapon),FLinearColor::White,55*S,17*S,nullptr,1.12f*S,false);
+ DrawText(FString::Printf(TEXT("%d treasure"),Hero->TreasureCount),Gold,55*S,35*S,nullptr,.83f*S,false);
 
  if(Hero->bInventoryOpen)
  {
-  const TCHAR* Weapons[]={TEXT("Unarmed"),TEXT("Longsword"),TEXT("Battle axe"),TEXT("Spear")};
-  DrawRect(Panel,W*.22f,H*.14f,W*.44f,H*.72f);
-  DrawText(TEXT("EQUIPMENT"),Gold,W*.26f,H*.18f,nullptr,1.65f*S,false);
+  Frame(W*.22f,H*.14f,W*.44f,H*.72f,Ink,Bronze);
+  Icon(EIcon::Bag,FVector2D(W*.255f,H*.201f),11*S,Gold);
+  DrawText(TEXT("Adventure Bag"),Gold,W*.285f,H*.172f,nullptr,1.75f*S,false);
   for(int32 Index=0;Index<4;++Index)
   {
    const auto Weapon=static_cast<ECryptWeapon>(Index);
    const bool bOwned=Hero->OwnsWeapon(Weapon);
    const bool bEquipped=Weapon==Hero->EquippedWeapon;
    const float Y=H*.30f+Index*H*.10f;
-   DrawRect(FLinearColor(.13f,.19f,.25f,.9f),W*.25f,Y-H*.045f,W*.37f,H*.09f);
-   DrawText(FString::Printf(TEXT("%s%s"),Weapons[Index],bEquipped?TEXT("  (equipped)"):(!bOwned?TEXT("  (quest reward)"):TEXT(""))),
-     bEquipped?Gold:(bOwned?FLinearColor::White:FLinearColor(.52f,.57f,.62f)),W*.26f,Y-9*S,nullptr,1.25f*S,false);
+   const FLinearColor Text=bOwned?FLinearColor::White:FLinearColor(.51f,.58f,.61f);
+   Frame(W*.25f,Y-H*.045f,W*.37f,H*.09f,bEquipped?FLinearColor(.24f,.17f,.086f):FLinearColor(.105f,.146f,.167f),bEquipped?Gold:Bronze);
+   Icon(WeaponIcon(Weapon),FVector2D(W*.278f,Y),FMath::Min(11.f*S,H*.031f),bOwned?Gold:Text);
+   DrawText(WeaponName(Weapon),Text,W*.302f,Y-8*S,nullptr,1.15f*S,false);
+   DrawText(bEquipped?TEXT("Equipped"):(bOwned?TEXT("Tap to equip"):TEXT("Quest reward")),
+     bEquipped?Gold:Text,W*.50f,Y-7*S,nullptr,.88f*S,false);
   }
-  DrawRect(FLinearColor(.18f,.24f,.25f),W*.25f,H*.67f,W*.175f,H*.08f);
-  DrawRect(FLinearColor(.18f,.24f,.25f),W*.445f,H*.67f,W*.175f,H*.08f);
-  DrawText(TEXT("Save"),Gold,W*.27f,H*.68f,nullptr,1.15f*S,false);
-  DrawText(TEXT("Restore"),Gold,W*.465f,H*.68f,nullptr,1.15f*S,false);
+  Frame(W*.25f,H*.67f,W*.175f,H*.08f,Ink,Bronze);
+  Frame(W*.445f,H*.67f,W*.175f,H*.08f,Ink,Bronze);
+  Icon(EIcon::Save,FVector2D(W*.275f,H*.71f),8*S,Gold);
+  Icon(EIcon::Restore,FVector2D(W*.47f,H*.71f),8*S,Gold);
+  DrawText(TEXT("Save"),Gold,W*.297f,H*.689f,nullptr,1.05f*S,false);
+  DrawText(TEXT("Restore"),Gold,W*.492f,H*.689f,nullptr,1.05f*S,false);
   if(!Hero->SaveStatus.IsEmpty())
    DrawText(Hero->SaveStatus,FLinearColor::White,W*.25f,H*.78f,nullptr,.95f*S,false);
   return;
@@ -118,14 +260,14 @@ void ACryptMobileHUD::DrawHUD()
  const FString Nearby=Hero->GetInteractionLabel();
  if(!Nearby.IsEmpty())
  {
-  Button(Layout.Interact,TEXT("INTERACT"));
+  Button(Layout.Interact,EIcon::Talk,TEXT("INTERACT"));
   DrawText(Nearby,Gold,38*S,Layout.Interact.Y+Layout.Radius+6*S,nullptr,1.05f*S,false);
  }
 
  TArray<FString> Entries;
  Hero->GetQuestJournal().ParseIntoArrayLines(Entries);
  for(int32 Index=0;Index<Entries.Num();++Index)
-  DrawText(Entries[Index],FLinearColor::White,30*S,(52+20*Index)*S,nullptr,1.0f*S,false);
+  DrawText(Entries[Index],FLinearColor::White,30*S,(63+20*Index)*S,nullptr,1.0f*S,false);
 
  if(!Hero->Dialogue.IsEmpty())
  {

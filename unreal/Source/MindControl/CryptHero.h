@@ -29,6 +29,8 @@ public:
  void SaveProgress();
  void RestoreProgress();
  void GetQuestMapMarkers(TArray<FCryptQuestMarker>& Markers) const;
+ const TArray<FVector>& GetStrikeTrail() const { return StrikeTrail; }
+ float GetStrikeStrength() const;
  FString SaveStatus;
  FString Dialogue;
  ECryptWeapon EquippedWeapon = ECryptWeapon::Unarmed;
@@ -56,6 +58,17 @@ protected:
  float WeaponDamage() const;
  float WeaponReach() const;
  void CycleWeapon();
+ void StartStrike(bool bSpin);
+ void UpdateStrike(float DeltaSeconds);
+ void ResolveStrike();
+ FName GripBone;
+ TArray<FVector> StrikeTrail;
+ float StrikeAge=0.f;
+ float StrikeDuration=0.f;
+ float TrailSampleTime=0.f;
+ bool bSpinStrike=false;
+ bool bStrikeResolved=false;
+ ECryptWeapon StrikeWeapon=ECryptWeapon::Unarmed;
  float AttackCooldown = 0;
  float DialogueTime = 0.f;
  UPROPERTY() class UAnimSequence* OceanIdle = nullptr;

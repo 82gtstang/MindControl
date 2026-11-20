@@ -30,9 +30,9 @@ namespace
   for(const auto& River : CryptWorld::Rivers)
   {
    if(Y<River.Start || Y>River.End) continue;
-   const float Bank=1.f-FMath::SmoothStep(River.Width*.84f,River.Width*1.75f,FMath::Abs(X-River.X(Y)));
+   const float Bank=1.f-FMath::SmoothStep(River.BedWidth(),River.BedWidth()+155.f,FMath::Abs(X-River.X(Y)));
    const float EndBlend=FMath::SmoothStep(0.f,180.f,FMath::Min(Y-River.Start,River.End-Y));
-   Height=FMath::Lerp(Height,River.Height(Y)-58.f,Bank*EndBlend);
+   Height=FMath::Lerp(Height,River.Height(Y)-95.f,Bank*EndBlend);
   }
   return Height;
  }
@@ -56,7 +56,7 @@ namespace
   if(X>-3500.f && X<3100.f && FMath::Abs(Y+1650.f+180.f*FMath::Sin(X/860.f))<125.f)
    return true;
   for(const auto& River : CryptWorld::Rivers)
-   if(Y>River.Start && Y<River.End && FMath::Abs(X-River.X(Y))<River.Width*1.45f)
+   if(Y>River.Start && Y<River.End && FMath::Abs(X-River.X(Y))<River.BedWidth()+60.f)
     return true;
   return false;
  }
@@ -125,9 +125,9 @@ namespace
    for(int32 Index=0;Index<=Samples;++Index)
    {
     const float T=float(Index)/Samples;
-    const float Y=FMath::Lerp(River.Start+150.f,River.End-150.f,T);
+    const float Y=FMath::Lerp(River.Start+190.f,River.End-190.f,T);
     const float X=River.X(Y);
-    const float Z=River.Height(Y);
+    const float Z=River.Height(Y)+6.f;
     const float HalfWidth=River.Width*.87f*FMath::Lerp(.40f,1.f,FMath::SmoothStep(0.f,.07f,FMath::Min(T,1.f-T)));
     const float Slope=(River.Height(Y+5)-River.Height(Y-5))*.1f;
     for(int32 Side=0;Side<2;++Side)

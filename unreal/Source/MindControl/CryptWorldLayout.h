@@ -16,13 +16,15 @@ namespace CryptWorld
   float Start,End,Center,Width,Phase;
   bool bFalls;
 
+  float BedWidth() const { return Width + 125.f; }
+
   float X(float Y) const { return Center+220.f*FMath::Sin(Y/590.f+Phase); }
   float Height(float Y) const
   {
    const float T=FMath::Clamp((Y-Start)/(End-Start),0.f,1.f);
    if(bFalls)
     return -88.f+80.f*T+320.f*FMath::SmoothStep(.47f,.53f,T);
-   return -235.f+170.f*T;
+   return -155.f+125.f*T;
   }
  };
  inline constexpr FRiver Rivers[]={

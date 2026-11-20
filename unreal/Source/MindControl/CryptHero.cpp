@@ -19,6 +19,7 @@
 #include "Engine/SkeletalMesh.h"
 #include "Components/CapsuleComponent.h"
 #include "Animation/AnimSequence.h"
+#include "Animation/AnimSingleNodeInstance.h"
 ACryptHero::ACryptHero()
 {
  PrimaryActorTick.bCanEverTick = true;
@@ -124,12 +125,17 @@ ACryptHero::ACryptHero()
 void ACryptHero::BeginPlay()
 {
  Super::BeginPlay();
- const FName Hand = GetMesh()->DoesSocketExist(TEXT("hand_rSocket")) ? FName(TEXT("hand_rSocket")) : FName(TEXT("hand_r"));
+ for(const FName Candidate : {FName(TEXT("hand_rSocket")),FName(TEXT("hand_R")),FName(TEXT("RightHand"))})
+ {
+  if(!GetMesh()->DoesSocketExist(Candidate)) continue;
+  GripBone=Candidate;
+  break;
+ }
  for(UStaticMeshComponent* Part : {SwordVisual,WeaponHead,WeaponGrip})
  {
-  if(GetMesh()->DoesSocketExist(Hand))
+  if(!GripBone.IsNone())
   {
-   Part->AttachToComponent(GetMesh(),FAttachmentTransformRules::SnapToTargetNotIncludingScale,Hand);
+   Part->AttachToComponent(GetMesh(),FAttachmentTransformRules::SnapToTargetNotIncludingScale,GripBone);
    Part->SetAbsolute(false,false,true);
   }
   else
@@ -163,6 +169,7 @@ void ACryptHero::Tick(float DeltaSeconds)
 {
  Super::Tick(DeltaSeconds);
  AttackCooldown=FMath::Max(0.f,AttackCooldown-DeltaSeconds);
+ UpdateStrike(DeltaSeconds);
  if(DialogueTime>0.f)
  {
   DialogueTime-=DeltaSeconds;
@@ -192,6 +199,7 @@ void ACryptHero::Tick(float DeltaSeconds)
      ActiveOceanAnimation!=Desired)
  {
   GetMesh()->PlayAnimation(Desired,bLoop);
+  if(auto* Player=GetMesh()->GetSingleNodeInstance()) Player->SetPlayRate(1.f);
   ActiveOceanAnimation=Desired;
   GetMesh()->SetMorphTarget(TEXT("OceanRunLeftLeg"), Desired == OceanRun ? 1.f : 0.f);
  }
@@ -202,6 +210,8 @@ void ACryptHero::PlayOceanAction(UAnimSequence* Sequence,float Duration)
  ActiveOceanAnimation=Sequence;
  OceanActionTime=Duration;
  GetMesh()->PlayAnimation(Sequence,false);
+ if(auto* Player=GetMesh()->GetSingleNodeInstance())
+  Player->SetPlayRate(Sequence->GetPlayLength()/FMath::Max(Duration,.05f));
  GetMesh()->SetMorphTarget(TEXT("OceanRunLeftLeg"), 0.f);
 }
 void ACryptHero::SetupPlayerInputComponent(UInputComponent* Input)
@@ -227,24 +237,86 @@ void ACryptHero::Turn(float V) { AddControllerYawInput(V); }
 void ACryptHero::LookUp(float V) { AddControllerPitchInput(V); }
 void ACryptHero::Attack()
 {
- if(AttackCooldown>0) return;
- AttackCooldown=.45f;
- PlayOceanAction(OceanAttack,.45f);
+ StartStrike(false);
+}
+
+void ACryptHero::SpinAttack()
+{
+ StartStrike(true);
+}
+
+void ACryptHero::StartStrike(bool bSpin)
+{
+ if(AttackCooldown>0.f || bInventoryOpen) return;
+ bSpinStrike=bSpin;
+ bStrikeResolved=false;
+ StrikeWeapon=EquippedWeapon;
+ StrikeAge=0.f;
+ TrailSampleTime=0.f;
+ StrikeTrail.Reset();
+ StrikeDuration=bSpin?1.12f:(StrikeWeapon==ECryptWeapon::Axe?.68f:(StrikeWeapon==ECryptWeapon::Unarmed?.48f:.56f));
+ AttackCooldown=StrikeDuration+.05f;
+ PlayOceanAction(bSpin?OceanSpin:OceanAttack,StrikeDuration);
+}
+
+void ACryptHero::ResolveStrike()
+{
+ const float Reach=WeaponReach()+(bSpinStrike?40.f:0.f);
  for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
  {
+  if(It->GetRemainingHealth()<=0.f) continue;
   const FVector Offset=It->GetActorLocation()-GetActorLocation();
-  if(Offset.Size()<WeaponReach() && FVector::DotProduct(GetActorForwardVector(),Offset.GetSafeNormal())>.25f)
+  if(Offset.SizeSquared()>=FMath::Square(Reach)) continue;
+  if(bSpinStrike || FVector::DotProduct(GetActorForwardVector(),Offset.GetSafeNormal())>.25f)
    It->TakeHit(WeaponDamage());
  }
 }
-void ACryptHero::SpinAttack()
+
+void ACryptHero::UpdateStrike(float DeltaSeconds)
 {
- if(AttackCooldown>0) return;
- AttackCooldown=1.2f;
- PlayOceanAction(OceanSpin,1.2f);
- for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
-  if(FVector::Dist(It->GetActorLocation(),GetActorLocation())<WeaponReach()+40.f) It->TakeHit(WeaponDamage());
+ if(StrikeDuration<=0.f) return;
+ StrikeAge+=DeltaSeconds;
+ const float Phase=StrikeAge/StrikeDuration;
+ if(!bStrikeResolved && Phase>=(bSpinStrike?.46f:.42f))
+ {
+  bStrikeResolved=true;
+  ResolveStrike();
+ }
+ if(Phase>=1.f)
+ {
+  StrikeDuration=0.f;
+  StrikeTrail.Reset();
+  return;
+ }
+ if(Phase<.18f || Phase>.77f) return;
+ TrailSampleTime+=DeltaSeconds;
+ if(TrailSampleTime<.024f && !StrikeTrail.IsEmpty()) return;
+ TrailSampleTime=0.f;
+ const bool bArmed=StrikeWeapon!=ECryptWeapon::Unarmed;
+ const FVector Wrist=GripBone.IsNone()
+  ? GetActorTransform().TransformPosition(FVector(22,38,12))
+  : GetMesh()->GetSocketLocation(GripBone);
+ FVector End=Wrist;
+ if(bArmed && EquippedWeapon==StrikeWeapon)
+ {
+  const UStaticMeshComponent* Blade=StrikeWeapon==ECryptWeapon::Sword?SwordVisual:WeaponHead;
+  End=Blade->GetComponentLocation()+Blade->GetUpVector()*(50.f*Blade->GetComponentScale().Z);
+ }
+ else if(!GripBone.IsNone() && GetMesh()->DoesSocketExist(TEXT("forearm_R")))
+ {
+  const FVector Forearm=GetMesh()->GetSocketLocation(TEXT("forearm_R"));
+  End=Wrist+(Wrist-Forearm).GetSafeNormal()*12.f;
+ }
+ StrikeTrail.Add(End);
+ if(StrikeTrail.Num()>10) StrikeTrail.RemoveAt(0);
 }
+
+float ACryptHero::GetStrikeStrength() const
+{
+ if(StrikeDuration<=0.f) return 0.f;
+ return 1.f-FMath::SmoothStep(.62f,1.f,StrikeAge/StrikeDuration);
+}
+
 ACryptTownActor* ACryptHero::GetInteractionTarget() const
 {
  ACryptTownActor* Nearest=nullptr;
@@ -334,7 +406,7 @@ bool ACryptHero::OwnsWeapon(ECryptWeapon Weapon) const
 
 void ACryptHero::EquipWeapon(ECryptWeapon Weapon)
 {
- if(!OwnsWeapon(Weapon)) return;
+ if(!OwnsWeapon(Weapon) || StrikeDuration>0.f) return;
  EquippedWeapon=Weapon;
  bSwordEquipped=Weapon==ECryptWeapon::Sword;
  const bool bArmed=Weapon!=ECryptWeapon::Unarmed;
@@ -445,6 +517,10 @@ void ACryptHero::RestoreProgress()
   return;
  }
  GetCharacterMovement()->StopMovementImmediately();
+ StrikeDuration=0.f;
+ StrikeTrail.Reset();
+ AttackCooldown=0.f;
+ OceanActionTime=0.f;
  if(AController* PC=GetController()) PC->SetControlRotation(Save->ViewRotation);
  TreasureCount=FMath::Max(0,Save->Treasure);
  ActiveWeaponMask=(Save->Weapons&15)|1;
