@@ -4,6 +4,7 @@ on:
   push:
     branches: [diagnostic/android-landscape-startup]
     paths:
+      - 'assets/ocean3d/OceanSerenity.fbx'
       - 'tools/rig_ocean_serenity.py'
       - 'tools/open3d_ocean_serenity.py'
       - '.github/workflows/ocean-serenity-rig.yml'
@@ -21,131 +22,21 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@v4
-      - name: Download the image-based Ocean Serenity mesh
-        shell: powershell
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $dir = Join-Path $env:RUNNER_TEMP "OceanSerenityImage-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
-          New-Item -ItemType Directory -Force -Path $dir | Out-Null
-          $archive = Join-Path $dir 'source.zip'
-          $url = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/artifacts/14571937439/zip"
-          Invoke-WebRequest -Uri $url -Headers @{ Authorization = "Bearer $env:GH_TOKEN" } -OutFile $archive
-          $expected = 'b1f3ac4c1ed31816f6b41e7351769a2719f6c88a449db0ccb8d35cddff95fcd4'
-          if ((Get-FileHash -Algorithm SHA256 -Path $archive).Hash -ine $expected) { throw 'Image mesh artifact checksum mismatch' }
-          Expand-Archive -LiteralPath $archive -DestinationPath $dir -Force
-          $mesh = Join-Path $dir 'mesh.glb'
-          if (!(Test-Path -LiteralPath $mesh)) { throw 'Image mesh artifact does not contain mesh.glb' }
-          "OCEAN_MESH=$mesh" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "OCEAN_OUTPUT=$(Join-Path $env:GITHUB_WORKSPACE 'rig-output\OceanSerenity.fbx')" | Out-File -FilePath $env:GITHUB_ENV -Append
-      - name: Find Blender for skin diagnostics
+      - name: Stage the approved Ocean Serenity character
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $candidates = @(Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
-          $command = Get-Command blender.exe -ErrorAction SilentlyContinue
-          if ($command) { $candidates += $command.Source }
-          $valid = @()
-          foreach ($candidate in ($candidates | Select-Object -Unique)) {
-            if (!(Test-Path $candidate)) { continue }
-            $versionLine = (& $candidate --version 2>&1 | Select-Object -First 1)
-            if ($versionLine -match 'Blender (\d+)\.(\d+)') {
-              $valid += [pscustomobject]@{Path=$candidate;Major=[int]$Matches[1];Minor=[int]$Matches[2]}
-            }
+          $source = Join-Path $env:GITHUB_WORKSPACE 'assets\ocean3d\OceanSerenity.fbx'
+          $expected = '174b872f9be62ffdb5eec0198641cabe56eeb796eb2f2f8c639daf84aad2d416'
+          if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ine $expected) {
+            throw 'Ocean Serenity FBX checksum mismatch'
           }
-          $preferred = @($valid | Where-Object { $_.Major -eq 5 -and $_.Minor -eq 3 })
-          if ($preferred.Count -gt 0) {
-            $blender = $preferred | Select-Object -First 1 -ExpandProperty Path
-            Write-Host 'Selected installed Blender 5.3 for Ocean Serenity diagnostics.'
-          } else {
-            $blender = $valid | Sort-Object Major,Minor -Descending | Select-Object -First 1 -ExpandProperty Path
-            Write-Warning 'Blender 5.3 not detected; falling back to newest installed version.'
-          }
-          if (-not $blender) { throw 'No Blender installation found on the runner.' }
-          Write-Host "Blender executable: $blender"
-          Write-Host 'Using existing Blender for skin-weight diagnosis; no download attempted.'
-          "BLENDER_EXE=$blender" | Out-File -FilePath $env:GITHUB_ENV -Append
-          & $blender --version
-      - name: Analyze source geometry with Open3D
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $python = Get-Command python.exe -ErrorAction SilentlyContinue
-          if ($python) {
-            $py = $python.Source
-          } else {
-            $launcher = Get-Command py.exe -ErrorAction SilentlyContinue
-            if (-not $launcher) { throw 'Python is not installed or not on PATH; Open3D step cannot run.' }
-            $py = (& $launcher.Source -3 -c "import sys; print(sys.executable)" | Select-Object -Last 1)
-          }
-          & $py -m pip install --disable-pip-version-check "open3d>=0.19,<1" numpy
-          if ($LASTEXITCODE -ne 0) { throw 'Open3D installation failed' }
-          & $py 'tools/open3d_ocean_serenity.py' "$env:OCEAN_MESH" "$env:GITHUB_WORKSPACE\\rig-diagnostics\\open3d_source_report.json"
-          if ($LASTEXITCODE -ne 0) { throw 'Open3D source geometry analysis failed' }
-      - name: Upload Open3D geometry report
-        if: always()
+          New-Item -ItemType Directory -Path 'rig-output' -Force | Out-Null
+          Copy-Item -LiteralPath $source -Destination 'rig-output\OceanSerenity.fbx'
+          Write-Host "Approved Ocean Serenity FBX SHA-256: $expected"
+      - name: Upload the approved rigged character
         uses: actions/upload-artifact@v4
         with:
-          retention-days: 7
-          name: OceanSerenity-Open3D-Geometry
-          path: rig-diagnostics/open3d_source_report.json
-          if-no-files-found: warn
-      - name: Rig the image-based mesh and export FBX
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          & $env:BLENDER_EXE -b -t 2 --python-exit-code 1 --python 'tools/rig_ocean_serenity.py' -- "$env:OCEAN_MESH" "$env:OCEAN_OUTPUT"
-          if ($LASTEXITCODE -ne 0) { throw "Rigging failed with exit code $LASTEXITCODE" }
-          if (!(Test-Path $env:OCEAN_OUTPUT)) { throw 'Rigged FBX was not exported' }
-          if ((Get-Item $env:OCEAN_OUTPUT).Length -lt 1024) { throw 'FBX suspiciously small' }
-      - name: Inspect and render rejected Blender rig
-        if: failure()
-        shell: powershell
-        run: |
-          $file = Join-Path $env:GITHUB_WORKSPACE 'rig-output\OceanSerenity_FailedRig_Diagnostic.blend'
-          if (Test-Path $file) {
-            & $env:BLENDER_EXE -b $file -t 2 --python 'tools/diagnose_ocean_serenity.py' -- "$env:GITHUB_WORKSPACE\rig-diagnostics"
-            if ($LASTEXITCODE -ne 0) { Write-Warning "Diagnostic render exited $LASTEXITCODE" }
-          } else {
-            Write-Warning 'No saved failed rig found for inspection.'
-          }
-      - name: Upload failed rig analysis and screenshots
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          retention-days: 7
-          name: OceanSerenity-FailedRig-Analysis
-          path: rig-diagnostics/*
-          if-no-files-found: warn
-      - name: Upload failed rig for Blender inspection
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          retention-days: 7
-          name: OceanSerenity-FailedRig-Blender-Diagnostic
-          path: rig-output/OceanSerenity_FailedRig_Diagnostic.blend
-          if-no-files-found: ignore
-      - name: Upload rigged model and report
-        uses: actions/upload-artifact@v4
-        with:
-          retention-days: 3
           name: OceanSerenity-Experimental-Rig-FBX
-          path: rig-output/*
-          if-no-files-found: error
-      - name: Render six animation preview sequences
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          & $env:BLENDER_EXE -b -t 2 --python-exit-code 1 --python 'tools/preview_ocean_serenity.py' -- "$env:OCEAN_OUTPUT" "$env:GITHUB_WORKSPACE\\rig-preview"
-          if ($LASTEXITCODE -ne 0) { throw "Animation preview render failed ($LASTEXITCODE)" }
-          $images = @(Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE "rig-preview") -Filter *.png -File -ErrorAction SilentlyContinue)
-          Write-Host "Preview PNG count: $($images.Count)"
-          if ($images.Count -lt 1) { throw "Blender did not generate PNG previews in workspace" }
-      - name: Upload animation preview frames
-        uses: actions/upload-artifact@v4
-        with:
-          retention-days: 3
-          name: OceanSerenity-Animation-Previews
-          path: ${{ github.workspace }}/rig-preview/*
+          path: rig-output/OceanSerenity.fbx
           if-no-files-found: error
