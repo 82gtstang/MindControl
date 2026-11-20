@@ -176,6 +176,7 @@ jobs:
             ('"{0}"' -f $project)
             '-run=pythonscript'
             ('-script="{0}"' -f $script)
+            '-ini:Engine:[ConsoleVariables]:Interchange.FeatureFlags.Import.Enable=0'
             '-unattended'
             '-nop4'
             '-nosplash'

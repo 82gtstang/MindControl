@@ -30,6 +30,7 @@ def texture(directory, asset, channel, checksum):
     task = unreal.AssetImportTask()
     task.filename = str(source)
     task.destination_path = DESTINATION
+    task.factory = unreal.TextureFactory()
     task.automated = True
     task.replace_existing = True
     task.save = False
