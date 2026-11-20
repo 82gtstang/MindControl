@@ -21,7 +21,7 @@ ACryptHero::ACryptHero()
  GetCharacterMovement()->AirControl = .45f;
  CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
  CameraBoom->SetupAttachment(RootComponent);
- CameraBoom->TargetArmLength = 520;
+ CameraBoom->TargetArmLength = 380;
  CameraBoom->bDoCollisionTest = true;
  CameraBoom->bUsePawnControlRotation = true;
  FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
@@ -44,7 +44,12 @@ ACryptHero::ACryptHero()
   GetMesh()->SetRelativeLocation(FVector(0,0,-75));
   // The image-based rig is already Z-up after import. Align its facing with the pawn.
   GetMesh()->SetRelativeRotation(FRotator(0,-90,0));
-  GetMesh()->SetRelativeScale3D(FVector(1,1,1));
+  const float MeshHeight = GetMesh()->GetSkeletalMeshAsset()->GetBounds().BoxExtent.Z * 2.f;
+  if (MeshHeight > KINDA_SMALL_NUMBER)
+  {
+   const float CapsuleHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight() * 2.f;
+   GetMesh()->SetRelativeScale3D(FVector(CapsuleHeight / MeshHeight));
+  }
   static ConstructorHelpers::FObjectFinder<UAnimSequence> Idle(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Idle.OceanSerenityOcean_Idle"));
   static ConstructorHelpers::FObjectFinder<UAnimSequence> Walk(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Walk.OceanSerenityOcean_Walk"));
   static ConstructorHelpers::FObjectFinder<UAnimSequence> Run(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Run.OceanSerenityOcean_Run"));
@@ -120,7 +125,7 @@ void ACryptHero::BeginPlay()
   const FBoxSphereBounds MeshBounds = GetMesh()->Bounds;
   const float MeshBottom = MeshBounds.Origin.Z - MeshBounds.BoxExtent.Z;
   const float CapsuleBottom = GetActorLocation().Z - GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-  const float Adjustment = CapsuleBottom - MeshBottom + 2.0f;
+  const float Adjustment = CapsuleBottom - MeshBottom;
   if (FMath::IsFinite(Adjustment) && FMath::Abs(Adjustment) < 10000.f)
   {
    GetMesh()->AddWorldOffset(FVector(0,0,Adjustment));
