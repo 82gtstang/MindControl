@@ -37,11 +37,11 @@ void ACryptMobileHUD::DrawHUD()
   const FVector2D Unit=CryptWorld::MapPoint(Location);
   return Origin+FVector2D(8*S+Unit.X*(Size.X-16*S),8*S+Unit.Y*(Size.Y-16*S));
  };
- const auto Line=[&](const FVector2D& A,const FVector2D& B,const FLinearColor& Color,float Thickness)
+ const auto MapLine=[&](const FVector2D& A,const FVector2D& B,const FLinearColor& Color,float Thickness)
  {
   DrawLine(A.X,A.Y,B.X,B.Y,Color,Thickness*S);
  };
- Line(ToMap(FVector(-5500,0,0)),ToMap(FVector(5500,0,0)),FLinearColor(.58f,.53f,.38f),2.f);
+ MapLine(ToMap(FVector(-5500,0,0)),ToMap(FVector(5500,0,0)),FLinearColor(.58f,.53f,.38f),2.f);
  for(const auto& River : CryptWorld::Rivers)
  {
   FVector2D Previous=ToMap(FVector(River.X(River.Start),River.Start,0));
@@ -49,7 +49,7 @@ void ACryptMobileHUD::DrawHUD()
   {
    const float Y=FMath::Lerp(River.Start,River.End,Index/24.f);
    const FVector2D Point=ToMap(FVector(River.X(Y),Y,0));
-   Line(Previous,Point,RiverColor,1.7f);
+   MapLine(Previous,Point,RiverColor,1.7f);
    Previous=Point;
   }
  }
@@ -72,10 +72,10 @@ void ACryptMobileHUD::DrawHUD()
   const FVector2D Point=ToMap(Marker.Location);
   const FVector2D A=Point+FVector2D(0,-5*S),B=Point+FVector2D(5*S,0);
   const FVector2D C=Point+FVector2D(0,5*S),D=Point+FVector2D(-5*S,0);
-  Line(A,B,Gold,1.5f);
-  Line(B,C,Gold,1.5f);
-  Line(C,D,Gold,1.5f);
-  Line(D,A,Gold,1.5f);
+  MapLine(A,B,Gold,1.5f);
+  MapLine(B,C,Gold,1.5f);
+  MapLine(C,D,Gold,1.5f);
+  MapLine(D,A,Gold,1.5f);
  }
  const FVector Position=Hero->GetActorLocation();
  const FVector Forward=Hero->GetActorForwardVector();
@@ -85,9 +85,9 @@ void ACryptMobileHUD::DrawHUD()
  const FVector2D Tip=Player+Direction*8*S;
  const FVector2D Left=Player-Direction*4*S-Side*4*S;
  const FVector2D Right=Player-Direction*4*S+Side*4*S;
- Line(Tip,Left,FLinearColor::White,2.f);
- Line(Left,Right,FLinearColor::White,2.f);
- Line(Right,Tip,FLinearColor::White,2.f);
+ MapLine(Tip,Left,FLinearColor::White,2.f);
+ MapLine(Left,Right,FLinearColor::White,2.f);
+ MapLine(Right,Tip,FLinearColor::White,2.f);
 
  DrawText(FString::Printf(TEXT("Treasure: %d"),Hero->TreasureCount),Gold,30*S,25*S,nullptr,1.3f*S,false);
 
