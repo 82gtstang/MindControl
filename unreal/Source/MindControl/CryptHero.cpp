@@ -42,10 +42,8 @@ ACryptHero::ACryptHero()
   // whose mesh origin is at capsule center. Keep Ocean at capsule base
   // and allow a little clearance above the floor.
   GetMesh()->SetRelativeLocation(FVector(0,0,-75));
-  // The Blender FBX arrives lying on its back in the Android build.
-  // Rotate only the skeletal mesh about its local X axis to stand it upright;
-  // do not rotate the capsule, movement directions, or follow camera.
-  GetMesh()->SetRelativeRotation(FRotator(0,-90,-90));
+  // The image-based rig is already Z-up after import. Align its facing with the pawn.
+  GetMesh()->SetRelativeRotation(FRotator(0,-90,0));
   GetMesh()->SetRelativeScale3D(FVector(1,1,1));
   static ConstructorHelpers::FObjectFinder<UAnimSequence> Idle(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Idle.OceanSerenityOcean_Idle"));
   static ConstructorHelpers::FObjectFinder<UAnimSequence> Walk(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Walk.OceanSerenityOcean_Walk"));
