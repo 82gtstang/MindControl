@@ -97,7 +97,12 @@ def stone_material(color):
     photo.set_editor_property("texture", color)
     projection = node(asset, unreal.MaterialExpressionCustom)
     projection.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
-    projection.set_editor_property("inputs", [unreal.CustomInput(input_name=name) for name in ("P", "N", "Stone")])
+    custom_inputs = []
+    for name in ("P", "N", "Stone"):
+        custom_input = unreal.CustomInput()
+        custom_input.set_editor_property("input_name", name)
+        custom_inputs.append(custom_input)
+    projection.set_editor_property("inputs", custom_inputs)
     projection.set_editor_property("code", """
 float3 coordinates = P / 275.0;
 float3 weights = pow(abs(N), 4.0);
