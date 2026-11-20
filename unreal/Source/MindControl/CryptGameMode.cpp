@@ -4,20 +4,22 @@
 #include "CryptMobileHUD.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 #include "Engine/World.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Engine/Engine.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 ACryptGameMode::ACryptGameMode() { DefaultPawnClass = ACryptHero::StaticClass(); HUDClass = ACryptMobileHUD::StaticClass(); }
-void ACryptGameMode::PlaceBlock(const FVector& Location,const FVector& Scale,const FRotator& Rotation)
+void ACryptGameMode::PlaceBlock(const FVector& Location,const FVector& Scale,const FRotator& Rotation,UMaterialInterface* Material,UStaticMesh* Mesh)
 {
  UWorld* World=GetWorld(); if(!World) return;
  AStaticMeshActor* Block=World->SpawnActor<AStaticMeshActor>(Location,Rotation);
  if(!Block) return;
- UStaticMesh* Cube=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));
+ if(!Mesh) Mesh=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));
  Block->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
- Block->GetStaticMeshComponent()->SetStaticMesh(Cube);
+ Block->GetStaticMeshComponent()->SetStaticMesh(Mesh);
+ if(Material) Block->GetStaticMeshComponent()->SetMaterial(0,Material);
  Block->SetActorScale3D(Scale);
  Block->GetStaticMeshComponent()->SetMobility(EComponentMobility::Static);
 }
@@ -31,7 +33,8 @@ void ACryptGameMode::BeginPlay()
  if(true) // Diagnostic: generate basic collision ground and world on launch
  {
  // World units are centimeters; cubes are 100 cm per side.
- PlaceBlock(FVector(0,0,-70),FVector(110,70,1)); // walkable ground
+ UMaterialInterface* Grass=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Grass.M_Grass"));
+ PlaceBlock(FVector(0,0,-70),FVector(110,70,1),FRotator::ZeroRotator,Grass); // walkable ground
  PlaceBlock(FVector(0,0,-8),FVector(110,4,.12)); // main road
  // Wilderness stones and ruined pillars beside the approach.
  for(int32 i=0;i<10;++i)
@@ -48,16 +51,46 @@ void ACryptGameMode::BeginPlay()
   PlaceBlock(FVector(X,Y,160),FVector(4.0f,4.2f,3.2f));
   PlaceBlock(FVector(X,Y,340),FVector(4.8f,4.8f,.45f));
  }
- // Castle walls, central keep and four towers at the far end of town.
- PlaceBlock(FVector(3800,-1050,330),FVector(2,2,7));
- PlaceBlock(FVector(3800,1050,330),FVector(2,2,7));
- PlaceBlock(FVector(5100,-1050,330),FVector(2,2,7));
- PlaceBlock(FVector(5100,1050,330),FVector(2,2,7));
- PlaceBlock(FVector(4450,-1050,290),FVector(13,1.2f,6));
- PlaceBlock(FVector(4450,1050,290),FVector(13,1.2f,6));
- PlaceBlock(FVector(5100,0,290),FVector(1.2f,21,6));
- PlaceBlock(FVector(4600,0,560),FVector(6,6,12));
- PlaceBlock(FVector(4600,0,1180),FVector(7,7,1));
+ // Castle masonry uses world-space projection across the different wall sizes.
+ UMaterialInterface* Stone=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_CastleStone.M_CastleStone"));
+ UStaticMesh* Cylinder=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+ const auto Masonry=[this,Stone](const FVector& Location,const FVector& Scale,const FRotator& Rotation=FRotator::ZeroRotator,UStaticMesh* Mesh=nullptr)
+ {
+  PlaceBlock(Location,Scale,Rotation,Stone,Mesh);
+ };
+ for(const float X : {3800.f,5100.f})
+ {
+  for(const float Y : {-1050.f,1050.f})
+  {
+   Masonry(FVector(X,Y,330),FVector(2.8f,2.8f,7.f),FRotator::ZeroRotator,Cylinder);
+   Masonry(FVector(X,Y,655),FVector(3.15f,3.15f,.35f),FRotator::ZeroRotator,Cylinder);
+   for(int32 Segment=0;Segment<8;++Segment)
+   {
+    const float Yaw=45.f*Segment;
+    const float Angle=FMath::DegreesToRadians(Yaw);
+    Masonry(FVector(X+135.f*FMath::Cos(Angle),Y+135.f*FMath::Sin(Angle),710),
+      FVector(.42f,.62f,.85f),FRotator(0,Yaw,0));
+   }
+  }
+ }
+ for(const float Y : {-1050.f,1050.f})
+ {
+  Masonry(FVector(4450,Y,290),FVector(13,1.2f,6));
+  Masonry(FVector(4450,Y,590),FVector(13,1.45f,.28f));
+ }
+ Masonry(FVector(5100,0,290),FVector(1.2f,21,6));
+ Masonry(FVector(4600,0,560),FVector(6,6,12));
+ Masonry(FVector(4600,0,1180),FVector(7,7,.55f));
+ for(int32 Segment=0;Segment<7;++Segment)
+ {
+  const float Offset=-285.f+Segment*95.f;
+  for(const float Edge : {-305.f,305.f})
+  {
+   Masonry(FVector(4600+Edge,Offset,1230),FVector(.65f,.55f,.75f));
+   if(Segment>0 && Segment<6)
+    Masonry(FVector(4600+Offset,Edge,1230),FVector(.55f,.65f,.75f));
+  }
+ }
  // Three monsters stand between the starting point and the town.
  for(int32 i=0;i<3;++i)
  {
@@ -127,16 +160,25 @@ void ACryptGameMode::BeginPlay()
   for(int32 j=-1;j<=1;j+=2)
    PlaceBlock(FVector(X+j*125.f,1000,60),FVector(.22f,.22f,1.25f));
  }
- // Castle battlements and entrance arch framing.
+ // Crenellations, gate piers and voussoirs framing the open road.
  for(int32 i=0;i<12;++i)
  {
   const float X=3850.f+i*105.f;
-  PlaceBlock(FVector(X,-1050,675),FVector(.7f,1.3f,1.0f));
-  PlaceBlock(FVector(X,1050,675),FVector(.7f,1.3f,1.0f));
+  Masonry(FVector(X,-1050,640),FVector(.66f,1.3f,.85f));
+  Masonry(FVector(X,1050,640),FVector(.66f,1.3f,.85f));
  }
- PlaceBlock(FVector(3790,-260,310),FVector(1.1f,1.1f,6.5f));
- PlaceBlock(FVector(3790,260,310),FVector(1.1f,1.1f,6.5f));
- PlaceBlock(FVector(3790,0,660),FVector(1.1f,6.3f,.8f));
+ for(const float Y : {-260.f,260.f})
+ {
+  Masonry(FVector(3790,Y,190),FVector(1.1f,1.1f,4.2f));
+  Masonry(FVector(3790,Y,400),FVector(1.25f,1.25f,.32f));
+ }
+ for(int32 Segment=0;Segment<=12;++Segment)
+ {
+  const float AngleDegrees=Segment*15.f;
+  const float Angle=FMath::DegreesToRadians(AngleDegrees);
+  Masonry(FVector(3790,260.f*FMath::Cos(Angle),400.f+260.f*FMath::Sin(Angle)),
+    FVector(1.2f,.74f,.71f),FRotator(0,0,90.f-AngleDegrees));
+ }
  // Ruined dungeon chambers with partial partitions and stone rubble.
  for(int32 i=0;i<5;++i)
  {
