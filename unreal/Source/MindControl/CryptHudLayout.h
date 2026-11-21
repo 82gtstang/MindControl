@@ -14,8 +14,6 @@ struct FCryptHudLayout
   const float Lower=Upper+2*Radius+8*Scale;
   const float Left=MapOrigin.X+MapSize.X*.25f;
   const float Right=MapOrigin.X+MapSize.X*.75f;
-  Fire=FVector2D(MapOrigin.X-Radius-12*Scale,Upper);
-  Storm=FVector2D(MapOrigin.X-3*Radius-22*Scale,Upper);
   Attack=FVector2D(Left,Upper);
   Jump=FVector2D(Right,Upper);
   Bag=FVector2D(Left,Lower);
@@ -75,5 +73,5 @@ struct FCryptHudLayout
  float ItemRadius,UtilityRadius;
  float Scale;
  float Radius;
- FVector2D MapOrigin,MapSize,Attack,Jump,Bag,Spin,Interact,Fire,Storm;
+ FVector2D MapOrigin,MapSize,Attack,Jump,Bag,Spin,Interact;
 };

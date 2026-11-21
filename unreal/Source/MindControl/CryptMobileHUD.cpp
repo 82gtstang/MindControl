@@ -172,8 +172,6 @@ void ACryptMobileHUD::DrawHUD()
  Button(Layout.Spin,EIcon::Spin,TEXT("SPIN"));
  if(!Hero->bInventoryOpen)
  {
-  Button(Layout.Fire,EIcon::Fire,TEXT("FIRE 19"),Hero->GetMana()>=19.f);
-  Button(Layout.Storm,EIcon::Storm,TEXT("STORM 28"),Hero->GetMana()>=28.f);
   const float BarWidth=FMath::Min(200.f*S,W*.18f);
   const float BarX=W*.40f;
   const auto Resource=[&](const TCHAR* Label,float Current,float Maximum,float Y,FLinearColor Color)

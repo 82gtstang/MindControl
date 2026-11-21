@@ -734,8 +734,6 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
  }
  if(Layout.Hit(TouchPoint,Layout.Jump)) Jump();
  else if(Layout.Hit(TouchPoint,Layout.Attack)) Attack();
- else if(Layout.Hit(TouchPoint,Layout.Fire)) CastFire();
- else if(Layout.Hit(TouchPoint,Layout.Storm)) CastStorm();
  else if(Layout.Hit(TouchPoint,Layout.Spin)) SpinAttack();
 }
 

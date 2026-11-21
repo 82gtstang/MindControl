@@ -676,20 +676,33 @@ void ACryptGameMode::BeginPlay()
    for(int32 Cell=ExitCell;Cell!=Start;Cell=Parent[Cell]) BossRoute.Add(Cell);
    BossRoute.Add(Start);
 
-   auto* Walls=NewObject<UHierarchicalInstancedStaticMeshComponent>(this);
-   AddInstanceComponent(Walls);
-   Walls->SetStaticMesh(Cube);
-   if(Stone) Walls->SetMaterial(0,Stone);
-   Walls->SetCollisionProfileName(TEXT("BlockAll"));
-   Walls->SetMobility(EComponentMobility::Static);
-   Walls->RegisterComponent();
+   // GameMode is hidden in game, which left its wall collision active but invisible.
+   auto* MazeActor=GetWorld()->SpawnActor<AActor>();
+   UHierarchicalInstancedStaticMeshComponent* Walls=nullptr;
+   if(MazeActor)
+   {
+    MazeActor->SetActorHiddenInGame(false);
+    Walls=NewObject<UHierarchicalInstancedStaticMeshComponent>(MazeActor,TEXT("VisibleMazeWalls"));
+    MazeActor->SetRootComponent(Walls);
+    MazeActor->AddInstanceComponent(Walls);
+    Walls->SetStaticMesh(Cube);
+    if(Stone) Walls->SetMaterial(0,Stone);
+    Walls->SetCollisionProfileName(TEXT("BlockAll"));
+    Walls->SetMobility(EComponentMobility::Static);
+    Walls->RegisterComponent();
+   }
    const auto Wall=[&](FVector Floor,FVector Size)
    {
-    Walls->AddInstance(FTransform(FRotator::ZeroRotator,Floor+FVector(0,0,CeilingHeight*.5),Size/100.),true);
+    const FVector Position=Floor+FVector(0,0,CeilingHeight*.5);
+    if(Walls) Walls->AddInstance(FTransform(FRotator::ZeroRotator,Position,Size/100.),true);
+    else Block(Position,Size,Stone);
    };
-   const auto IsEntranceEdge=[Start](int32 A,int32 B)
+   const int32 FirstTurn=Start+2;
+   const int32 NextCell=FirstTurn+(I%2==0?Columns:-Columns);
+   const auto IsEntranceEdge=[Start,FirstTurn,NextCell](int32 A,int32 B)
    {
-    return B==A+1 && (A==Start || A==Start+1);
+    return (B==A+1 && (A==Start || A==Start+1)) ||
+      (A==FMath::Min(FirstTurn,NextCell) && B==FMath::Max(FirstTurn,NextCell));
    };
    const auto Connected=[&](int32 A,int32 B)
    {
@@ -710,7 +723,7 @@ void ACryptGameMode::BeginPlay()
      for(double Side : {-1.,1.})
       Wall(Floor+FVector(CellWidth*.5,Side*(Opening+Wing)*.5,0),FVector(WallThickness,Wing,CeilingHeight));
     }
-    if((Cell+I*3)%5==0 && Cell/Columns+1<Rows && Connected(Cell,Cell+Columns))
+    if((Cell+I*3)%5==0 && Cell/Columns+1<Rows && Connected(Cell,Cell+Columns) && !IsEntranceEdge(Cell,Cell+Columns))
     {
      const double Wing=(CellWidth-Opening)*.5;
      for(double Side : {-1.,1.})
@@ -725,12 +738,16 @@ void ACryptGameMode::BeginPlay()
     if(Cell/Columns+1<Rows && Connected(Cell,Cell+Columns)) ++Degree;
     if(Degree>=3 || (Cell+I*7)%9==0)
      PassageLamp(Floor+FVector(0,0,480),Degree>=3?Definition.Accent:FLinearColor(1.f,.50f,.23f));
-    if(Degree==1 && (Cell<Start || Cell>Start+2) && Cell!=ExitCell && (Cell+I)%3==0)
+    if(Degree==1 && (Cell<Start || Cell>FirstTurn) && Cell!=NextCell && Cell!=ExitCell && (Cell+I)%3==0)
      Block(Floor+FVector(0,0,29),FVector(148,148,58),Mark);
    }
 
    PassageLamp(CellPoint(Start)+FVector(0,0,480),FLinearColor(1.f,.58f,.31f));
    PassageLamp(CellPoint(Start+1)+FVector(0,0,480),FLinearColor(1.f,.58f,.31f));
+   const FVector Passage=CellPoint(FirstTurn);
+   const FVector TurningCell=CellPoint(NextCell);
+   PassageLamp(FMath::Lerp(Passage,TurningCell,.6)+FVector(0,0,480),FLinearColor(1.f,.62f,.33f));
+   Sign(FMath::Lerp(Passage,TurningCell,.45)+FVector(0,0,305),TEXT("Maze passage"),26);
    const double DoorY=CellPoint(ExitCell).Y;
    constexpr double DoorHalfWidth=180.;
    const double SouthSpan=DoorY-DoorHalfWidth-SouthEdge;
