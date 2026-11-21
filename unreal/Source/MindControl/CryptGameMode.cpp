@@ -13,6 +13,8 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "Engine/World.h"
+#include "Engine/PointLight.h"
+#include "Components/PointLightComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Engine/Engine.h"
 #include "Misc/CommandLine.h"
@@ -38,6 +40,16 @@ namespace
    const float EndBlend=FMath::SmoothStep(0.f,180.f,FMath::Min(Y-River.Start,River.End-Y));
    Height=FMath::Lerp(Height,River.Height(Y)-95.f,Bank*EndBlend);
   }
+  for(int32 I=0;I<CryptDungeons::Count;++I)
+  {
+   const FVector2D Point=CryptDungeons::EntrancePoints[I];
+   const float Dx=(X-Point.X)/580.f, Dy=(Y-Point.Y)/610.f;
+   if(Dx<=.15f || Dx>=2.3f || FMath::Abs(Dy)>2.f) continue;
+   // Raise a shoulder behind the entrance and taper it into the existing terrain.
+   const float Shape=FMath::Exp(-FMath::Square(Dx-.96f)*2.f-FMath::Square(Dy)*1.8f);
+   Height+=(I==8?78.f:199.f)*Shape*FMath::SmoothStep(.15f,.72f,Dx)
+    *(1.f-FMath::SmoothStep(1.8f,2.3f,Dx))*(1.f-FMath::SmoothStep(1.45f,2.f,FMath::Abs(Dy)));
+  }
   const float WestRoad = FMath::SmoothStep(5500.f, 6520.f, -X)
    * (1.f - FMath::SmoothStep(235.f, 575.f, FMath::Abs(Y)));
   return FMath::Lerp(Height, -20.f, WestRoad);
@@ -59,6 +71,13 @@ namespace
 
  bool IsDirt(float X,float Y)
  {
+  for(const auto& Entrance : CryptDungeons::EntrancePoints)
+  {
+   const float Along=X-Entrance.X;
+   const float Across=Y-Entrance.Y;
+   if(Along>-730.f && Along<165.f && FMath::Abs(Across-46.f*FMath::Sin(Along/190.f))
+     < 118.f+28.f*FMath::Cos(Along/170.f)) return true;
+  }
   if(X>-3500.f && X<3100.f && FMath::Abs(Y+1650.f+180.f*FMath::Sin(X/860.f))<125.f)
    return true;
   for(const auto& River : CryptWorld::Rivers)
@@ -268,6 +287,146 @@ void ACryptGameMode::BeginPlay()
    Block(P+FVector(0,0,211),FVector(64,270,30),Glow);
    Sign(P+FVector(-37,0,263),Title,30);
   };
+  auto* Boulder=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+  auto* Trunk=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+  auto* Bark=Accent(FLinearColor(.099,.064,.038));
+  auto* Pine=Accent(FLinearColor(.055,.115,.077));
+  auto* Brush=Accent(FLinearColor(.19,.112,.046));
+  auto* Torch=Accent(FLinearColor(1,.32,.047));
+  auto* Rune=Accent(FLinearColor(.39,.78,1));
+  const auto SurfaceEntrance=[&](int32 Index,UMaterialInterface* Mark)
+  {
+   const FVector Origin=Entrance(Index);
+   const bool bForest=Index==1 || Index==8 || Index==6;
+   const bool bCutStone=Index==0 || Index==2 || Index==5 || Index==9;
+   const bool bRunes=Index==4 || Index==9;
+   const bool bSinkhole=Index==8;
+   FRandomStream Random(317+Index*97);
+   const auto Rock=[&](FVector Offset,FVector Size)
+   {
+    PlaceBlock(Origin+Offset,Size/100.,FRotator(Random.FRandRange(-14,14),
+       Random.FRandRange(-180,180),Random.FRandRange(-18,18)),Stone,Boulder);
+   };
+   const auto Tree=[&](double DX,double DY)
+   {
+    const double X=Origin.X+DX, Y=Origin.Y+DY;
+    const double Ground=TerrainHeight(X,Y);
+    const float H=Random.FRandRange(580,900);
+    PlaceBlock(FVector(X,Y,Ground+H*.5),FVector(.45,.45,H/100.),FRotator(3,0,0),Bark,Trunk);
+    for(int32 Tier=0;Tier<3;++Tier)
+    {
+     const float Width=300.f-Tier*63.f;
+     PlaceBlock(FVector(X,Y,Ground+H*(.67+Tier*.139)),FVector(Width,Width*.86,225)/100.,
+       FRotator(0,Tier*41,0),Pine,Boulder);
+    }
+   };
+
+   if(bForest)
+   {
+    for(int32 T=0;T<12;++T)
+    {
+     const double Side=T%2?1.:-1.;
+     Tree(Random.FRandRange(-570,830),Side*Random.FRandRange(370,850));
+    }
+   }
+   for(int32 R=0;R<14;++R)
+   {
+    const double Side=R%2?1.:-1.;
+    const double OffsetX=Random.FRandRange(-425,810);
+    const double OffsetY=Side*Random.FRandRange(260,685);
+    const double Ground=TerrainHeight(Origin.X+OffsetX,Origin.Y+OffsetY);
+    const float Size=Random.FRandRange(65,225);
+    Rock(FVector(OffsetX,OffsetY,Ground-Origin.Z+Size*.26),FVector(Size*1.22,Size,Size*.75));
+   }
+
+   if(bSinkhole)
+   {
+    // Arc around the far side, with a walkable gap on the west approach.
+    for(int32 R=0;R<11;++R)
+    {
+     const double Angle=FMath::DegreesToRadians(-128.+R*25.6);
+     Rock(FVector(30+FMath::Cos(Angle)*167,FMath::Sin(Angle)*188,28),
+      FVector(138,128,109));
+    }
+    Block(Origin+FVector(36,0,-4),FVector(216,216,18),Brush);
+   }
+   else if(bCutStone)
+   {
+    // Recessed lintel and stepped jambs on a textured escarpment.
+    for(const double Side : {-1.,1.})
+    {
+     Rock(FVector(190,Side*307,151),FVector(670,364,439));
+     Rock(FVector(230,Side*457,250),FVector(583,285,438));
+     Block(Origin+FVector(-3,Side*146,121),FVector(126,61,255),Stone);
+     Block(Origin+FVector(-37,Side*187,109),FVector(104,35,229),Stone);
+     Block(Origin+FVector(-17,Side*151,18),FVector(151,85,41),Stone);
+    }
+    Block(Origin+FVector(-3,0,263),FVector(160,354,52),Stone);
+    Block(Origin+FVector(-18,0,297),FVector(164,421,29),Stone);
+    Rock(FVector(190,0,353),FVector(673,752,229));
+   }
+   else
+   {
+    // Layered boulders form an irregular arch without filling its opening.
+    for(const double Side : {-1.,1.})
+    {
+     Rock(FVector(131,Side*236,123),FVector(462,235,327));
+     Rock(FVector(163,Side*346,157),FVector(469,295,360));
+     Rock(FVector(209,Side*209,258),FVector(449,195,157));
+    }
+    Rock(FVector(138,0,322),FVector(448,490,169));
+    Rock(FVector(362,0,388),FVector(444,565,166));
+   }
+
+   if(!bSinkhole)
+   {
+    // A dark back chamber gives the mouth depth while keeping the trigger reachable.
+    Block(Origin+FVector(214,0,113),FVector(32,250,237),Accent(FLinearColor(.018,.023,.027)));
+    for(int32 Step=0;Step<3;++Step)
+    {
+     const double X=Origin.X-193+Step*69;
+     const double Ground=TerrainHeight(X,Origin.Y);
+     Block(FVector(X,Origin.Y,Ground+1),FVector(62,220,20),Cobble?Cobble:Stone);
+    }
+   }
+
+   for(const double Side : {-1.,1.})
+   {
+    if(bRunes)
+    {
+     // Original angular glyphs inset along each edge, visible from the trail.
+     for(int32 Row=0;Row<4;++Row)
+     {
+      const FVector Glyph=Origin+FVector(-114,Side*153,77+Row*43);
+      Block(Glyph,FVector(3,5,27),Rune);
+      PlaceBlock(Glyph+FVector(0,Side*8,4),FVector(.03,.22,.035),FRotator(0,0,Side*36),Rune,Cube);
+      PlaceBlock(Glyph+FVector(0,-Side*5,-7),FVector(.03,.18,.035),FRotator(0,0,-Side*43),Rune,Cube);
+     }
+    }
+    else if(!bSinkhole)
+    {
+     const FVector Brazier=Origin+FVector(-82,Side*194,79);
+     PlaceBlock(Brazier,FVector(.19,.19,.91),FRotator::ZeroRotator,Bark,Trunk);
+     PlaceBlock(Brazier+FVector(0,0,51),FVector(.32,.32,.24),FRotator::ZeroRotator,Stone,Boulder);
+     PlaceBlock(Brazier+FVector(0,0,70),FVector(.13,.13,.39),FRotator(13,0,0),Torch,Boulder);
+     if(auto* Light=GetWorld()->SpawnActor<APointLight>(Brazier+FVector(-25,0,78),FRotator::ZeroRotator))
+     {
+      auto* Lamp=Light->GetPointLightComponent();
+      Lamp->SetMobility(EComponentMobility::Movable);
+      Lamp->SetIntensity(1200);
+      Lamp->SetLightColor(FLinearColor(1.f,.42f,.18f));
+      Lamp->SetAttenuationRadius(285);
+      Lamp->SetCastShadows(false);
+     }
+    }
+   }
+   const double SignX=Origin.X-225;
+   const double SignY=Origin.Y-193;
+   const FVector SignPost(SignX,SignY,TerrainHeight(SignX,SignY));
+   Block(SignPost+FVector(0,0,57),FVector(12,12,114),Bark);
+   Block(SignPost+FVector(0,0,115),FVector(9,224,34),Mark);
+   Sign(SignPost+FVector(-9,0,115),Chambers[Index].Name,21);
+  };
   auto* HubAccent=Accent(FLinearColor(.32,.55,.62));
   Portal(SurfaceGate(),TEXT("Dungeon Crossroads"),HubAccent);
   const FVector Square=Hub();
@@ -283,7 +442,7 @@ void ACryptGameMode::BeginPlay()
    const auto& Definition=Chambers[I];
    auto* Mark=Accent(Definition.Accent);
    Portal(Gate(I),Definition.Name,Mark);
-   Portal(Entrance(I),Definition.Name,Mark);
+   SurfaceEntrance(I,Mark);
    const FVector Center=Room(I);
    Block(Center+FVector(0,0,-25),FVector(2750,1740,50),Stone);
    for(float Side : {-1.f,1.f})
