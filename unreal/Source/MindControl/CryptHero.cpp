@@ -254,7 +254,7 @@ void ACryptHero::StartStrike(bool bSpin)
  StrikeAge=0.f;
  TrailSampleTime=0.f;
  StrikeTrail.Reset();
- StrikeDuration=bSpin?1.12f:(StrikeWeapon==ECryptWeapon::Axe?.68f:(StrikeWeapon==ECryptWeapon::Unarmed?.48f:.56f));
+ StrikeDuration=bSpin?1.12f:(StrikeWeapon==ECryptWeapon::Axe?.90f:.78f);
  AttackCooldown=StrikeDuration+.05f;
  PlayOceanAction(bSpin?OceanSpin:OceanAttack,StrikeDuration);
 }
