@@ -71,7 +71,7 @@ def gait(rig, phase, running, diagonal):
     bob = (.013 if running else .009) * (-.35 - math.cos(2 * wave))
     pelvis = rig.pose.bones["pelvis"]
     pelvis.location = pelvis.bone.matrix_local.to_3x3().inverted() @ Vector((0, 0, bob))
-    rotate(rig.pose.bones["spine"], X, math.radians(-8 if running else -3))
+    rotate(rig.pose.bones["spine"], X, math.radians(-11 if running else -9))
     rotate(rig.pose.bones["chest"], Z, math.sin(wave) * (.09 if diagonal else .05))
     rotate(rig.pose.bones["head"], Z, -math.sin(wave) * .025)
 
@@ -112,6 +112,22 @@ def gait(rig, phase, running, diagonal):
         fore = rig.pose.bones[f"forearm_{side}"]
         rotate(upper, X, swing_angle)
         rotate(fore, X, -.12 - (.32 if running else .14) * (1 + math.cos(math.tau * cycle)))
+
+
+def side_punch(rig, phase):
+    """Alternating outward punches with a guarded recovery and mild torso twist."""
+    # Left hand extends first, right hand follows; no root translation.
+    for side, start in (("L", .10), ("R", .48)):
+        extend = smooth(start, start + .15, phase) * (1 - smooth(start + .27, start + .43, phase))
+        upper = rig.pose.bones[f"upperarm_{side}"]
+        fore = rig.pose.bones[f"forearm_{side}"]
+        # Arm spreads laterally, elbow straightens on impact, then returns.
+        rotate(upper, Z, (1 if side == "L" else -1) * (.20 + 1.10 * extend))
+        rotate(fore, X, -.78 * (1 - extend) - .10 * extend)
+    twist = .16 * (smooth(.10, .25, phase) * (1 - smooth(.37, .53, phase))
+                   - smooth(.48, .63, phase) * (1 - smooth(.75, .91, phase)))
+    rotate(rig.pose.bones["chest"], Z, twist)
+    rotate(rig.pose.bones["spine"], X, -.07 * math.sin(math.pi * phase))
 
 
 def hair_pose(rig, name, phase):
@@ -162,6 +178,8 @@ def make_clips(scene, rig, source):
                     bone.matrix_basis = poses[sample][bone.name]
             if walking:
                 gait(rig, phase, name.startswith("Run"), name.endswith("Diagonal"))
+            if name == "Attack":
+                side_punch(rig, phase)
             if name == "Jump":
                 # The movement component supplies the jump arc.
                 rig.pose.bones["root"].location = (0, 0, 0)
