@@ -15,7 +15,7 @@ from tsr import bake_texture
 
 def positions_to_colors(model, scene_code, positions_texture, texture_resolution):
     pixels = positions_texture.reshape(-1, 4)
-    positions = torch.as_tensor(pixels[:, :3], device=scene_code.device)
+    positions = torch.tensor(pixels[:, :3], device=scene_code.device)
     with torch.no_grad():
         result = model.renderer.query_triplane(model.decoder, positions, scene_code)
     rgb = result["color"].detach().cpu().numpy().reshape(-1, 3)

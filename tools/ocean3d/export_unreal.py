@@ -7,7 +7,10 @@ import bpy
 
 source, output = map(Path, sys.argv[sys.argv.index("--") + 1:])
 bpy.ops.wm.read_factory_settings(use_empty=True)
-bpy.ops.wm.obj_import(filepath=str(source / "mesh.obj"))
+if bpy.app.version >= (3, 3, 0):
+    bpy.ops.wm.obj_import(filepath=str(source / "mesh.obj"))
+else:
+    bpy.ops.import_scene.obj(filepath=str(source / "mesh.obj"))
 meshes = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
 if not meshes or not any(obj.data.polygons for obj in meshes):
     raise RuntimeError("Reconstruction produced no usable mesh")
