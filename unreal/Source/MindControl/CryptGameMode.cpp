@@ -4,6 +4,7 @@
 #include "CryptMobileHUD.h"
 #include "CryptTownActor.h"
 #include "CryptWorldLayout.h"
+#include "CryptSettlements.h"
 #include "ProceduralMeshComponent.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/StaticMesh.h"
@@ -34,7 +35,9 @@ namespace
    const float EndBlend=FMath::SmoothStep(0.f,180.f,FMath::Min(Y-River.Start,River.End-Y));
    Height=FMath::Lerp(Height,River.Height(Y)-95.f,Bank*EndBlend);
   }
-  return Height;
+  const float WestRoad = FMath::SmoothStep(5500.f, 6520.f, -X)
+   * (1.f - FMath::SmoothStep(235.f, 575.f, FMath::Abs(Y)));
+  return FMath::Lerp(Height, -20.f, WestRoad);
  }
 
  UProceduralMeshComponent* CreateSurface(UWorld* World,const TCHAR* Name,bool bCollision)
@@ -184,6 +187,7 @@ void ACryptGameMode::BeginPlay()
  {
   for(const bool bAlongX : {false,true})
   {
+   if (!bAlongX && Side < 0.f) continue;
    auto* Boundary=GetWorld()->SpawnActor<AStaticMeshActor>(
      FVector(bAlongX?0.f:Side*6020.f,bAlongX?Side*5480.f:0.f,375),FRotator::ZeroRotator);
    if(!Boundary) continue;
@@ -205,14 +209,21 @@ void ACryptGameMode::BeginPlay()
   const float Y=(i%2==0?1.f:-1.f)*(600.f+(i%3)*220.f);
   PlaceBlock(FVector(X,Y,75),FVector(1.2f,1.2f,2.5f+(i%3)),FRotator::ZeroRotator,Stone);
  }
- // Six houses in two rows, leaving the road unobstructed.
- for(int32 i=0;i<6;++i)
+ // Leave a road-sized opening in the west boundary for the town district.
+ for (float Y : {-2965.f,2965.f})
  {
-  const float X=750+(i/2)*650.f;
-  const float Y=(i%2==0?850.f:-850.f);
-  PlaceBlock(FVector(X,Y,160),FVector(4.0f,4.2f,3.2f),FRotator::ZeroRotator,Stone);
-  PlaceBlock(FVector(X,Y,340),FVector(4.8f,4.8f,.45f));
+  auto* Boundary=GetWorld()->SpawnActor<AStaticMeshActor>(FVector(-6020,Y,375),FRotator::ZeroRotator);
+  if (!Boundary) continue;
+  auto* Collision=Boundary->GetStaticMeshComponent();
+  Collision->SetMobility(EComponentMobility::Movable);
+  Collision->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube")));
+  Collision->SetCollisionProfileName(TEXT("BlockAll"));
+  Boundary->SetActorScale3D(FVector(1,54.3f,28));
+  Boundary->SetActorHiddenInGame(true);
+  Collision->SetMobility(EComponentMobility::Static);
  }
+ PlaceBlock(FVector(-6048,0,-24),FVector(11.04,4,.10),FRotator::ZeroRotator,Cobble?Cobble:Stone);
+ CryptSettlements::Build(GetWorld(),Grass,Stone,Cobble?Cobble:Stone,Dirt?Dirt:Stone,-20.f);
  // Castle masonry uses world-space projection across the different wall sizes.
  UStaticMesh* Cylinder=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
  const auto Masonry=[this,Stone](const FVector& Location,const FVector& Scale,const FRotator& Rotation=FRotator::ZeroRotator,UStaticMesh* Mesh=nullptr)
