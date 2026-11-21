@@ -29,7 +29,7 @@ namespace CryptDungeons
  double GetGroundHeight(double X,double Y);
  inline const FVector2D EntrancePoints[]={
   {-4900,1200},{-3100,2700},{-1200,4100},{1000,4200},{3200,3700},
-  {3500,2200},{-4600,-1500},{-2400,-3000},{-900,-4200},{2800,-3600}
+  {3500,2200},{-4600,-1500},{-2200,-3900},{-900,-4200},{2800,-3600}
  };
  static_assert(UE_ARRAY_COUNT(EntrancePoints)==Count);
  inline constexpr double RampLength=1000.;
