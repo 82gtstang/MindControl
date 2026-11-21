@@ -1,0 +1,75 @@
+name: Start private image worker
+on:
+  workflow_dispatch:
+  push:
+    branches: [diagnostic/android-landscape-startup]
+    paths: [.github/workflows/image-worker-bootstrap.yml]
+permissions:
+  contents: read
+jobs:
+  setup:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install and verify loopback worker
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:ProgramData 'MindControl-ImageWorker'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          & icacls $root /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Could not restrict worker directory' }
+          $engine = Join-Path $env:LOCALAPPDATA 'Ocean3D'
+          $python = Join-Path $engine 'venv\Scripts\python.exe'
+          $tripo = Join-Path $engine 'TripoSR-main'
+          $blender = Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse | Select-Object -First 1
+          if (!$blender -or !(Test-Path $python)) { throw 'Worker dependencies missing' }
+          & $python -m pip install --disable-pip-version-check 'Flask>=3.1,<4' 'waitress>=3,<4'
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
+          Copy-Item tools/ocean3d/unreal_server.py,tools/ocean3d/export_unreal.py -Destination $root -Force
+          $tokenPath = Join-Path $root 'token.txt'
+          if (!(Test-Path $tokenPath)) {
+            $key = & $python -c 'import secrets; print(secrets.token_urlsafe(32))'
+            if ($LASTEXITCODE -ne 0 -or !$key) { throw 'Token generation failed' }
+            [IO.File]::WriteAllText($tokenPath,$key)
+          }
+          $key = [IO.File]::ReadAllText($tokenPath)
+          @{ python=$python; tripo=$tripo; blender=$blender.FullName } | ConvertTo-Json | Set-Content (Join-Path $root 'config.json')
+          @'
+          $ErrorActionPreference = 'Stop'
+          $c = Get-Content (Join-Path $PSScriptRoot 'config.json') -Raw | ConvertFrom-Json
+          $env:OCEAN3D_TOKEN = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'token.txt'))
+          $env:OCEAN3D_TRIPOSR = $c.tripo
+          $env:OCEAN3D_BLENDER = $c.blender
+          & $c.python (Join-Path $PSScriptRoot 'unreal_server.py') 2>&1 | Out-File (Join-Path $PSScriptRoot 'worker.log') -Append
+          exit $LASTEXITCODE
+          '@ | Set-Content (Join-Path $root 'Start-Worker.ps1') -Encoding UTF8
+          $task = 'MindControl-ImageToUnreal-Worker'
+          if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) { Stop-ScheduledTask -TaskName $task }
+          $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "' + (Join-Path $root 'Start-Worker.ps1') + '"') -WorkingDirectory $root
+          $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+          Register-ScheduledTask -TaskName $task -Action $action -Trigger (New-ScheduledTaskTrigger -AtStartup) -Settings $settings -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
+          Start-ScheduledTask -TaskName $task
+          $ready = $false
+          for ($i=0; $i -lt 25 -and !$ready; $i++) {
+            try {
+              Invoke-WebRequest -Uri 'http://127.0.0.1:8787/generate-unreal' -Method Post -Headers @{ Authorization=('Bearer ' + $key) } -UseBasicParsing -TimeoutSec 3 | Out-Null
+            } catch {
+              if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 400) { $ready = $true }
+            }
+            if (!$ready) { Start-Sleep -Seconds 1 }
+          }
+          if (!$ready) { throw "Worker listener unavailable; scheduled task result: $((Get-ScheduledTaskInfo -TaskName $task).LastTaskResult)" }
+          $rsa = New-Object System.Security.Cryptography.RSACryptoServiceProvider
+          try {
+            $rsa.FromXmlString('<RSAKeyValue><Modulus>1QggBTjKYfX23rRuMgjqXTzuIt30KCsD+VX0jicRfefDzmmWpBXMJTtamkOWU1I58P/bIB4PGokFhxs+LfAvG/srPUsOVNl2jXubf8pRznJaMX8B8LQhzqTHhfL3Ar6iimcJWbPYOpH5PwYE1LUB5rcV8Z0yP2GXhsySdA4G/2TdtOEivK0uDBBZtr8tNNrPbe9U02yZHujcmfTxS8oTMmdQqUxx10INN+rLgukwu3J7ci5bEhJRfxiLo4x//hce0KTN4xQOWRGc3e+qaQvh14NHQh0casLrgOQ8w3x9YH177imnaQrCe4skSgcgLqWzobGxPgn4p12qd+BD1REzHYt+GuMdgXZqlc8EJ8oQAuO3lXXRzX92trN4Kg0LVlRpTTgNi61JWrFWU4NcMQhV00S1ir6e68Ww5fQWoSRXdww4STJ6/NlwRcVp9CwcdSKh3W4vJC5Keq4WOcGNNyorMriR9ln1h3hludKVnQVd/HF1obTkSW7vnxHzfWX3ckSt</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>')
+            [IO.File]::WriteAllBytes((Join-Path $env:GITHUB_WORKSPACE 'image-worker-token.enc'),$rsa.Encrypt([Text.Encoding]::UTF8.GetBytes($key),$true))
+          } finally { $rsa.Dispose() }
+          Write-Host 'Authenticated loopback worker verified.'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sealed-image-worker-token
+          path: image-worker-token.enc
+          if-no-files-found: error
+          retention-days: 1
