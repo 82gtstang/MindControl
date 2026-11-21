@@ -44,7 +44,6 @@ namespace CryptDungeons
  inline constexpr double CeilingHeight=620.;
  inline constexpr double RampLength=4000.;
  inline constexpr double RampHalfWidth=200.;
- inline constexpr double LayoutScale=.72*Enlargement;
  inline constexpr double RoomHalfLength=1300.*Enlargement;
  inline constexpr double RoomHalfWidth=660.*Enlargement;
 
@@ -103,6 +102,11 @@ namespace CryptDungeons
 
  inline FVector MigrateLocation(FVector Position,int32 Version)
  {
+  if(Version==4)
+  {
+   const int32 Dungeon=Current(Position);
+   return Dungeon==INDEX_NONE?Position:SurfaceArrival(Dungeon);
+  }
   if(Version==3)
   {
    for(int32 I=0;I<Count;++I)

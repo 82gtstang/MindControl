@@ -561,7 +561,7 @@ void ACryptHero::SaveProgress()
  Save->HeroRotation=GetActorRotation();
  Save->ViewRotation=GetControlRotation();
  Save->Treasure=TreasureCount;
- Save->Version=4;
+ Save->Version=5;
  Save->HeroHealth=Health;
  Save->HeroStamina=Stamina;
  Save->HeroMana=Mana;
@@ -589,14 +589,14 @@ void ACryptHero::RestoreProgress()
   SaveStatus=TEXT("No readable save was found.");
   return;
  }
- if((Save->Version<1 || Save->Version>4) || Save->QuestStates.Num()!=CryptQuests::Count ||
+ if((Save->Version<1 || Save->Version>5) || Save->QuestStates.Num()!=CryptQuests::Count ||
     Save->QuestCounts.Num()!=CryptQuests::Count || Save->HeroLocation.ContainsNaN() ||
     Save->HeroRotation.ContainsNaN() || Save->ViewRotation.ContainsNaN())
  {
   SaveStatus=TEXT("This save cannot be restored.");
   return;
  }
- if(!TeleportTo(Save->Version<4?CryptDungeons::MigrateLocation(Save->HeroLocation,Save->Version):Save->HeroLocation,Save->HeroRotation,false,true))
+ if(!TeleportTo(Save->Version<5?CryptDungeons::MigrateLocation(Save->HeroLocation,Save->Version):Save->HeroLocation,Save->HeroRotation,false,true))
  {
   SaveStatus=TEXT("Could not return to the saved location.");
   return;
@@ -631,7 +631,7 @@ void ACryptHero::RestoreProgress()
   const float* SavedEnemyHealth=Save->EnemyHealth.Find(It->SaveId);
   const FVector* Location=Save->EnemyLocations.Find(It->SaveId);
   if(SavedEnemyHealth && Location && FMath::IsFinite(*SavedEnemyHealth) && !Location->ContainsNaN())
-   It->RestoreState(Save->Version==1?(*SavedEnemyHealth/3.f)*It->Stats().Health:*SavedEnemyHealth,Save->Version<3 && It->SaveId>=1000 ? It->GetActorLocation() : *Location);
+   It->RestoreState(Save->Version==1?(*SavedEnemyHealth/3.f)*It->Stats().Health:*SavedEnemyHealth,Save->Version<5 && It->SaveId>=1000 ? It->GetActorLocation() : *Location);
  }
  Dialogue.Reset();
  SaveStatus=TEXT("Adventure restored.");
@@ -819,7 +819,7 @@ FString ACryptHero::GetCombatTarget() const
   const TCHAR* Weakness=Profile.Fire>1.2f || Profile.Storm>1.2f
    ? (Profile.Fire>Profile.Storm?TEXT(" | Weak: Fire"):TEXT(" | Weak: Storm")) : TEXT("");
   if(!Text.IsEmpty()) Text+=TEXT("\n");
-  Text+=FString::Printf(TEXT("%s  %d/%d HP  |  Armor %d%s"),Profile.Name,
+  Text+=FString::Printf(TEXT("%s%s  %d/%d HP  |  Armor %d%s"),Target->IsBoss()?TEXT("Boss: "):TEXT(""),Profile.Name,
      FMath::CeilToInt(Target->GetRemainingHealth()),int32(Profile.Health),int32(Profile.Armor),Weakness);
  }
  return Text;

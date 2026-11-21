@@ -23,11 +23,18 @@ ACryptMonster::ACryptMonster()
  Body->SetRelativeScale3D(FVector(1.2,1.2,1.8));
 }
 
-void ACryptMonster::ConfigureCreature(int32 Index,int32 InDungeon)
+void ACryptMonster::ConfigureCreature(int32 Index,int32 InDungeon,bool bInBoss)
 {
  Creature=FMath::Clamp(Index,0,int32(UE_ARRAY_COUNT(CryptCombat::Creatures))-1);
  Dungeon=InDungeon;
- const auto& Profile=Stats();
+ bBoss=bInBoss;
+ Profile=CryptCombat::Creatures[Creature];
+ if(bBoss)
+ {
+  Profile.Health*=1.85f;
+  Profile.Weapon*=1.20f;
+  Profile.Armor+=3.f;
+ }
  Health=Profile.Health;
  Stamina=Profile.Stamina;
  Mana=Profile.Mana;
@@ -98,42 +105,42 @@ void ACryptMonster::Tick(float Dt)
  Super::Tick(Dt);
  auto* Player=Cast<ACryptHero>(UGameplayStatics::GetPlayerPawn(this,0));
  if(!Player || Health<=0.f) return;
- const auto& Profile=Stats();
+ const auto& CombatProfile=Stats();
  FVector Offset=Player->GetActorLocation()-GetActorLocation();
  if(FMath::Abs(Offset.Z)>165.f || Offset.SizeSquared2D()>FMath::Square(1450.f)) return;
  Offset.Z=0;
  const float Distance=Offset.Size();
  AttackTimer=FMath::Max(0.f,AttackTimer-Dt);
- Stamina=FMath::Min(Profile.Stamina,Stamina+Dt*10);
- Mana=FMath::Min(Profile.Mana,Mana+Dt*4);
- const bool bRanged=Profile.Element!=ECryptDamage::Physical && Mana>=14.f;
+ Stamina=FMath::Min(CombatProfile.Stamina,Stamina+Dt*10);
+ Mana=FMath::Min(CombatProfile.Mana,Mana+Dt*4);
+ const bool bRanged=CombatProfile.Element!=ECryptDamage::Physical && Mana>=14.f;
  const float Reach=bRanged?550.f:155.f;
  SetActorRotation(Offset.Rotation());
  if(Distance>Reach*.87f && (Home.IsNearlyZero() || FVector::DistSquared2D(Home,GetActorLocation())<FMath::Square(1250.f)))
-  SetActorLocation(GetActorLocation()+Offset.GetSafeNormal()*FMath::Min(Profile.Speed*Dt,Distance-Reach*.87f),true);
+  SetActorLocation(GetActorLocation()+Offset.GetSafeNormal()*FMath::Min(CombatProfile.Speed*Dt,Distance-Reach*.87f),true);
  if(Distance>Reach || AttackTimer>0.f || Stamina<10.f) return;
  FCollisionQueryParams Query;
  Query.AddIgnoredActor(this);
  Query.AddIgnoredActor(Player);
  const FVector From=GetActorLocation()+FVector(0,0,28);
  if(GetWorld()->LineTraceTestByChannel(From,Player->GetActorLocation(),ECC_Visibility,Query)) return;
- AttackTimer=FMath::Clamp(2.f-Profile.Dexterity*.028f,1.15f,1.95f);
+ AttackTimer=FMath::Clamp(2.f-CombatProfile.Dexterity*.028f,1.15f,1.95f);
  Stamina-=10.f;
  if(bRanged)
  {
   Mana-=14.f;
-  Player->ShowSpell(From,Player->GetActorLocation(),Profile.Element,Profile.Color);
+  Player->ShowSpell(From,Player->GetActorLocation(),CombatProfile.Element,CombatProfile.Color);
  }
- Player->ReceiveCombatHit(Profile.Weapon,Profile.Dexterity,bRanged?Profile.Element:ECryptDamage::Physical);
+ Player->ReceiveCombatHit(CombatProfile.Weapon,CombatProfile.Dexterity,bRanged?CombatProfile.Element:ECryptDamage::Physical);
 }
 
 bool ACryptMonster::TakeHit(float Rating,float Dexterity,ECryptDamage Element)
 {
  if(Health<=0.f) return false;
- const auto& Profile=Stats();
- if(Element==ECryptDamage::Physical && FMath::FRand()>CryptCombat::HitChance(Dexterity,Profile.Dexterity)) return false;
- const float Multiplier=Element==ECryptDamage::Fire?Profile.Fire:Element==ECryptDamage::Storm?Profile.Storm:1.f;
- Health=FMath::Max(0.f,Health-CryptCombat::Damage(Rating,Profile.Armor,Element)*Multiplier);
+ const auto& CombatProfile=Stats();
+ if(Element==ECryptDamage::Physical && FMath::FRand()>CryptCombat::HitChance(Dexterity,CombatProfile.Dexterity)) return false;
+ const float Multiplier=Element==ECryptDamage::Fire?CombatProfile.Fire:Element==ECryptDamage::Storm?CombatProfile.Storm:1.f;
+ Health=FMath::Max(0.f,Health-CryptCombat::Damage(Rating,CombatProfile.Armor,Element)*Multiplier);
  if(Health>0.f) return true;
  if(bRoadRaider)
   if(auto* Hero=Cast<ACryptHero>(UGameplayStatics::GetPlayerPawn(this,0))) Hero->DefeatedRoadRaider();

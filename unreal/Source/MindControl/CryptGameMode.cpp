@@ -1,4 +1,5 @@
 #include "CryptGameMode.h"
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "CryptHudLayout.h"
 #include "Engine/GameViewportClient.h"
 #include "Widgets/Input/SVirtualJoystick.h"
@@ -627,83 +628,143 @@ void ACryptGameMode::BeginPlay()
     const FVector Point=FMath::Lerp(Mouth,End,Fraction);
     PassageLamp(Point+FVector(0,0,245),FLinearColor(1.f,.58f,.32f));
    }
-   for(int32 Row=0;Row<3;++Row)
+   // Each carved passage joins two cells in a spanning tree. The boss arena
+   // has one entrance, at the east-side cell furthest from the ramp by foot.
+   constexpr int32 Columns=19, Rows=11, Cells=Columns*Rows;
+   constexpr double WallThickness=62.;
+   const double MazeEnd=Center.X+RoomHalfLength*.47;
+   const double CellWidth=(MazeEnd-East)/Columns;
+   const double CellDepth=2*RoomHalfWidth/Rows;
+   const double SouthEdge=Center.Y-RoomHalfWidth;
+   const auto CellPoint=[&](int32 Cell)
    {
-    const double Y=(Row-1)*RoomHalfWidth*.72;
-    for(int32 Bay=0;Bay<8;++Bay)
+    return FVector(East+(Cell%Columns+.5)*CellWidth,SouthEdge+(Cell/Columns+.5)*CellDepth,Center.Z);
+   };
+
+   int32 Parent[Cells], Depth[Cells]{};
+   for(int32& Value : Parent) Value=INDEX_NONE;
+   const int32 Start=(Rows/2)*Columns;
+   Parent[Start]=Start;
+   TArray<int32> Stack;
+   Stack.Reserve(Cells);
+   Stack.Add(Start);
+   FRandomStream MazeRandom(7139+I*389);
+   while(!Stack.IsEmpty())
+   {
+    const int32 Cell=Stack.Last();
+    const int32 X=Cell%Columns, Y=Cell/Columns;
+    int32 Neighbors[4], Available=0;
+    if(X>0 && Parent[Cell-1]==INDEX_NONE) Neighbors[Available++]=Cell-1;
+    if(X+1<Columns && Parent[Cell+1]==INDEX_NONE) Neighbors[Available++]=Cell+1;
+    if(Y>0 && Parent[Cell-Columns]==INDEX_NONE) Neighbors[Available++]=Cell-Columns;
+    if(Y+1<Rows && Parent[Cell+Columns]==INDEX_NONE) Neighbors[Available++]=Cell+Columns;
+    if(Available==0)
     {
-     const double X=((Bay+.5)/4.-1.)*RoomHalfLength;
-     PassageLamp(Center+FVector(X,Y,525),
-       (Bay+Row)%2==0?FLinearColor(1.f,.56f,.31f):Definition.Accent);
-     if(Row==1) continue;
-     const FVector Pillar=Center+FVector(X,Y,CeilingHeight*.5);
-     Block(Pillar,FVector(148,148,CeilingHeight),Stone);
-     Block(Pillar-FVector(0,0,CeilingHeight*.5-26),FVector(210,210,52),Mark);
+     Stack.Pop();
+     continue;
+    }
+    const int32 Next=Neighbors[MazeRandom.RandRange(0,Available-1)];
+    Parent[Next]=Cell;
+    Depth[Next]=Depth[Cell]+1;
+    Stack.Add(Next);
+   }
+
+   int32 ExitCell=Columns-1;
+   for(int32 Row=1;Row<Rows;++Row)
+   {
+    const int32 EdgeCell=(Row+1)*Columns-1;
+    if(Depth[EdgeCell]>Depth[ExitCell]) ExitCell=EdgeCell;
+   }
+   TArray<int32> BossRoute;
+   for(int32 Cell=ExitCell;Cell!=Start;Cell=Parent[Cell]) BossRoute.Add(Cell);
+   BossRoute.Add(Start);
+
+   auto* Walls=NewObject<UHierarchicalInstancedStaticMeshComponent>(this);
+   AddInstanceComponent(Walls);
+   Walls->SetStaticMesh(Cube);
+   if(Stone) Walls->SetMaterial(0,Stone);
+   Walls->SetCollisionProfileName(TEXT("BlockAll"));
+   Walls->SetMobility(EComponentMobility::Static);
+   Walls->RegisterComponent();
+   const auto Wall=[&](FVector Floor,FVector Size)
+   {
+    Walls->AddInstance(FTransform(FRotator::ZeroRotator,Floor+FVector(0,0,CeilingHeight*.5),Size/100.),true);
+   };
+   const auto Connected=[&](int32 A,int32 B)
+   {
+    return Parent[A]==B || Parent[B]==A;
+   };
+   for(int32 Cell=0;Cell<Cells;++Cell)
+   {
+    const FVector Floor=CellPoint(Cell);
+    if(Cell%Columns+1<Columns && !Connected(Cell,Cell+1))
+     Wall(Floor+FVector(CellWidth*.5,0,0),FVector(WallThickness,CellDepth,CeilingHeight));
+    if(Cell/Columns+1<Rows && !Connected(Cell,Cell+Columns))
+     Wall(Floor+FVector(0,CellDepth*.5,0),FVector(CellWidth,WallThickness,CeilingHeight));
+    // Partial walls make doorways between selected cells, leaving 3.4 m clear.
+    constexpr double Opening=340.;
+    if((Cell+I)%4==0 && Cell%Columns+1<Columns && Connected(Cell,Cell+1))
+    {
+     const double Wing=(CellDepth-Opening)*.5;
+     for(double Side : {-1.,1.})
+      Wall(Floor+FVector(CellWidth*.5,Side*(Opening+Wing)*.5,0),FVector(WallThickness,Wing,CeilingHeight));
+    }
+    if((Cell+I*3)%5==0 && Cell/Columns+1<Rows && Connected(Cell,Cell+Columns))
+    {
+     const double Wing=(CellWidth-Opening)*.5;
+     for(double Side : {-1.,1.})
+      Wall(Floor+FVector(Side*(Opening+Wing)*.5,CellDepth*.5,0),FVector(Wing,WallThickness,CeilingHeight));
+    }
+
+    // Light junctions and vary side alcoves without marking the solution path.
+    int32 Degree=0;
+    if(Cell%Columns>0 && Connected(Cell,Cell-1)) ++Degree;
+    if(Cell%Columns+1<Columns && Connected(Cell,Cell+1)) ++Degree;
+    if(Cell/Columns>0 && Connected(Cell,Cell-Columns)) ++Degree;
+    if(Cell/Columns+1<Rows && Connected(Cell,Cell+Columns)) ++Degree;
+    if(Degree>=3 || (Cell+I*7)%9==0)
+     PassageLamp(Floor+FVector(0,0,480),Degree>=3?Definition.Accent:FLinearColor(1.f,.50f,.23f));
+    if(Degree==1 && Cell!=Start && Cell!=ExitCell && (Cell+I)%3==0)
+     Block(Floor+FVector(0,0,29),FVector(148,148,58),Mark);
+   }
+
+   const double DoorY=CellPoint(ExitCell).Y;
+   constexpr double DoorHalfWidth=180.;
+   const double SouthSpan=DoorY-DoorHalfWidth-SouthEdge;
+   const double NorthSpan=Center.Y+RoomHalfWidth-DoorY-DoorHalfWidth;
+   Wall(FVector(MazeEnd,SouthEdge+SouthSpan*.5,Center.Z),FVector(WallThickness,SouthSpan,CeilingHeight));
+   Wall(FVector(MazeEnd,DoorY+DoorHalfWidth+NorthSpan*.5,Center.Z),FVector(WallThickness,NorthSpan,CeilingHeight));
+   Block(FVector(MazeEnd,DoorY,Center.Z+(CeilingHeight+310)*.5),
+      FVector(WallThickness,2*DoorHalfWidth,CeilingHeight-310),Stone);
+   Sign(FVector(MazeEnd-WallThickness*.5-3,DoorY,Center.Z+355),TEXT("Boss chamber"),30);
+
+   const double ArenaLength=Center.X+RoomHalfLength-MazeEnd;
+   const FVector Arena(MazeEnd+ArenaLength*.56,Center.Y,Center.Z);
+   for(double Side : {-1.,1.})
+   {
+    for(double Along : {-.27,0.,.27})
+    {
+     const FVector Row=Arena+FVector(ArenaLength*Along,Side*RoomHalfWidth*.49,0);
+     Wall(Row,FVector(160,160,CeilingHeight));
+     PassageLamp(Row+FVector(0,-Side*150,475),Definition.Accent);
     }
    }
-   const auto Fixture=[&](float X,float Y,float W,float D,float H)
-   {
-    const double Height=FMath::Min(235.,double(H));
-    Block(Center+FVector(X*LayoutScale,Y*LayoutScale,Height/2),FVector(W*1.65,D*1.65,Height),Mark);
+   PassageLamp(Arena+FVector(0,0,525),FLinearColor(1.f,.62f,.36f));
+
+   const FVector Encounter[]={
+    CellPoint(BossRoute[BossRoute.Num()*3/4])+FVector(0,0,95),
+    CellPoint(BossRoute[BossRoute.Num()/2])+FVector(0,0,95),
+    CellPoint(BossRoute[BossRoute.Num()/4])+FVector(0,0,95),
+    Arena+FVector(0,0,95)
    };
-   switch(Definition.Layout)
-   {
-    case ELayout::Pillars:
-     for(float X : {-420.f,35.f,470.f}) for(float Y : {-385.f,385.f}) Fixture(X,Y,115,115,310);
-     break;
-    case ELayout::Web:
-     Fixture(-155,-490,580,96,216);
-     Fixture(350,470,615,105,240);
-     Fixture(450,-590,195,205,170);
-     break;
-    case ELayout::Forge:
-     Fixture(-135,5,220,470,235);
-     Fixture(535,0,200,205,125);
-     Fixture(670,-690,860,110,85);
-     break;
-    case ELayout::Marsh:
-     // Raised stepping blocks leave the stone floor as the only continuous surface.
-     for(int32 P=0;P<5;++P) Fixture(-470+315*P,P%2?260:-260,135,110,21);
-     Fixture(90,420,210,120,155);
-     Fixture(400,-475,240,170,180);
-     break;
-    case ELayout::Spires:
-     for(int32 N=0;N<7;++N) Fixture(-430+220*N,N%2?435:-435,76,76,160+45*N);
-     break;
-    case ELayout::Maze:
-     Fixture(-270,-335,75,870,290);
-     Fixture(250,350,85,880,290);
-     Fixture(820,-330,75,870,290);
-     break;
-    case ELayout::Ice:
-     Fixture(-240,340,270,430,260);
-     Fixture(240,-410,250,480,286);
-     Fixture(790,420,220,340,235);
-     break;
-    case ELayout::Caldera:
-     Fixture(120,25,250,490,60);
-     Fixture(420,-650,920,110,100);
-     Fixture(670,620,530,120,165);
-     break;
-    case ELayout::Cross:
-     Fixture(120,0,510,90,265);
-     Fixture(120,0,90,560,265);
-     Fixture(680,565,125,130,295);
-     break;
-    case ELayout::Vault:
-     for(float Y : {-650.f,650.f}) Fixture(290,Y,1120,100,145);
-     Fixture(1100,0,252,410,88);
-     break;
-   }
-   const FVector Encounter[]={{-490,220,95},{330,-200,95},{700,205,95},{1040,-175,95}};
    for(int32 Slot=0;Slot<UE_ARRAY_COUNT(Encounter);++Slot)
    {
     FActorSpawnParameters Spawn;
     Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-    if(auto* Enemy=GetWorld()->SpawnActor<ACryptMonster>(Center+FVector(Encounter[Slot].X*LayoutScale,Encounter[Slot].Y*LayoutScale,Encounter[Slot].Z),FRotator::ZeroRotator,Spawn))
+    if(auto* Enemy=GetWorld()->SpawnActor<ACryptMonster>(Encounter[Slot],FRotator::ZeroRotator,Spawn))
     {
      Enemy->SaveId=EnemyId(I,Slot);
-     Enemy->ConfigureCreature(Definition.Enemies[Slot],I);
+     Enemy->ConfigureCreature(Definition.Enemies[Slot],I,Slot==UE_ARRAY_COUNT(Encounter)-1);
     }
    }
   }
