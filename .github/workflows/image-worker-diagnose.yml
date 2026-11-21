@@ -12,16 +12,21 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy smooth-surface worker and test a repository reference image
+      - name: Deploy face-detail worker and test a repository reference image
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $root = Join-Path $env:ProgramData 'MindControl-ImageWorker'
           $task = 'MindControl-ImageToUnreal-Worker'
           $key = [IO.File]::ReadAllText((Join-Path $root 'token.txt'))
-          Stop-ScheduledTask -TaskName $task
           $configPath = Join-Path $root 'config.json'
           $config = Get-Content $configPath -Raw | ConvertFrom-Json
+          $null = & $config.python -c "import importlib.util; print(importlib.util.find_spec('cv2') is not None)" | Tee-Object -Variable hasDetector
+          if ($hasDetector -ne 'True') {
+            & $config.python -m pip install --disable-pip-version-check 'opencv-python-headless==4.11.0.86'
+            if ($LASTEXITCODE -ne 0) { throw 'Could not install the face detector' }
+          }
+          Stop-ScheduledTask -TaskName $task
           $newBlender = Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse |
             Where-Object { $_.Directory.Name -match '^Blender [\d.]+$' } |
             Sort-Object { [version]($_.Directory.Name -replace '^Blender ','') } -Descending | Select-Object -First 1
@@ -67,6 +72,9 @@ jobs:
             } finally { $zip.Dispose() }
             & $config.python -c "import sys, zipfile; from PIL import Image; z=zipfile.ZipFile(sys.argv[1]); image=Image.open(z.open('Character_BaseColor.png')); assert image.size == (2048,2048), image.size; print('Verified 2048 x 2048 texture')" $out
             if ($LASTEXITCODE -ne 0) { throw 'High-detail texture verification failed' }
+            if (!(Select-String -Path (Join-Path $root 'worker.stdout.log') -Pattern 'Frontal face reference restored on [1-9][0-9]* texels' -Quiet)) {
+              Write-Warning 'The reference export succeeded but face refinement did not apply.'
+            }
             Write-Host 'Generated FBX and texture through private HTTPS.'
           } finally {
             foreach ($name in @('worker.stdout.log','worker.stderr.log')) {
