@@ -32,11 +32,22 @@ jobs:
           if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ine $expected) {
             throw 'Ocean Serenity FBX checksum mismatch; do not bake an unreviewed replacement'
           }
-          $blenders = @(Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
+          $candidates = @(Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
           $command = Get-Command blender.exe -ErrorAction SilentlyContinue
-          if ($command) { $blenders += $command.Source }
-          $blender = $blenders | Select-Object -Unique | Select-Object -First 1
-          if (!$blender) { throw 'Blender executable not found on runner' }
+          if ($command) { $candidates += $command.Source }
+          $valid = @()
+          foreach ($candidate in ($candidates | Select-Object -Unique)) {
+            $line = (& $candidate --version 2>&1 | Select-Object -First 1)
+            if ($line -match '^Blender\s+(\d+)\.(\d+)') {
+              $major = [int]$Matches[1]; $minor = [int]$Matches[2]
+              if ($major -gt 4 -or ($major -eq 4 -and $minor -ge 3)) {
+                $valid += [pscustomobject]@{ Path=$candidate; Major=$major; Minor=$minor }
+              }
+            }
+          }
+          $blender = $valid | Sort-Object Major,Minor -Descending | Select-Object -First 1 -ExpandProperty Path
+          if (!$blender) { throw 'Blender 4.3+ required for animation bake. Installed versions are too old or Blender is unavailable.' }
+          Write-Host "Selected Blender: $blender"
           New-Item -ItemType Directory -Path 'rig-output' -Force | Out-Null
           $output = Join-Path $env:GITHUB_WORKSPACE 'rig-output\OceanSerenity.fbx'
           & $blender -b -t 2 --python 'tools/animate_valkyrie.py' -- "$source" "$output"
