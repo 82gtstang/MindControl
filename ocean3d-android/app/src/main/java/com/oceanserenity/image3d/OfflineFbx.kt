@@ -90,7 +90,7 @@ private fun writeFbx(mesh: LocalMesh, uv: DoubleArray): ByteArray {
     val polygon = IntArray(mesh.indices.size) { if (it%3==2) -mesh.indices[it]-1 else mesh.indices[it] }
     val filename = "Character_BaseColor.png"
     fun element(type: String) = node("LayerElement", children=listOf(node("Type",type),node("TypedIndex",0)))
-    fun setting(name: String,value: Any) = node("P",name,if(value is Double) "double" else "int","", "",value)
+    fun setting(name: String,value: Any) = node("P",name,if(value is Double) "double" else "int",if(value is Double) "Number" else "Integer", "",value)
     val nodes = listOf(
         node("FBXHeaderExtension", children=listOf(node("FBXHeaderVersion",1003),node("FBXVersion",7400))),
         node("GlobalSettings", children=listOf(node("Version",1000),node("Properties70", children=listOf(
@@ -111,9 +111,11 @@ private fun writeFbx(mesh: LocalMesh, uv: DoubleArray): ByteArray {
             node("Model",2L,"Character\u0000\u0001Model","Mesh",children=listOf(node("Version",232),node("Shading",true),node("Culling","CullingOff"))),
             node("Material",3L,"Character_Material\u0000\u0001Material","",children=listOf(node("Version",102),node("ShadingModel","Lambert"),node("MultiLayer",0),
                 node("Properties70",children=listOf(node("P","DiffuseColor","Color","","A",1.0,1.0,1.0))))),
-            node("Texture",4L,"Character_BaseColor\u0000\u0001Texture","",children=listOf(node("Type","TextureVideoClip"),node("Version",202),node("FileName",filename),node("RelativeFilename",filename)))
+            node("Texture",4L,"Character_BaseColor\u0000\u0001Texture","",children=listOf(node("Type","TextureVideoClip"),node("Version",202),node("FileName",filename),node("RelativeFilename",filename))),
+            node("Video",5L,"Character_BaseColor\u0000\u0001Video","Clip",children=listOf(
+                node("Type","Clip"),node("Filename",filename),node("RelativeFilename",filename)))
         )),
-        node("Connections",children=listOf(node("C","OO",1L,2L),node("C","OO",2L,0L),node("C","OO",3L,2L),node("C","OP",4L,3L,"DiffuseColor")))
+        node("Connections",children=listOf(node("C","OO",1L,2L),node("C","OO",2L,0L),node("C","OO",3L,2L),node("C","OP",4L,3L,"DiffuseColor"),node("C","OO",5L,4L)))
     )
     val output = ByteBuffer.allocate(256 + nodes.sumOf { it.size }).order(ByteOrder.LITTLE_ENDIAN)
     output.put("Kaydara FBX Binary  \u0000\u001a\u0000".toByteArray())

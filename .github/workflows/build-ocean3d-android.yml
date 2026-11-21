@@ -49,10 +49,17 @@ jobs:
             'image_to_triplanes.onnx' = '9e030d7d0a9d3d4c5237b673abaf61025bfbf3f6e2cbf493ad998a1fe3b12c7a'
             'mlp.onnx' = '49412ff9c66aebdd472e967f7c47b045ba3124ee5ec58520e9ed35010e163f76'
           }
+          $cache = Join-Path $env:RUNNER_TOOL_CACHE 'Ocean3D\verified-onnx-v1'
+          New-Item -ItemType Directory -Force -Path $cache | Out-Null
           foreach ($file in $checksums.Keys) {
             $target = Join-Path $models $file
-            & curl.exe -fL --retry 3 --max-time 900 "https://huggingface.co/yapaymizeka/image-to-3d/resolve/main/$file" -o $target
-            if ($LASTEXITCODE -ne 0 -or !(Test-Path $target) -or (Get-FileHash $target -Algorithm SHA256).Hash -ine $checksums[$file]) {
+            $cached = Join-Path $cache $file
+            if (!(Test-Path $cached) -or (Get-FileHash $cached -Algorithm SHA256).Hash -ine $checksums[$file]) {
+              & curl.exe -fL --retry 3 --max-time 900 "https://huggingface.co/yapaymizeka/image-to-3d/resolve/main/$file" -o $cached
+              if ($LASTEXITCODE -ne 0) { throw "Download failed: $file" }
+            }
+            Copy-Item $cached $target -Force
+            if (!(Test-Path $target) -or (Get-FileHash $target -Algorithm SHA256).Hash -ine $checksums[$file]) {
               throw "Could not verify bundled model asset: $file"
             }
           }
