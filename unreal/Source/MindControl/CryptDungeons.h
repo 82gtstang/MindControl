@@ -26,14 +26,17 @@ namespace CryptDungeons
  };
  inline constexpr int32 Count=UE_ARRAY_COUNT(Chambers);
  inline constexpr int32 EnemyId(int32 Chamber,int32 Slot) { return 1000+Chamber*10+Slot; }
- inline FVector SurfaceGate() { return FVector(-2450,440,-20); }
- inline constexpr float FloorElevation=240.f;
  double GetGroundHeight(double X,double Y);
  inline const FVector2D EntrancePoints[]={
-  {-4950,1750},{-3150,2700},{-1200,4100},{950,4250},{3170,3670},
-  {4870,2350},{-4650,-1450},{-2450,-2950},{-940,-4250},{2800,-3650}
+  {-4900,1200},{-3100,2700},{-1200,4100},{1000,4200},{3200,3700},
+  {3500,2200},{-4600,-1500},{-2400,-3000},{-900,-4200},{2800,-3600}
  };
  static_assert(UE_ARRAY_COUNT(EntrancePoints)==Count);
+ inline constexpr double RampLength=1000.;
+ inline constexpr double RampHalfWidth=200.;
+ inline constexpr double LayoutScale=.5;
+ inline constexpr double RoomHalfLength=687.5;
+ inline constexpr double RoomHalfWidth=435.;
 
  inline FVector Entrance(int32 Index)
  {
@@ -45,63 +48,47 @@ namespace CryptDungeons
   const auto& P=EntrancePoints[Index];
   return FVector(P.X-285,P.Y,GetGroundHeight(P.X-285,P.Y)+115);
  }
- inline FVector Hub() { return FVector(9200,0,FloorElevation); }
- inline FVector Room(int32 Index) { return FVector(14000+3600*(Index%5),-4800+9600*(Index/5),FloorElevation); }
- inline FVector Gate(int32 Index) { return Hub()+FVector(-1440+720*(Index%5),Index<5?-640:640,0); }
- inline FVector Exit(int32 Index) { return Room(Index)+FVector(-1050,0,0); }
- inline bool Near(const FVector& A,const FVector& B) { return FVector::DistSquared(A,B)<FMath::Square(250.); }
+ inline FVector Room(int32 Index)
+ {
+  const auto& P=EntrancePoints[Index];
+  const double X=P.X+RampLength+RoomHalfLength;
+  double Ceiling=GetGroundHeight(P.X,P.Y)-115;
+  for(double DX : {-RoomHalfLength,-RoomHalfLength/2,0.,RoomHalfLength/2,RoomHalfLength})
+   for(double DY : {-RoomHalfWidth,0.,RoomHalfWidth})
+    Ceiling=FMath::Min(Ceiling,GetGroundHeight(X+DX,P.Y+DY)-45);
+  return FVector(X,P.Y,Ceiling-310);
+ }
+ inline bool IsRampCell(double X,double Y)
+ {
+  for(const auto& P : EntrancePoints)
+   if(X>P.X && X<P.X+RampLength && FMath::Abs(Y-P.Y)<RampHalfWidth) return true;
+  return false;
+ }
  inline int32 Current(const FVector& Point)
  {
   for(int32 I=0;I<Count;++I)
-   if(FVector::DistSquared(Point,Room(I))<FMath::Square(1740.)) return I;
+  {
+   const auto& P=EntrancePoints[I];
+   if(Point.X<P.X+RampLength-20 || Point.X>P.X+RampLength+2*RoomHalfLength+20 ||
+      FMath::Abs(Point.Y-P.Y)>RoomHalfWidth+20) continue;
+   const double Height=Point.Z-Room(I).Z;
+   if(Height>=-30 && Height<=283) return I;
+  }
   return INDEX_NONE;
  }
- inline FVector RaiseOldSave(FVector Position)
+
+ inline FVector MigrateLocation(FVector Position,bool bEnemy=false)
  {
-  // Previous builds placed these floors at Z=0.
-  if(Position.Z>=FloorElevation-5) return Position;
-  if(FMath::Abs(Position.X-Hub().X)<2140 && FMath::Abs(Position.Y)<1000)
-   Position.Z+=FloorElevation;
-  else for(int32 I=0;I<Count;++I)
-  {
-   const FVector Offset=Position-Room(I);
-   if(FMath::Abs(Offset.X)<1380 && FMath::Abs(Offset.Y)<870)
-   {
-    Position.Z+=FloorElevation;
-    break;
-   }
-  }
-  return Position;
- }
- inline bool Travel(const FVector& Point,FVector& Destination,FString& Label)
- {
-  if(Near(Point,SurfaceGate()))
-  {
-   Destination=Hub()+FVector(-1700,0,100);
-   Label=TEXT("Enter dungeon crossroads");
-   return true;
-  }
-  if(Near(Point,Hub()+FVector(-1910,0,0)))
-  {
-   Destination=SurfaceGate()+FVector(0,-220,110);
-   Label=TEXT("Return to the surface");
-   return true;
-  }
+  // Move saves made in the old separate rooms to the matching walk-in dungeon.
+  if(FMath::Abs(Position.X-9200)<2140 && FMath::Abs(Position.Y)<1000)
+   return FVector(-2450,210,GetGroundHeight(-2450,210)+115);
   for(int32 I=0;I<Count;++I)
   {
-   if(Near(Point,Gate(I)) || Near(Point,Entrance(I)))
-   {
-    Destination=Room(I)+FVector(-780,0,100);
-    Label=FString::Printf(TEXT("Enter %s"),Chambers[I].Name);
-    return true;
-   }
-   if(Near(Point,Exit(I)))
-   {
-    Destination=SurfaceArrival(I);
-    Label=TEXT("Return to the surface");
-    return true;
-   }
+   const FVector OldCenter(14000+3600*(I%5),-4800+9600*(I/5),0);
+   const FVector Offset=Position-OldCenter;
+   if(FMath::Abs(Offset.X)<1400 && FMath::Abs(Offset.Y)<900)
+    return bEnemy ? Room(I)+FVector(Offset.X*LayoutScale,Offset.Y*LayoutScale,95) : SurfaceArrival(I);
   }
-  return false;
+  return Position;
  }
 }

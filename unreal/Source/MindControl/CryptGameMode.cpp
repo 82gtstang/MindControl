@@ -115,7 +115,7 @@ namespace
     Normals.Add(FVector(-Dx,-Dy,1).GetSafeNormal());
     Tangents.Emplace(FVector(1,0,Dx).GetSafeNormal(),false);
     UVs.Emplace(float(Column)/Columns,float(Row)/Rows);
-    if(Row<Rows && Column<Columns)
+    if(Row<Rows && Column<Columns && !CryptDungeons::IsRampCell(X+50.f,Y+50.f))
     {
      const int32 A=Row*Stride+Column;
      const int32 B=A+1;
@@ -279,19 +279,10 @@ void ACryptGameMode::BeginPlay()
    Label->SetWorldSize(Size);
    Label->SetText(FText::FromString(Title));
   };
-  const auto Portal=[&](FVector P,const TCHAR* Title,UMaterialInterface* Glow)
-  {
-   Block(P+FVector(0,0,3),FVector(155,205,6),Glow);
-   for(float Side : {-1.f,1.f})
-    Block(P+FVector(0,Side*113,100),FVector(62,53,200),Stone);
-   Block(P+FVector(0,0,211),FVector(64,270,30),Glow);
-   Sign(P+FVector(-37,0,263),Title,30);
-  };
   auto* Boulder=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));
   auto* Trunk=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
   auto* Bark=Accent(FLinearColor(.099,.064,.038));
   auto* Pine=Accent(FLinearColor(.055,.115,.077));
-  auto* Brush=Accent(FLinearColor(.19,.112,.046));
   auto* Torch=Accent(FLinearColor(1,.32,.047));
   auto* Rune=Accent(FLinearColor(.39,.78,1));
   const auto SurfaceEntrance=[&](int32 Index,UMaterialInterface* Mark)
@@ -364,7 +355,7 @@ void ACryptGameMode::BeginPlay()
      if(!Sculpt) Rock(FVector(30+FMath::Cos(Angle)*167,FMath::Sin(Angle)*188,28),
       FVector(138,128,109));
     }
-    Block(Origin+FVector(36,0,-4),FVector(216,216,18),Brush);
+
    }
    else if(bCutStone)
    {
@@ -396,8 +387,6 @@ void ACryptGameMode::BeginPlay()
 
    if(!bSinkhole)
    {
-    // A dark back chamber gives the mouth depth while keeping the trigger reachable.
-    Block(Origin+FVector(214,0,113),FVector(32,250,237),Accent(FLinearColor(.018,.023,.027)));
     for(int32 Step=0;Step<3;++Step)
     {
      const double X=Origin.X-193+Step*69;
@@ -444,33 +433,73 @@ void ACryptGameMode::BeginPlay()
    Block(SignPost+FVector(0,0,115),FVector(9,224,34),Mark);
    Sign(SignPost+FVector(-9,0,115),Chambers[Index].Name,21);
   };
-  auto* HubAccent=Accent(FLinearColor(.32,.55,.62));
-  Portal(SurfaceGate(),TEXT("Dungeon Crossroads"),HubAccent);
-  const FVector Square=Hub();
-  Block(Square+FVector(0,0,-20),FVector(4280,2000,40),Cobble?Cobble:Stone);
-  for(float Side : {-1.f,1.f})
+  const auto PassageLamp=[&](FVector Position,FLinearColor Tint)
   {
-   Block(Square+FVector(0,Side*994,156),FVector(4290,45,312),Stone);
-   Block(Square+FVector(Side*2130,0,156),FVector(48,2000,312),Stone);
-  }
-  Portal(Square+FVector(-1910,0,0),TEXT("Surface"),HubAccent);
+   if(auto* Light=GetWorld()->SpawnActor<APointLight>(Position,FRotator::ZeroRotator))
+   {
+    if(auto* Lamp=Light->FindComponentByClass<UPointLightComponent>())
+    {
+     Lamp->SetMobility(EComponentMobility::Movable);
+     Lamp->SetIntensity(1850);
+     Lamp->SetLightColor(Tint);
+     Lamp->SetAttenuationRadius(810);
+     Lamp->SetCastShadows(false);
+    }
+   }
+  };
   for(int32 I=0;I<Count;++I)
   {
    const auto& Definition=Chambers[I];
    auto* Mark=Accent(Definition.Accent);
-   Portal(Gate(I),Definition.Name,Mark);
    SurfaceEntrance(I,Mark);
    const FVector Center=Room(I);
-   Block(Center+FVector(0,0,-25),FVector(2750,1740,50),Stone);
-   for(float Side : {-1.f,1.f})
+   const FVector Mouth=Entrance(I);
+   const double East=Mouth.X+RampLength;
+   const double HalfWidth=RampHalfWidth;
+   if(auto* Ramp=CreateSurface(GetWorld(),TEXT("DungeonPassage"),true))
    {
-    Block(Center+FVector(0,Side*863,160),FVector(2760,46,320),Stone);
-    Block(Center+FVector(Side*1370,0,160),FVector(46,1740,320),Stone);
+    const FVector Along(RampLength,0,Center.Z-Mouth.Z);
+    const FVector Normal=FVector::CrossProduct(Along,FVector::RightVector).GetSafeNormal();
+    const TArray<FVector> Points={
+     Mouth+FVector(0,-HalfWidth,0),Mouth+FVector(0,HalfWidth,0),
+     FVector(East,Mouth.Y-HalfWidth,Center.Z),FVector(East,Mouth.Y+HalfWidth,Center.Z)};
+    const TArray<FVector> Normals={Normal,Normal,Normal,Normal};
+    const TArray<FVector2D> UV={{0,0},{0,2},{5,0},{5,2}};
+    const TArray<FProcMeshTangent> Tangents={
+     FProcMeshTangent(Along.GetSafeNormal(),false),FProcMeshTangent(Along.GetSafeNormal(),false),
+     FProcMeshTangent(Along.GetSafeNormal(),false),FProcMeshTangent(Along.GetSafeNormal(),false)};
+    Ramp->CreateMeshSection_LinearColor(0,Points,{0,1,2,1,3,2},Normals,UV,{},Tangents,true);
+    if(Stone) Ramp->SetMaterial(0,Stone);
    }
-   Portal(Exit(I),TEXT("Surface"),Mark);
+   for(int32 Section=0;Section<10;++Section)
+   {
+    const double Fraction=(Section+.5)/10.;
+    const double X=Mouth.X+RampLength*Fraction;
+    const double Bottom=FMath::Lerp(Mouth.Z,Center.Z,(Section+1)/10.)-30;
+    for(double Side : {-1.,1.})
+    {
+     const double Y=Mouth.Y+Side*(HalfWidth+10);
+     const double Top=FMath::Max(Bottom+110,GetGroundHeight(X,Y)+40);
+     Block(FVector(X,Y,(Bottom+Top)*.5),FVector(RampLength/10.,24,Top-Bottom),Stone);
+    }
+   }
+
+   Block(Center+FVector(0,0,-25),FVector(2*RoomHalfLength,2*RoomHalfWidth,50),Stone);
+   Block(Center+FVector(0,0,292),FVector(2*RoomHalfLength,2*RoomHalfWidth,44),Stone);
+   for(double Side : {-1.,1.})
+   {
+    Block(Center+FVector(0,Side*RoomHalfWidth,145),FVector(2*RoomHalfLength,35,290),Stone);
+    const double Wing=RoomHalfWidth-HalfWidth;
+    Block(FVector(East+6,Center.Y+Side*(HalfWidth+Wing*.5),Center.Z+145),FVector(22,Wing,290),Stone);
+   }
+   Block(Center+FVector(RoomHalfLength,0,145),FVector(32,2*RoomHalfWidth,290),Stone);
+   PassageLamp(FVector(East-270,Center.Y,Center.Z+260),FLinearColor(1.f,.58f,.32f));
+   PassageLamp(Center+FVector(-280,-165,218),FLinearColor(1.f,.56f,.31f));
+   PassageLamp(Center+FVector(305,165,218),Definition.Accent);
    const auto Fixture=[&](float X,float Y,float W,float D,float H)
    {
-    Block(Center+FVector(X,Y,H/2),FVector(W,D,H),Mark);
+    const double Height=FMath::Min(235.,double(H));
+    Block(Center+FVector(X*LayoutScale,Y*LayoutScale,Height/2),FVector(W*LayoutScale,D*LayoutScale,Height),Mark);
    };
    switch(Definition.Layout)
    {
@@ -526,7 +555,7 @@ void ACryptGameMode::BeginPlay()
    {
     FActorSpawnParameters Spawn;
     Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-    if(auto* Enemy=GetWorld()->SpawnActor<ACryptMonster>(Center+Encounter[Slot],FRotator::ZeroRotator,Spawn))
+    if(auto* Enemy=GetWorld()->SpawnActor<ACryptMonster>(Center+FVector(Encounter[Slot].X*LayoutScale,Encounter[Slot].Y*LayoutScale,Encounter[Slot].Z),FRotator::ZeroRotator,Spawn))
     {
      Enemy->SaveId=EnemyId(I,Slot);
      Enemy->ConfigureCreature(Definition.Enemies[Slot],I);

@@ -243,8 +243,6 @@ void ACryptMobileHUD::DrawHUD()
   GetTextSize(Label,Width,Height,nullptr,.87f*S);
   DrawText(Label,FLinearColor::White,Point.X-Width*.72f,Point.Y+OffsetY*S,nullptr,.87f*S,false);
  };
- const FVector Entry=CryptDungeons::SurfaceGate();
- Landmark(FVector2D(Entry.X,Entry.Y),TEXT("Crossroads"),-19.f,EIcon::Storm);
  for(int32 I=0;I<CryptDungeons::Count;++I)
  {
   const FVector Location=CryptDungeons::Entrance(I);

@@ -410,9 +410,6 @@ ACryptTownActor* ACryptHero::GetInteractionTarget() const
 
 FString ACryptHero::GetInteractionLabel() const
 {
- FVector Destination;
- FString GateLabel;
- if(CryptDungeons::Travel(GetActorLocation(),Destination,GateLabel)) return GateLabel;
  if(const ACryptTownActor* Target=GetInteractionTarget())
   return Target->bQuestGiver ? FString(CryptQuests::Data[Target->QuestIndex].Giver) : FString(TEXT("Inspect objective"));
  return {};
@@ -439,14 +436,6 @@ FString ACryptHero::GetQuestJournal() const
 
 void ACryptHero::Interact()
 {
- FVector Destination;
- FString GateLabel;
- if(CryptDungeons::Travel(GetActorLocation(),Destination,GateLabel))
- {
-  SetActorLocation(Destination,false,nullptr,ETeleportType::TeleportPhysics);
-  GetCharacterMovement()->StopMovementImmediately();
-  return;
- }
  ACryptTownActor* Target=GetInteractionTarget();
  if(!Target)
  {
@@ -601,7 +590,7 @@ void ACryptHero::RestoreProgress()
   SaveStatus=TEXT("This save cannot be restored.");
   return;
  }
- if(!TeleportTo(CryptDungeons::RaiseOldSave(Save->HeroLocation),Save->HeroRotation,false,true))
+ if(!TeleportTo(CryptDungeons::MigrateLocation(Save->HeroLocation),Save->HeroRotation,false,true))
  {
   SaveStatus=TEXT("Could not return to the saved location.");
   return;
@@ -636,7 +625,7 @@ void ACryptHero::RestoreProgress()
   const float* SavedEnemyHealth=Save->EnemyHealth.Find(It->SaveId);
   const FVector* Location=Save->EnemyLocations.Find(It->SaveId);
   if(SavedEnemyHealth && Location && FMath::IsFinite(*SavedEnemyHealth) && !Location->ContainsNaN())
-   It->RestoreState(Save->Version==1?(*SavedEnemyHealth/3.f)*It->Stats().Health:*SavedEnemyHealth,CryptDungeons::RaiseOldSave(*Location));
+   It->RestoreState(Save->Version==1?(*SavedEnemyHealth/3.f)*It->Stats().Health:*SavedEnemyHealth,CryptDungeons::MigrateLocation(*Location,true));
  }
  Dialogue.Reset();
  SaveStatus=TEXT("Adventure restored.");
@@ -793,7 +782,7 @@ void ACryptHero::ReceiveCombatHit(float Rating,float Dexterity,ECryptDamage Elem
  RecoveryDelay=5.f;
  if(Health>0.f) return;
  const int32 Dungeon=CryptDungeons::Current(GetActorLocation());
- FVector Safe=CryptDungeons::SurfaceGate()+FVector(0,-270,110);
+ FVector Safe=FVector(-2450,175,110);
  if(Dungeon!=INDEX_NONE) Safe=CryptDungeons::SurfaceArrival(Dungeon);
  SetActorLocation(Safe,false,nullptr,ETeleportType::TeleportPhysics);
  GetCharacterMovement()->StopMovementImmediately();
