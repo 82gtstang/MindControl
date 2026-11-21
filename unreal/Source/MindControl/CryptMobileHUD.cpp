@@ -1,5 +1,6 @@
 #include "CryptMobileHUD.h"
 #include "CryptHero.h"
+#include "CryptDungeons.h"
 #include "CryptHudLayout.h"
 #include "CryptWorldLayout.h"
 #include "Engine/Canvas.h"
@@ -19,7 +20,7 @@ void ACryptMobileHUD::DrawHUD()
  const FLinearColor Gold(.96f,.79f,.44f);
  const FLinearColor Bronze(.53f,.37f,.21f,.95f);
  const FLinearColor Ink(.061f,.083f,.099f,.97f);
- enum class EIcon { Fist, Sword, Axe, Spear, Jump, Spin, Bag, Talk, Save, Restore, Castle, Town };
+ enum class EIcon { Fist, Sword, Axe, Spear, Jump, Spin, Bag, Talk, Save, Restore, Castle, Town, Fire, Storm };
  const auto Stroke=[&](FVector2D A,FVector2D B,FLinearColor Color,float Width=1.6f)
  {
   DrawLine(A.X,A.Y,B.X,B.Y,Color,Width*S);
@@ -47,6 +48,12 @@ void ACryptMobileHUD::DrawHUD()
   };
   switch(Shape)
   {
+   case EIcon::Fire:
+    Path({{-.32,.87},{-.76,.38},{-.62,-.18},{-.19,.12},{.11,-.91},{.67,-.19},{.78,.49},{.38,.87},{-.32,.87}});
+    break;
+   case EIcon::Storm:
+    Path({{.16,-.91},{-.67,.14},{-.09,.14},{-.39,.92},{.72,-.23},{.15,-.23},{.16,-.91}});
+    break;
    case EIcon::Fist:
     Path({{-.7,.65},{-.86,-.1},{-.55,-.69},{.48,-.78},{.81,-.4},{.72,.2},{.39,.65},{-.7,.65}});
     Path({{-.58,.2},{-.23,-.16},{.38,-.07},{.65,.16}});
@@ -163,6 +170,30 @@ void ACryptMobileHUD::DrawHUD()
  Button(Layout.Jump,EIcon::Jump,TEXT("JUMP"));
  Button(Layout.Attack,WeaponIcon(Hero->EquippedWeapon),bArmed?TEXT("ATTACK"):TEXT("PUNCH"),Strength>.1f);
  Button(Layout.Spin,EIcon::Spin,TEXT("SPIN"));
+ if(!Hero->bInventoryOpen)
+ {
+  Button(Layout.Fire,EIcon::Fire,TEXT("FIRE 19"),Hero->GetMana()>=19.f);
+  Button(Layout.Storm,EIcon::Storm,TEXT("STORM 28"),Hero->GetMana()>=28.f);
+  const float BarWidth=FMath::Min(200.f*S,W*.18f);
+  const float BarX=W*.40f;
+  const auto Resource=[&](const TCHAR* Label,float Current,float Maximum,float Y,FLinearColor Color)
+  {
+   DrawRect(Ink,BarX,Y,BarWidth,16*S);
+   DrawRect(Color,BarX+S,Y+S,(BarWidth-2*S)*FMath::Clamp(Current/Maximum,0.f,1.f),14*S);
+   DrawText(FString::Printf(TEXT("%s %d/%d"),Label,FMath::CeilToInt(Current),int32(Maximum)),
+    FLinearColor::White,BarX+5*S,Y,nullptr,.80f*S,false);
+  };
+  Resource(TEXT("HP"),Hero->GetHealth(),100.f,12*S,FLinearColor(.61f,.15f,.14f));
+  Resource(TEXT("STA"),Hero->GetStamina(),100.f,30*S,FLinearColor(.25f,.54f,.20f));
+  Resource(TEXT("MP"),Hero->GetMana(),75.f,48*S,FLinearColor(.15f,.34f,.67f));
+  DrawText(FString::Printf(TEXT("DEX %d   ARM %d   WPN %d"),int32(Hero->GetDexterity()),
+    int32(Hero->GetArmorRating()),int32(Hero->WeaponDamage())),
+    Gold,BarX,67*S,nullptr,.92f*S,false);
+  TArray<FString> Encounter;
+  Hero->GetCombatTarget().ParseIntoArrayLines(Encounter);
+  for(int32 I=0;I<Encounter.Num();++I)
+   DrawText(Encounter[I],FLinearColor::White,BarX,(86+17*I)*S,nullptr,.92f*S,false);
+ }
  Button(Layout.Bag,EIcon::Bag,TEXT("BAG"),Hero->bInventoryOpen);
 
  const FVector2D Origin=Layout.MapOrigin,Size=Layout.MapSize;
@@ -212,6 +243,8 @@ void ACryptMobileHUD::DrawHUD()
   GetTextSize(Label,Width,Height,nullptr,.87f*S);
   DrawText(Label,FLinearColor::White,Point.X-Width*.72f,Point.Y+OffsetY*S,nullptr,.87f*S,false);
  };
+ const FVector Entry=CryptDungeons::SurfaceGate();
+ Landmark(FVector2D(Entry.X,Entry.Y),TEXT("Dungeons"),-19.f,EIcon::Storm);
  Landmark(CryptWorld::Town,TEXT("Town"),7.f,EIcon::Town);
  Landmark(CryptWorld::Castle,TEXT("Castle"),-23.f,EIcon::Castle);
  DrawText(TEXT("N"),FLinearColor::White,Origin.X+9*S,Origin.Y+4*S,nullptr,.9f*S,false);

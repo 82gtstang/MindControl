@@ -1,5 +1,9 @@
 #include "CryptHero.h"
 #include "CryptMonster.h"
+#include "CryptDungeons.h"
+#include "Engine/StaticMeshActor.h"
+#include "Engine/World.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "CryptTownActor.h"
 #include "CryptSaveGame.h"
 #include "CryptHudLayout.h"
@@ -20,6 +24,23 @@
 #include "Components/CapsuleComponent.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimSingleNodeInstance.h"
+namespace
+{
+ int32 CompletedDungeonCount(uint32 Mask)
+ {
+  int32 Count=0;
+  for(;Mask;Mask&=Mask-1) ++Count;
+  return Count;
+ }
+ bool CombatVisible(const AActor* From,const AActor* To)
+ {
+  FCollisionQueryParams Query;
+  Query.AddIgnoredActor(From);
+  Query.AddIgnoredActor(To);
+  return !From->GetWorld()->LineTraceTestByChannel(From->GetActorLocation(),To->GetActorLocation(),ECC_Visibility,Query);
+ }
+}
+
 ACryptHero::ACryptHero()
 {
  PrimaryActorTick.bCanEverTick = true;
@@ -176,6 +197,12 @@ void ACryptHero::Tick(float DeltaSeconds)
 {
  Super::Tick(DeltaSeconds);
  AttackCooldown=FMath::Max(0.f,AttackCooldown-DeltaSeconds);
+ HurtCooldown=FMath::Max(0.f,HurtCooldown-DeltaSeconds);
+ SpellCooldown=FMath::Max(0.f,SpellCooldown-DeltaSeconds);
+ RecoveryDelay=FMath::Max(0.f,RecoveryDelay-DeltaSeconds);
+ if(RecoveryDelay<=0.f) Health=FMath::Min(100.f,Health+DeltaSeconds*4.f);
+ if(AttackCooldown<=0.f) Stamina=FMath::Min(100.f,Stamina+DeltaSeconds*19.f);
+ if(SpellCooldown<=0.f) Mana=FMath::Min(75.f,Mana+DeltaSeconds*7.f);
  UpdateStrike(DeltaSeconds);
  if(DialogueTime>0.f)
  {
@@ -268,6 +295,8 @@ void ACryptHero::SetupPlayerInputComponent(UInputComponent* Input)
  Input->BindAction("Spin",IE_Pressed,this,&ACryptHero::SpinAttack);
  Input->BindAction("Interact",IE_Pressed,this,&ACryptHero::Interact);
  Input->BindKey(EKeys::Tab,IE_Pressed,this,&ACryptHero::ToggleInventory);
+ Input->BindKey(EKeys::One,IE_Pressed,this,&ACryptHero::CastFire);
+ Input->BindKey(EKeys::Two,IE_Pressed,this,&ACryptHero::CastStorm);
  Input->BindKey(EKeys::R,IE_Pressed,this,&ACryptHero::CycleWeapon);
  Input->BindKey(EKeys::F5,IE_Pressed,this,&ACryptHero::SaveProgress);
  Input->BindKey(EKeys::F9,IE_Pressed,this,&ACryptHero::RestoreProgress);
@@ -289,6 +318,9 @@ void ACryptHero::SpinAttack()
 void ACryptHero::StartStrike(bool bSpin)
 {
  if(AttackCooldown>0.f || bInventoryOpen) return;
+ const float Cost=bSpin?25.f:(EquippedWeapon==ECryptWeapon::Axe?16.f:10.f);
+ if(Stamina<Cost) return;
+ Stamina-=Cost;
  bSpinStrike=bSpin;
  bStrikeResolved=false;
  StrikeWeapon=EquippedWeapon;
@@ -296,7 +328,7 @@ void ACryptHero::StartStrike(bool bSpin)
  TrailSampleTime=0.f;
  StrikeTrail.Reset();
  StrikeDuration=bSpin?1.12f:(StrikeWeapon==ECryptWeapon::Axe?.90f:.78f);
- AttackCooldown=StrikeDuration+.05f;
+ AttackCooldown=StrikeDuration+FMath::Max(.04f,.28f-GetDexterity()*.010f);
  PlayOceanAction(bSpin?OceanSpin:OceanAttack,StrikeDuration);
 }
 
@@ -308,8 +340,8 @@ void ACryptHero::ResolveStrike()
   if(It->GetRemainingHealth()<=0.f) continue;
   const FVector Offset=It->GetActorLocation()-GetActorLocation();
   if(Offset.SizeSquared()>=FMath::Square(Reach)) continue;
-  if(bSpinStrike || FVector::DotProduct(GetActorForwardVector(),Offset.GetSafeNormal())>.25f)
-   It->TakeHit(WeaponDamage());
+  if((bSpinStrike || FVector::DotProduct(GetActorForwardVector(),Offset.GetSafeNormal())>.25f) && CombatVisible(this,*It))
+   It->TakeHit(WeaponDamage()*(bSpinStrike?1.20f:1.f),GetDexterity(),ECryptDamage::Physical);
  }
 }
 
@@ -378,6 +410,9 @@ ACryptTownActor* ACryptHero::GetInteractionTarget() const
 
 FString ACryptHero::GetInteractionLabel() const
 {
+ FVector Destination;
+ FString GateLabel;
+ if(CryptDungeons::Travel(GetActorLocation(),Destination,GateLabel)) return GateLabel;
  if(const ACryptTownActor* Target=GetInteractionTarget())
   return Target->bQuestGiver ? FString(CryptQuests::Data[Target->QuestIndex].Giver) : FString(TEXT("Inspect objective"));
  return {};
@@ -404,6 +439,14 @@ FString ACryptHero::GetQuestJournal() const
 
 void ACryptHero::Interact()
 {
+ FVector Destination;
+ FString GateLabel;
+ if(CryptDungeons::Travel(GetActorLocation(),Destination,GateLabel))
+ {
+  SetActorLocation(Destination,false,nullptr,ETeleportType::TeleportPhysics);
+  GetCharacterMovement()->StopMovementImmediately();
+  return;
+ }
  ACryptTownActor* Target=GetInteractionTarget();
  if(!Target)
  {
@@ -491,8 +534,9 @@ void ACryptHero::CycleWeapon()
 
 float ACryptHero::WeaponDamage() const
 {
- if(EquippedWeapon==ECryptWeapon::Axe) return 3.f;
- return EquippedWeapon==ECryptWeapon::Unarmed?1.f:2.f;
+ if(EquippedWeapon==ECryptWeapon::Axe) return 29.f;
+ if(EquippedWeapon==ECryptWeapon::Spear) return 21.f;
+ return EquippedWeapon==ECryptWeapon::Unarmed?13.f:24.f;
 }
 
 float ACryptHero::WeaponReach() const
@@ -522,6 +566,11 @@ void ACryptHero::SaveProgress()
  Save->HeroRotation=GetActorRotation();
  Save->ViewRotation=GetControlRotation();
  Save->Treasure=TreasureCount;
+ Save->Version=2;
+ Save->HeroHealth=Health;
+ Save->HeroStamina=Stamina;
+ Save->HeroMana=Mana;
+ Save->ClearedDungeons=int32(ClearedDungeons);
  Save->Weapons=ActiveWeaponMask;
  Save->Equipped=static_cast<uint8>(EquippedWeapon);
  Save->QuestStates.Append(QuestState,CryptQuests::Count);
@@ -545,7 +594,7 @@ void ACryptHero::RestoreProgress()
   SaveStatus=TEXT("No readable save was found.");
   return;
  }
- if(Save->Version!=1 || Save->QuestStates.Num()!=CryptQuests::Count ||
+ if((Save->Version!=1 && Save->Version!=2) || Save->QuestStates.Num()!=CryptQuests::Count ||
     Save->QuestCounts.Num()!=CryptQuests::Count || Save->HeroLocation.ContainsNaN() ||
     Save->HeroRotation.ContainsNaN() || Save->ViewRotation.ContainsNaN())
  {
@@ -564,6 +613,13 @@ void ACryptHero::RestoreProgress()
  OceanActionTime=0.f;
  if(AController* PC=GetController()) PC->SetControlRotation(Save->ViewRotation);
  TreasureCount=FMath::Max(0,Save->Treasure);
+ Health=Save->Version==2 && FMath::IsFinite(Save->HeroHealth)?FMath::Clamp(Save->HeroHealth,1.f,100.f):100.f;
+ Stamina=Save->Version==2 && FMath::IsFinite(Save->HeroStamina)?FMath::Clamp(Save->HeroStamina,0.f,100.f):100.f;
+ Mana=Save->Version==2 && FMath::IsFinite(Save->HeroMana)?FMath::Clamp(Save->HeroMana,0.f,75.f):75.f;
+ ClearedDungeons=Save->Version==2?uint32(Save->ClearedDungeons)&1023u:0u;
+ SpellCooldown=0.f;
+ HurtCooldown=1.f;
+ RecoveryDelay=0.f;
  ActiveWeaponMask=(Save->Weapons&15)|1;
  EquipWeapon(ECryptWeapon::Unarmed);
  if(Save->Equipped<=static_cast<uint8>(ECryptWeapon::Spear))
@@ -580,7 +636,7 @@ void ACryptHero::RestoreProgress()
   const float* Health=Save->EnemyHealth.Find(It->SaveId);
   const FVector* Location=Save->EnemyLocations.Find(It->SaveId);
   if(Health && Location && FMath::IsFinite(*Health) && !Location->ContainsNaN())
-   It->RestoreState(*Health,*Location);
+   It->RestoreState(Save->Version==1?(*Health/3.f)*It->Stats().Health:*Health,*Location);
  }
  Dialogue.Reset();
  SaveStatus=TEXT("Adventure restored.");
@@ -680,6 +736,190 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
  }
  if(Layout.Hit(TouchPoint,Layout.Jump)) Jump();
  else if(Layout.Hit(TouchPoint,Layout.Attack)) Attack();
+ else if(Layout.Hit(TouchPoint,Layout.Fire)) CastFire();
+ else if(Layout.Hit(TouchPoint,Layout.Storm)) CastStorm();
  else if(Layout.Hit(TouchPoint,Layout.Spin)) SpinAttack();
 }
 
+
+
+float ACryptHero::GetArmorRating() const
+{
+ return 4.f+CompletedDungeonCount(ClearedDungeons)*1.5f;
+}
+
+float ACryptHero::GetDexterity() const
+{
+ return 18.f+CompletedDungeonCount(ClearedDungeons)*.8f;
+}
+
+FString ACryptHero::GetCombatTarget() const
+{
+ const int32 Dungeon=CryptDungeons::Current(GetActorLocation());
+ const ACryptMonster* Target=nullptr;
+ double Nearest=FMath::Square(780.);
+ int32 Remaining=0;
+ for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
+ {
+  if(It->GetRemainingHealth()<=0.f) continue;
+  if(Dungeon!=INDEX_NONE && It->GetDungeon()==Dungeon) ++Remaining;
+  const double Distance=FVector::DistSquared(GetActorLocation(),It->GetActorLocation());
+  if(Distance<Nearest && CombatVisible(this,*It))
+  {
+   Target=*It;
+   Nearest=Distance;
+  }
+ }
+ FString Text;
+ if(Dungeon!=INDEX_NONE)
+  Text=FString::Printf(TEXT("%s | %d remaining"),CryptDungeons::Chambers[Dungeon].Name,Remaining);
+ if(Target)
+ {
+  const auto& Profile=Target->Stats();
+  const TCHAR* Weakness=Profile.Fire>1.2f || Profile.Storm>1.2f
+   ? (Profile.Fire>Profile.Storm?TEXT(" | Weak: Fire"):TEXT(" | Weak: Storm")) : TEXT("");
+  if(!Text.IsEmpty()) Text+=TEXT("\n");
+  Text+=FString::Printf(TEXT("%s  %d/%d HP  |  Armor %d%s"),Profile.Name,
+     FMath::CeilToInt(Target->GetRemainingHealth()),int32(Profile.Health),int32(Profile.Armor),Weakness);
+ }
+ return Text;
+}
+
+void ACryptHero::ReceiveCombatHit(float Rating,float Dexterity,ECryptDamage Element)
+{
+ if(HurtCooldown>0.f || FMath::FRand()>CryptCombat::HitChance(Dexterity,GetDexterity())) return;
+ HurtCooldown=.33f;
+ Health=FMath::Max(0.f,Health-CryptCombat::Damage(Rating,GetArmorRating(),Element));
+ RecoveryDelay=5.f;
+ if(Health>0.f) return;
+ const int32 Dungeon=CryptDungeons::Current(GetActorLocation());
+ FVector Safe=CryptDungeons::SurfaceGate()+FVector(0,-270,110);
+ if(Dungeon!=INDEX_NONE) Safe=CryptDungeons::Gate(Dungeon)+FVector(0,Dungeon<5?280:-280,105);
+ SetActorLocation(Safe,false,nullptr,ETeleportType::TeleportPhysics);
+ GetCharacterMovement()->StopMovementImmediately();
+ Health=100.f;
+ Stamina=100.f;
+ Mana=75.f;
+ StrikeDuration=0.f;
+ AttackCooldown=0.f;
+ SpellCooldown=0.f;
+ OceanActionTime=0.f;
+ StrikeTrail.Reset();
+ HurtCooldown=2.f;
+ Dialogue=TEXT("You were defeated and retreated to safety.");
+ DialogueTime=4.f;
+}
+
+void ACryptHero::CheckDungeonClear(int32 Dungeon)
+{
+ if(Dungeon<0 || Dungeon>=CryptDungeons::Count || (ClearedDungeons & (1u<<Dungeon))) return;
+ for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
+  if(It->GetDungeon()==Dungeon && It->GetRemainingHealth()>0.f) return;
+ ClearedDungeons|=1u<<Dungeon;
+ AddTreasure(10+Dungeon*2);
+ Health=100.f;
+ Stamina=100.f;
+ Mana=75.f;
+ Dialogue=FString::Printf(TEXT("%s cleared. Armor and dexterity increased."),CryptDungeons::Chambers[Dungeon].Name);
+ DialogueTime=6.f;
+}
+
+void ACryptHero::ShowSpell(FVector From,FVector To,ECryptDamage Element,FLinearColor Color)
+{
+ auto* Mesh=LoadObject<UStaticMesh>(nullptr,Element==ECryptDamage::Fire
+  ?TEXT("/Engine/BasicShapes/Sphere.Sphere"):TEXT("/Engine/BasicShapes/Cube.Cube"));
+ auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+ const auto Part=[&](FVector Position,FVector Scale,FRotator Rotation,float Duration)
+ {
+  auto* Effect=GetWorld()->SpawnActor<AStaticMeshActor>(Position,Rotation);
+  if(!Effect) return;
+  auto* Shape=Effect->GetStaticMeshComponent();
+  Shape->SetMobility(EComponentMobility::Movable);
+  Shape->SetStaticMesh(Mesh);
+  Shape->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+  Shape->SetCastShadow(false);
+  if(Base)
+  {
+   auto* Tint=UMaterialInstanceDynamic::Create(Base,Effect);
+   Tint->SetVectorParameterValue(TEXT("Color"),Color);
+   Shape->SetMaterial(0,Tint);
+  }
+  Effect->SetActorScale3D(Scale);
+  Effect->SetLifeSpan(Duration);
+ };
+ if(Element==ECryptDamage::Fire)
+ {
+  for(int32 N=1;N<=5;++N)
+   Part(FMath::Lerp(From,To,N*.2),FVector(.22+N*.08),FRotator::ZeroRotator,.12f+N*.045f);
+  return;
+ }
+ const FVector Side=FVector::CrossProduct((To-From).GetSafeNormal(),FVector::UpVector);
+ FVector Start=From;
+ for(int32 N=1;N<=6;++N)
+ {
+  const FVector End=FMath::Lerp(From,To,N/6.)+Side*(N==6?0:(N%2?-21:21));
+  const FVector Segment=End-Start;
+  Part((Start+End)*.5,FVector(Segment.Size()/100.,.08,.08),Segment.Rotation(),.23f);
+  Start=End;
+ }
+}
+
+void ACryptHero::CastSpell(ECryptDamage Element)
+{
+ if(bInventoryOpen || SpellCooldown>0.f || AttackCooldown>0.f) return;
+ const bool bFire=Element==ECryptDamage::Fire;
+ const float Cost=bFire?19.f:28.f;
+ if(Mana<Cost)
+ {
+  Dialogue=TEXT("Not enough mana.");
+  DialogueTime=1.25f;
+  return;
+ }
+ const FVector Start=GetActorLocation()+FVector(0,0,30);
+ ACryptMonster* Target=nullptr;
+ double Nearest=FMath::Square(bFire?770.:950.);
+ for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
+ {
+  if(It->GetRemainingHealth()<=0.f) continue;
+  const FVector Offset=It->GetActorLocation()-Start;
+  const double Range=Offset.SizeSquared();
+  if(Range<Nearest && FVector::DotProduct(Offset.GetSafeNormal(),GetActorForwardVector())>.39f &&
+     CombatVisible(this,*It))
+  {
+   Target=*It;
+   Nearest=Range;
+  }
+ }
+ if(!Target)
+ {
+  Dialogue=TEXT("Face an enemy within spell range.");
+  DialogueTime=1.25f;
+  return;
+ }
+ Mana-=Cost;
+ SpellCooldown=1.05f;
+ AttackCooldown=.42f;
+ PlayOceanAction(OceanAttack,.42f);
+ const FLinearColor Color=bFire?FLinearColor(1.f,.25f,.045f):FLinearColor(.35f,.72f,1.f);
+ const FVector Hit=Target->GetActorLocation()+FVector(0,0,22);
+ ShowSpell(Start,Hit,Element,Color);
+ Target->TakeHit(bFire?34.f:28.f,GetDexterity(),Element);
+ if(bFire) return;
+ ACryptMonster* Chain=nullptr;
+ Nearest=FMath::Square(430.);
+ for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
+ {
+  if(*It==Target || It->GetRemainingHealth()<=0.f) continue;
+  const double Range=FVector::DistSquared(It->GetActorLocation(),Hit);
+  if(Range<Nearest && CombatVisible(Target,*It))
+  {
+   Chain=*It;
+   Nearest=Range;
+  }
+ }
+ if(Chain)
+ {
+  ShowSpell(Hit,Chain->GetActorLocation(),Element,Color);
+  Chain->TakeHit(17.f,GetDexterity(),Element);
+ }
+}

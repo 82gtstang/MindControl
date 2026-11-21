@@ -5,6 +5,9 @@
 #include "CryptTownActor.h"
 #include "CryptWorldLayout.h"
 #include "CryptSettlements.h"
+#include "CryptDungeons.h"
+#include "Components/TextRenderComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "ProceduralMeshComponent.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/StaticMesh.h"
@@ -224,6 +227,131 @@ void ACryptGameMode::BeginPlay()
  }
  PlaceBlock(FVector(-6048,0,-24),FVector(11.04,4,.10),FRotator::ZeroRotator,Cobble?Cobble:Stone);
  CryptSettlements::Build(GetWorld(),Grass,Stone,Cobble?Cobble:Stone,Dirt?Dirt:Stone,-20.f);
+ {
+  using namespace CryptDungeons;
+  auto* Cube=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));
+  auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+  const auto Accent=[&](FLinearColor Color) -> UMaterialInterface*
+  {
+   if(!Base) return Stone;
+   auto* Material=UMaterialInstanceDynamic::Create(Base,this);
+   Material->SetVectorParameterValue(TEXT("Color"),Color);
+   return Material;
+  };
+  const auto Block=[&](FVector P,FVector Size,UMaterialInterface* Material)
+  {
+   PlaceBlock(P,Size/100.,FRotator::ZeroRotator,Material,Cube);
+  };
+  const auto Sign=[&](FVector Location,const TCHAR* Title,float Size)
+  {
+   auto* Actor=GetWorld()->SpawnActor<AActor>(Location,FRotator::ZeroRotator);
+   if(!Actor) return;
+   auto* Label=NewObject<UTextRenderComponent>(Actor);
+   Actor->SetRootComponent(Label);
+   Actor->AddInstanceComponent(Label);
+   Label->RegisterComponent();
+   Label->SetWorldLocationAndRotation(Location,FRotator(0,180,0));
+   Label->SetHorizontalAlignment(EHTA_Center);
+   Label->SetWorldSize(Size);
+   Label->SetText(FText::FromString(Title));
+  };
+  const auto Portal=[&](FVector P,const TCHAR* Title,UMaterialInterface* Glow)
+  {
+   Block(P+FVector(0,0,3),FVector(155,205,6),Glow);
+   for(float Side : {-1.f,1.f})
+    Block(P+FVector(0,Side*113,100),FVector(62,53,200),Stone);
+   Block(P+FVector(0,0,211),FVector(64,270,30),Glow);
+   Sign(P+FVector(-37,0,263),Title,30);
+  };
+  auto* HubAccent=Accent(FLinearColor(.32,.55,.62));
+  Portal(SurfaceGate(),TEXT("Dungeon Crossroads"),HubAccent);
+  const FVector Square=Hub();
+  Block(Square+FVector(0,0,-20),FVector(4280,2000,40),Cobble?Cobble:Stone);
+  for(float Side : {-1.f,1.f})
+  {
+   Block(Square+FVector(0,Side*994,156),FVector(4290,45,312),Stone);
+   Block(Square+FVector(Side*2130,0,156),FVector(48,2000,312),Stone);
+  }
+  Portal(Square+FVector(-1910,0,0),TEXT("Surface"),HubAccent);
+  for(int32 I=0;I<Count;++I)
+  {
+   const auto& Definition=Chambers[I];
+   auto* Mark=Accent(Definition.Accent);
+   Portal(Gate(I),Definition.Name,Mark);
+   const FVector Center=Room(I);
+   Block(Center+FVector(0,0,-25),FVector(2750,1740,50),Stone);
+   for(float Side : {-1.f,1.f})
+   {
+    Block(Center+FVector(0,Side*863,160),FVector(2760,46,320),Stone);
+    Block(Center+FVector(Side*1370,0,160),FVector(46,1740,320),Stone);
+   }
+   Portal(Exit(I),TEXT("Crossroads"),Mark);
+   const auto Fixture=[&](float X,float Y,float W,float D,float H)
+   {
+    Block(Center+FVector(X,Y,H/2),FVector(W,D,H),Mark);
+   };
+   switch(Definition.Layout)
+   {
+    case ELayout::Pillars:
+     for(float X : {-420.f,35.f,470.f}) for(float Y : {-385.f,385.f}) Fixture(X,Y,115,115,310);
+     break;
+    case ELayout::Web:
+     Fixture(-155,-490,580,96,216);
+     Fixture(350,470,615,105,240);
+     Fixture(450,-590,195,205,170);
+     break;
+    case ELayout::Forge:
+     Fixture(-135,5,220,470,235);
+     Fixture(535,0,200,205,125);
+     Fixture(670,-690,860,110,85);
+     break;
+    case ELayout::Marsh:
+     Fixture(220,0,2240,1460,10);
+     Fixture(90,420,210,120,155);
+     Fixture(400,-475,240,170,180);
+     break;
+    case ELayout::Spires:
+     for(int32 N=0;N<7;++N) Fixture(-430+220*N,N%2?435:-435,76,76,160+45*N);
+     break;
+    case ELayout::Maze:
+     Fixture(-270,-335,75,870,290);
+     Fixture(250,350,85,880,290);
+     Fixture(820,-330,75,870,290);
+     break;
+    case ELayout::Ice:
+     Fixture(-240,340,270,430,260);
+     Fixture(240,-410,250,480,286);
+     Fixture(790,420,220,340,235);
+     break;
+    case ELayout::Caldera:
+     Fixture(120,25,250,490,60);
+     Fixture(420,-650,920,110,100);
+     Fixture(670,620,530,120,165);
+     break;
+    case ELayout::Cross:
+     Fixture(120,0,510,90,265);
+     Fixture(120,0,90,560,265);
+     Fixture(680,565,125,130,295);
+     break;
+    case ELayout::Vault:
+     for(float Y : {-650.f,650.f}) Fixture(290,Y,1120,100,145);
+     Fixture(1100,0,252,410,88);
+     break;
+   }
+   const FVector Encounter[]={{-490,220,95},{330,-200,95},{700,205,95},{1040,-175,95}};
+   for(int32 Slot=0;Slot<UE_ARRAY_COUNT(Encounter);++Slot)
+   {
+    FActorSpawnParameters Spawn;
+    Spawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+    if(auto* Enemy=GetWorld()->SpawnActor<ACryptMonster>(Center+Encounter[Slot],FRotator::ZeroRotator,Spawn))
+    {
+     Enemy->SaveId=EnemyId(I,Slot);
+     Enemy->ConfigureCreature(Definition.Enemies[Slot],I);
+    }
+   }
+  }
+ }
+
  // Castle masonry uses world-space projection across the different wall sizes.
  UStaticMesh* Cylinder=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
  const auto Masonry=[this,Stone](const FVector& Location,const FVector& Scale,const FRotator& Rotation=FRotator::ZeroRotator,UStaticMesh* Mesh=nullptr)
@@ -271,6 +399,7 @@ void ACryptGameMode::BeginPlay()
   {
    Raider->bRoadRaider=true;
    Raider->SaveId=i;
+   Raider->ConfigureCreature(0);
   }
   else
    UE_LOG(LogTemp,Warning,TEXT("MindControl: failed to spawn monster %d"),i);
@@ -289,7 +418,10 @@ void ACryptGameMode::BeginPlay()
  PlaceBlock(FVector(2700,3200,180),FVector(1.5f,30,5));
  for(int32 i=0;i<5;++i)
   if(ACryptMonster* Guardian=GetWorld()->SpawnActor<ACryptMonster>(FVector(200+i*380.f,3000.f+(i%2)*300.f,120.f),FRotator::ZeroRotator))
+  {
    Guardian->SaveId=100+i;
+   Guardian->ConfigureCreature(1);
+  }
  // Roadside timber fences, lantern posts, rubble, and a village square.
  for(int32 i=0;i<26;++i)
  {

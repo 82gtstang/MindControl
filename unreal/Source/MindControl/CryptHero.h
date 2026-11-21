@@ -2,6 +2,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "CryptQuestData.h"
+#include "CryptCombat.h"
 #include "CryptHero.generated.h"
 struct FCryptQuestMarker
 {
@@ -22,6 +23,16 @@ public:
  UFUNCTION(BlueprintCallable) void Interact();
  UFUNCTION(BlueprintCallable) void EquipSword(bool bEquip);
  void DefeatedRoadRaider();
+ void ReceiveCombatHit(float Rating,float Dexterity,ECryptDamage Element);
+ void CheckDungeonClear(int32 Dungeon);
+ void ShowSpell(FVector From,FVector To,ECryptDamage Element,FLinearColor Color);
+ float GetHealth() const { return Health; }
+ float GetStamina() const { return Stamina; }
+ float GetMana() const { return Mana; }
+ float GetArmorRating() const;
+ float GetDexterity() const;
+ float WeaponDamage() const;
+ FString GetCombatTarget() const;
  void EquipWeapon(ECryptWeapon Weapon);
  bool OwnsWeapon(ECryptWeapon Weapon) const;
  FString GetQuestJournal() const;
@@ -58,7 +69,12 @@ protected:
  int32 ActiveWeaponMask = 1;
  int32 QuestProgress[CryptQuests::Count] = {};
  uint8 QuestState[CryptQuests::Count] = {};
- float WeaponDamage() const;
+ void CastSpell(ECryptDamage Element);
+ void CastFire() { CastSpell(ECryptDamage::Fire); }
+ void CastStorm() { CastSpell(ECryptDamage::Storm); }
+ float Health=100.f, Stamina=100.f, Mana=75.f;
+ float RecoveryDelay=0.f, HurtCooldown=0.f, SpellCooldown=0.f;
+ uint32 ClearedDungeons=0;
  float WeaponReach() const;
  void CycleWeapon();
  void StartStrike(bool bSpin);
