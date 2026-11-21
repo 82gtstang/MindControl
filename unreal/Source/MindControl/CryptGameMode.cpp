@@ -13,6 +13,8 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
+#include "Components/PrimitiveComponent.h"
 #include "Engine/PointLight.h"
 #include "Components/PointLightComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -84,6 +86,39 @@ namespace
    if(Y>River.Start && Y<River.End && FMath::Abs(X-River.X(Y))<River.BedWidth()+60.f)
     return true;
   return false;
+ }
+
+ void DisableTemplateGround(UWorld* World)
+ {
+  // The engine startup level can have its own floor. A terrain cutout only
+  // removes our mesh triangles, so that original floor must not span the shaft.
+  for(TActorIterator<AActor> It(World);It;++It)
+  {
+   AActor* Actor=*It;
+   if(Actor->IsA<AStaticMeshActor>() || Actor->GetClass()->GetName().StartsWith(TEXT("Landscape")))
+   {
+    TArray<UPrimitiveComponent*> Primitives;
+    Actor->GetComponents(Primitives);
+    for(UPrimitiveComponent* Primitive : Primitives)
+    {
+     const auto& Bounds=Primitive->Bounds;
+     const FVector Extent=Bounds.BoxExtent;
+     const bool bLandscape=Actor->GetClass()->GetName().StartsWith(TEXT("Landscape"));
+     if(!bLandscape && (Extent.X<500 || Extent.Y<500 || Extent.Z>220)) continue;
+     for(int32 I=0;I<CryptDungeons::Count;++I)
+     {
+      const FVector Mouth=CryptDungeons::Entrance(I);
+      const FVector Chamber=CryptDungeons::Room(I);
+      const FBox Shaft(FVector(Mouth.X-20,Mouth.Y-CryptDungeons::RampHalfWidth,Chamber.Z),
+                       FVector(Mouth.X+CryptDungeons::RampLength+20,Mouth.Y+CryptDungeons::RampHalfWidth,Mouth.Z+200));
+      if(!Shaft.Intersect(Bounds.GetBox())) continue;
+      Primitive->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+      Primitive->SetVisibility(false,true);
+      break;
+     }
+    }
+   }
+  }
  }
 
  void CreateTerrain(UWorld* World,UMaterialInterface* Grass,UMaterialInterface* Dirt)
@@ -194,6 +229,7 @@ void ACryptGameMode::PlaceBlock(const FVector& Location,const FVector& Scale,con
  if(!Mesh) Mesh=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));
  Block->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
  Block->GetStaticMeshComponent()->SetStaticMesh(Mesh);
+ Block->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));
  if(Material) Block->GetStaticMeshComponent()->SetMaterial(0,Material);
  Block->SetActorScale3D(Scale);
  Block->GetStaticMeshComponent()->SetMobility(EComponentMobility::Static);
@@ -207,6 +243,7 @@ void ACryptGameMode::BeginPlay()
  UMaterialInterface* Cobble=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Cobblestone.M_Cobblestone"));
  UMaterialInterface* River=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_River.M_River"));
  UMaterialInterface* Falls=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Waterfall.M_Waterfall"));
+ DisableTemplateGround(GetWorld());
  CreateTerrain(GetWorld(),Grass,Dirt);
  CreateWater(GetWorld(),River,Falls);
  // Keep movement inside the finished terrain while the surrounding hills continue past the boundary.
@@ -456,21 +493,15 @@ void ACryptGameMode::BeginPlay()
    const FVector Mouth=Entrance(I);
    const double East=Mouth.X+RampLength;
    const double HalfWidth=RampHalfWidth;
-   if(auto* Ramp=CreateSurface(GetWorld(),TEXT("DungeonPassage"),true))
-   {
-    const FVector Along(RampLength,0,Center.Z-Mouth.Z);
-    const FVector Normal=FVector::CrossProduct(Along,FVector::RightVector).GetSafeNormal();
-    const TArray<FVector> Points={
-     Mouth+FVector(0,-HalfWidth,0),Mouth+FVector(0,HalfWidth,0),
-     FVector(East,Mouth.Y-HalfWidth,Center.Z),FVector(East,Mouth.Y+HalfWidth,Center.Z)};
-    const TArray<FVector> Normals={Normal,Normal,Normal,Normal};
-    const TArray<FVector2D> UV={{0,0},{0,2},{5,0},{5,2}};
-    const TArray<FProcMeshTangent> Tangents={
-     FProcMeshTangent(Along.GetSafeNormal(),false),FProcMeshTangent(Along.GetSafeNormal(),false),
-     FProcMeshTangent(Along.GetSafeNormal(),false),FProcMeshTangent(Along.GetSafeNormal(),false)};
-    Ramp->CreateMeshSection_LinearColor(0,Points,{0,1,2,1,3,2},Normals,UV,{},Tangents,true);
-    if(Stone) Ramp->SetMaterial(0,Stone);
-   }
+   // The thick stone slab uses the engine cube's simple collision. Align its
+   // top face to both thresholds so the hero can descend and climb back out.
+   constexpr double SlabThickness=44.;
+   const FVector End(East,Mouth.Y,Center.Z);
+   const FVector Run=End-Mouth;
+   const FRotator Pitch=Run.Rotation();
+   const FVector SlabCenter=(Mouth+End)*.5-Pitch.RotateVector(FVector(0,0,SlabThickness*.5));
+   PlaceBlock(SlabCenter,FVector(Run.Size(),2*HalfWidth,SlabThickness)/100.,Pitch,Stone,Cube);
+
    for(int32 Section=0;Section<10;++Section)
    {
     const double Fraction=(Section+.5)/10.;
