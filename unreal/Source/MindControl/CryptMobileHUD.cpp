@@ -251,18 +251,18 @@ void ACryptMobileHUD::DrawHUD()
  {
   const float Open=FMath::SmoothStep(0.f,1.f,SatchelOpen);
   const FVector2D Center=FMath::Lerp(Layout.Bag,Layout.InSatchel(.5f,.50f),Open);
-  const FVector2D Size=FMath::Lerp(FVector2D(Layout.Radius*1.6f),Layout.SatchelSize,Open);
+  const FVector2D AnimatedSize=FMath::Lerp(FVector2D(Layout.Radius*1.6f),Layout.SatchelSize,Open);
   DrawRect(FLinearColor(.01f,.008f,.006f,.61f*Open),Layout.SatchelOrigin.X-10*S,
    Layout.SatchelOrigin.Y,Layout.SatchelSize.X+20*S,Layout.SatchelSize.Y);
   if(SatchelTexture)
   {
-   Sprite(0,Center,Size,1.f-Open);
-   Sprite(1,Center,Size,Open);
+   Sprite(0,Center,AnimatedSize,1.f-Open);
+   Sprite(1,Center,AnimatedSize,Open);
   }
   else
   {
-   Frame(Center.X-Size.X*.5f,Center.Y-Size.Y*.5f,Size.X,Size.Y,Ink,Bronze);
-   Icon(EIcon::Bag,Center,Size.Y*.18f,Gold);
+   Frame(Center.X-AnimatedSize.X*.5f,Center.Y-AnimatedSize.Y*.5f,AnimatedSize.X,AnimatedSize.Y,Ink,Bronze);
+   Icon(EIcon::Bag,Center,AnimatedSize.Y*.18f,Gold);
   }
 
   if(SatchelOpen>.88f && Hero->bInventoryOpen)
