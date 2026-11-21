@@ -6,6 +6,44 @@ from pathlib import Path
 
 import bmesh
 import bpy
+import numpy as np
+
+
+def refine_face(mesh, correction):
+    vertices = np.empty(len(mesh.vertices) * 3, dtype=np.float32)
+    mesh.vertices.foreach_get("co", vertices)
+    xyz = vertices.reshape(-1, 3)
+    x, y, z = xyz.T
+    with np.load(correction, allow_pickle=False) as data:
+        cx, cy, fw, fh = data["face_box"]
+        image_center, head_center, x_scale, crown, top, y_scale = data["mapping"]
+        front, target, weight = data["front"], data["target"], data["weight"]
+    perspective = (1.9 - x) * .728
+    u, v = y / perspective, -z / perspective
+    qx = (image_center + (u - head_center) * x_scale - cx) / fw + .5
+    qy = (crown + (v - top) * y_scale - cy) / fh + .5
+    valid = (qx >= 0) & (qx <= 1) & (qy >= 0) & (qy <= 1)
+    ids = np.flatnonzero(valid)
+    if ids.size == 0:
+        return
+    gx = qx[ids] * (front.shape[1] - 1)
+    gy = qy[ids] * (front.shape[0] - 1)
+    ix = np.minimum(gx.astype(int), front.shape[1] - 2)
+    iy = np.minimum(gy.astype(int), front.shape[0] - 2)
+    fx, fy = gx - ix, gy - iy
+
+    def sample(grid):
+        return ((1 - fy) * ((1 - fx) * grid[iy, ix] + fx * grid[iy, ix + 1])
+                + fy * ((1 - fx) * grid[iy + 1, ix] + fx * grid[iy + 1, ix + 1]))
+
+    visible = np.clip(1 - np.abs(x[ids] - sample(front)) / .029, 0, 1)
+    adjustment = np.clip(sample(target) - x[ids], -.032, .032)
+    adjustment *= visible * sample(weight) * .88
+    x[ids] += adjustment
+    mesh.vertices.foreach_set("co", vertices)
+    mesh.update()
+    print(f"Face geometry refined on {np.count_nonzero(np.abs(adjustment) > .0003)} vertices.", flush=True)
+
 
 source, output = map(Path, sys.argv[sys.argv.index("--") + 1:])
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -45,6 +83,9 @@ for obj in meshes:
     finally:
         mesh.free()
 
+    correction = source / "face_surface.npz"
+    if correction.is_file():
+        refine_face(obj.data, correction)
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
     if obj.data.has_custom_normals:

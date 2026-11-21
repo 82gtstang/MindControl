@@ -24,6 +24,44 @@ def capture_foreground(image, ratio):
 
 
 
+
+def save_face_surface(locations, qx, qy, ellipse, front_weight, face_box, mapping):
+    import cv2
+
+    # Save a small depth correction for the exporter. Fit only the visible
+    # face and leave the outer head silhouette, hair and rear surface alone.
+    cx, cy, fw, fh = face_box
+    ids = np.flatnonzero((ellipse < .91) & (front_weight > .55))
+    if ids.size < 1600:
+        return
+    grid_size = 96
+    gx = np.clip(np.rint(((qx[ids] - cx) / fw + .5) * (grid_size - 1)).astype(int), 0, grid_size - 1)
+    gy = np.clip(np.rint(((qy[ids] - cy) / fh + .5) * (grid_size - 1)).astype(int), 0, grid_size - 1)
+    front_x = np.full((grid_size, grid_size), -np.inf, np.float32)
+    np.maximum.at(front_x, (gy, gx), locations[ids, 0])
+    known = np.isfinite(front_x)
+    if np.count_nonzero(known) < 900:
+        return
+    depth_grid = np.where(known, front_x, 0)
+    density = cv2.GaussianBlur(known.astype(np.float32), (0, 0), 4.0)
+    baseline = cv2.GaussianBlur(depth_grid, (0, 0), 4.0) / np.maximum(density, .001)
+    filled = np.where(known, front_x, baseline)
+    smooth = cv2.GaussianBlur(cv2.medianBlur(filled, 5), (0, 0), 2.2)
+    # Preserve the central nose profile with a tighter blur there.
+    yy, xx = np.mgrid[0:grid_size, 0:grid_size] / (grid_size - 1)
+    nose = np.exp(-((xx - .5) / .145)**2 - ((yy - .53) / .20)**2)
+    fine = cv2.GaussianBlur(filled, (0, 0), .9)
+    target = smooth * (1 - .72 * nose) + fine * (.72 * nose)
+    taper = np.clip((1 - (((xx - .5) / .50)**2 + ((yy - .5) / .53)**2)) / .40, 0, 1)
+    weight = np.where(known & (density > .23), taper, 0).astype(np.float32)
+    output = Path(sys.argv[sys.argv.index("--output-dir") + 1]) / "0"
+    output.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(output / "face_surface.npz", front=filled.astype(np.float32),
+                        target=target.astype(np.float32), weight=weight,
+                        face_box=face_box, mapping=mapping)
+    print(f"Face geometry correction prepared from {np.count_nonzero(weight)} samples.", flush=True)
+
+
 def restore_face(locations, colors, reference):
     try:
         import cv2
@@ -88,12 +126,19 @@ def restore_face(locations, colors, reference):
     by = np.clip(((v + .5) * 511).astype(np.int32), 0, 511)
     front = np.full((512, 512), np.inf, np.float32)
     np.minimum.at(front, (by, bx), depth)
-    x = np.clip(np.rint(qx[face_ids]).astype(np.int32), 0, width-1)
-    y = np.clip(np.rint(qy[face_ids]).astype(np.int32), 0, height-1)
-    surface = np.clip(1 - (depth[face_ids] - front[by[face_ids], bx[face_ids]]) / .023, 0, 1)
-    edge = np.clip((1 - ellipse[face_ids]) / .46, 0, 1)
-    alpha = (.96 * surface * edge * (reference[y, x, 3] > .98))[:, None]
-    colors[face_ids, :3] += alpha * (reference[y, x, :3] - colors[face_ids, :3])
+    points_x = np.clip(qx[face_ids], 0, width - 1.001)
+    points_y = np.clip(qy[face_ids], 0, height - 1.001)
+    x, y = points_x.astype(np.int32), points_y.astype(np.int32)
+    dx, dy = (points_x - x)[:, None], (points_y - y)[:, None]
+    samples = ((1 - dy) * ((1 - dx) * reference[y, x] + dx * reference[y, x + 1])
+               + dy * ((1 - dx) * reference[y + 1, x] + dx * reference[y + 1, x + 1]))
+    front_weight = np.clip(1 - (depth - front[by, bx]) / .023, 0, 1)
+    edge = np.clip((1 - ellipse[face_ids]) / .36, 0, 1)
+    alpha = (front_weight[face_ids] * edge * (samples[:, 3] > .98))[:, None]
+    colors[face_ids, :3] += alpha * (samples[:, :3] - colors[face_ids, :3])
+    save_face_surface(locations, qx, qy, ellipse, front_weight,
+                      (cx, cy, fw, fh),
+                      (image_center, head_center, x_scale, crown, top, body_height / (foot - top)))
     print(f"Frontal face reference restored on {np.count_nonzero(alpha > .35)} texels.", flush=True)
 
 
