@@ -9,6 +9,7 @@ on:
 jobs:
   build:
     runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 35
     defaults:
       run:
         working-directory: ocean3d-android
@@ -38,15 +39,33 @@ jobs:
           if (!$sdk) { throw 'Android SDK missing on runner' }
           "ANDROID_HOME=$sdk" | Out-File $env:GITHUB_ENV -Append
           Write-Host "SDK=$sdk"
+      - name: Bundle the licensed on-device model
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $models = 'app/src/main/assets/models'
+          New-Item -ItemType Directory -Force -Path $models | Out-Null
+          $checksums = @{
+            'image_to_triplanes.onnx' = '9e030d7d0a9d3d4c5237b673abaf61025bfbf3f6e2cbf493ad998a1fe3b12c7a'
+            'mlp.onnx' = '49412ff9c66aebdd472e967f7c47b045ba3124ee5ec58520e9ed35010e163f76'
+          }
+          foreach ($file in $checksums.Keys) {
+            $target = Join-Path $models $file
+            & curl.exe -fL --retry 3 --max-time 900 "https://huggingface.co/yapaymizeka/image-to-3d/resolve/main/$file" -o $target
+            if ($LASTEXITCODE -ne 0 -or !(Test-Path $target) -or (Get-FileHash $target -Algorithm SHA256).Hash -ine $checksums[$file]) {
+              throw "Could not verify bundled model asset: $file"
+            }
+          }
       - name: Build debug APK
         shell: powershell
         run: |
           $ErrorActionPreference='Stop'
-          gradle --no-daemon :app:assembleDebug
+          gradle --no-daemon "-Dorg.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8" :app:assembleDebug
           if ($LASTEXITCODE -ne 0) { throw "Gradle build failed: $LASTEXITCODE" }
           if (!(Test-Path 'app\build\outputs\apk\debug\app-debug.apk')) { throw 'APK missing' }
       - uses: actions/upload-artifact@v4
         with:
           name: Ocean3D-Android-debug-APK
-          path: ocean3d-android/app/build/outputs/apk/debug/app-debug.apk
+          compression-level: 0
+        path: ocean3d-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
