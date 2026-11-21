@@ -194,7 +194,15 @@ jobs:
             if (Test-Path $log) { Get-Content $log -Tail 120 }
             throw "Townsperson import failed with exit code $($process.ExitCode)"
           }
-          Write-Host "Verified townsperson mesh saved: $mesh"
+          $settlers = Join-Path (Split-Path $mesh) 'Settlers'
+          foreach ($identity in @('Villager','Artisan','Elf','Dwarf','Halfling','Wizard')) {
+            foreach ($frame in 0..4) {
+              $frameAsset = Join-Path $settlers "$identity$frame.uasset"
+              if (!(Test-Path $frameAsset)) { throw "Missing cooked NPC source $frameAsset" }
+            }
+          }
+          if (!$raw.Contains('SETTLEMENT_PEOPLE_IMPORT_SUCCESS')) { throw 'Settlement NPC import did not finish' }
+          Write-Host "Verified townsperson and 30 settlement NPC mesh frames"
       - name: Import environment materials
         shell: powershell
         run: |

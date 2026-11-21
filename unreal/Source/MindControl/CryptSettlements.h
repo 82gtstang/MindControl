@@ -18,6 +18,9 @@ namespace CryptSettlements
   float Height;
   bool bPet;
   int32 Job;
+  int32 Appearance;
+  int32 MeshSlot = INDEX_NONE;
+  int32 SpellSlot = INDEX_NONE;
  };
 
  inline void Build(UWorld* World, UMaterialInterface* Grass, UMaterialInterface* Stone,
@@ -42,8 +45,8 @@ namespace CryptSettlements
   };
   auto* Oak = Color(FLinearColor(.22f,.1f,.043f));
   auto* Cloth = Color(FLinearColor(.32f,.12f,.075f));
-  auto* Skin = Color(FLinearColor(.57f,.32f,.20f));
-  auto* Dark = Color(FLinearColor(.056f,.06f,.064f));
+  auto* LightningColor = Color(FLinearColor(.30f,.73f,1.f));
+  auto* FireColor = Color(FLinearColor(1.f,.23f,.025f));
   auto* Glass = Color(FLinearColor(.20f,.32f,.37f));
 
   const auto Batch = [&](UStaticMesh* Mesh, UMaterialInterface* Material, bool bCollision, bool bMoving = false) -> UInstancedStaticMeshComponent*
@@ -200,7 +203,12 @@ namespace CryptSettlements
       FResident Resident;
       Resident.bPet = Member == 3;
       Resident.Job = (Town+Member)%4;
+      const bool bHalflingFamily = Town == 0 && Home == 0;
+      const bool bWizard = !bHalflingFamily && Home == 0 && Member == 0 && Town % 2 == 0;
+      Resident.Appearance = bHalflingFamily ? 4 : bWizard ? 5 : (Town+Home+Member%2)%4;
       Resident.Height = Member == 2 ? 117.f : 165.f + 7.f * ((Town+Member)%3);
+      if (Resident.Appearance == 4) Resident.Height *= .67f;
+      if (Resident.Appearance == 3) Resident.Height *= .80f;
       Resident.Shift = 3.f*Home + 2.f*Member + (Town%5);
       Resident.Route = Member < 2
        ? TArray<FVector>{AtHome,Door,Curb,Junction,ShopCorner,ShopDoor,Work}
@@ -211,31 +219,64 @@ namespace CryptSettlements
    }
   }
 
-  auto* Heads = Batch(Sphere, Skin, false, true);
-  auto* Bodies = Batch(Cube, Cloth, false, true);
-  auto* Limbs = Batch(Cube, Dark, false, true);
+  const TCHAR* Cast[] = {TEXT("Villager"),TEXT("Artisan"),TEXT("Elf"),TEXT("Dwarf"),TEXT("Halfling"),TEXT("Wizard")};
+  constexpr int32 Frames = 5;
+  struct FAppearance
+  {
+   UInstancedStaticMeshComponent* Mesh[Frames]{};
+   float Scale[Frames]{};
+   float Feet[Frames]{};
+  };
+  TArray<FAppearance> Appearances;
+  auto* Fallback = LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Characters/Town/Townsperson.Townsperson"));
+  for (const TCHAR* Name : Cast)
+  {
+   auto& Appearance = Appearances.AddDefaulted_GetRef();
+   for (int32 Frame=0;Frame<Frames;++Frame)
+   {
+    const FString Asset = FString::Printf(TEXT("%s%d"),Name,Frame);
+    const FString Path = FString::Printf(TEXT("/Game/Characters/Town/Settlers/%s.%s"),*Asset,*Asset);
+    auto* Mesh = LoadObject<UStaticMesh>(nullptr,*Path);
+    if (!Mesh) Mesh = Fallback ? Fallback : Sphere;
+    const auto Bounds = Mesh->GetBounds();
+    Appearance.Mesh[Frame] = Batch(Mesh,nullptr,false,true);
+    Appearance.Scale[Frame] = 1.f/FMath::Max(1.f,float(Bounds.BoxExtent.Z*2));
+    Appearance.Feet[Frame] = Bounds.Origin.Z-Bounds.BoxExtent.Z;
+   }
+  }
   auto* Pets = Batch(Sphere, Oak, false, true);
-  for (const FResident& Resident : Residents)
+  auto* Staff = Batch(Cube, Oak, false, true);
+  auto* Lightning = Batch(Cube, LightningColor, false, true);
+  auto* Flames = Batch(Sphere, FireColor, false, true);
+  TArray<int32> LastFrames;
+  LastFrames.Init(INDEX_NONE,Residents.Num());
+  int32 Wizards = 0;
+  const FTransform Hidden(FRotator::ZeroRotator,FVector::ZeroVector,FVector::ZeroVector);
+  for (FResident& Resident : Residents)
   {
    if (Resident.bPet)
    {
-    for (int32 Piece = 0; Piece < 7; ++Piece) Pets->AddInstance(FTransform::Identity);
+    for (int32 Piece=0;Piece<7;++Piece) Pets->AddInstance(Hidden);
+    continue;
    }
-   else
+   for (auto* Frame : Appearances[Resident.Appearance].Mesh)
+    Resident.MeshSlot = Frame->AddInstance(Hidden);
+   if (Resident.Appearance == 5)
    {
-    Heads->AddInstance(FTransform::Identity);
-    Bodies->AddInstance(FTransform::Identity);
-    for (int32 Piece = 0; Piece < 4; ++Piece) Limbs->AddInstance(FTransform::Identity);
+    Resident.SpellSlot = Wizards++;
+    Staff->AddInstance(Hidden);
+    Flames->AddInstance(Hidden);
+    for (int32 Piece=0;Piece<5;++Piece) Lightning->AddInstance(Hidden);
    }
   }
   TBitArray<> WasVisible(false, Residents.Num());
-  auto Update = [World, Residents = MoveTemp(Residents), Heads, Bodies, Limbs, Pets,
-                       WasVisible = MoveTemp(WasVisible)]() mutable
+  auto Update = [World, Residents = MoveTemp(Residents), Appearances = MoveTemp(Appearances), Pets, Staff, Lightning, Flames,
+                       LastFrames = MoveTemp(LastFrames), Hidden, WasVisible = MoveTemp(WasVisible)]() mutable
   {
    const APawn* Player = World->GetFirstPlayerController() ? World->GetFirstPlayerController()->GetPawn() : nullptr;
    const FVector Eye = Player ? Player->GetActorLocation() : FVector::ZeroVector;
    const float Time = World->GetTimeSeconds();
-   int32 Person = 0, Pet = 0, ResidentIndex = 0;
+   int32 Pet = 0, ResidentIndex = 0;
    bool bChanged = false;
    for (const FResident& Resident : Residents)
    {
@@ -262,7 +303,6 @@ namespace CryptSettlements
     if (WasVisible[Index] == bVisible && !bVisible && Time > .2f)
     {
      if (Resident.bPet) ++Pet;
-     else ++Person;
      continue;
     }
     WasVisible[Index] = bVisible;
@@ -284,21 +324,52 @@ namespace CryptSettlements
     }
     else
     {
-     const float H = Resident.Height;
-     Pose(Heads,Person,FVector(0,0,H*.91f),FVector(24,24,28));
-     Pose(Bodies,Person,FVector(0,0,H*.67f),FVector(24,38,H*.33f));
-     for (int32 Side=0;Side<2;++Side)
+     const auto& Model = Appearances[Resident.Appearance];
+     const int32 Frame = bVisible ? (bMoving ? 1+FMath::FloorToInt(Time*6+Resident.Shift)%4 : 0) : INDEX_NONE;
+     const int32 Previous = LastFrames[Index];
+     if (Previous != INDEX_NONE && Previous != Frame)
+      Model.Mesh[Previous]->UpdateInstanceTransform(Resident.MeshSlot,Hidden,false,false,true);
+     if (Frame != INDEX_NONE)
      {
-      const float Sign = Side ? 1.f : -1.f;
-      Pose(Limbs,Person*4+Side,FVector(0,Sign*10,H*.21f),FVector(14,15,H*.43f),Sign*Swing);
-      const float Task = bWorking ? -36.f - 20.f*FMath::Sin(Time*(2+Resident.Job)+Side) : -Sign*Swing;
-      Pose(Limbs,Person*4+2+Side,FVector(0,Sign*24,H*.63f),FVector(12,12,H*.36f),Task);
+      const float Scale = Resident.Height*Model.Scale[Frame];
+      const float WorkRock = bWorking ? 4.f*FMath::Sin(Time*4+Resident.Shift) : 0.f;
+      const FTransform Transform(FRotator(WorkRock,Facing.Yaw-90,0),
+       Position+FVector(0,0,-Model.Feet[Frame]*Scale),FVector(Scale));
+      Model.Mesh[Frame]->UpdateInstanceTransform(Resident.MeshSlot,Transform,false,false,true);
      }
-     ++Person;
+     LastFrames[Index] = Frame;
+     if (Resident.SpellSlot != INDEX_NONE)
+     {
+      const int32 Slot = Resident.SpellSlot;
+      const float SpellTime = FMath::Fmod(Time+Resident.Shift,8.f);
+      const bool bCasting = bVisible && SpellTime < 1.15f;
+      const bool bFire = FMath::FloorToInt((Time+Resident.Shift)/8.f)%2 != 0;
+      Pose(Staff,Slot,FVector(20,29,70),FVector(6,6,143),bCasting ? 42.f : 10.f);
+      const FVector Start = Position+Facing.RotateVector(FVector(65,29,123));
+      const FVector Direction = Facing.Vector();
+      const FVector Right = Facing.RotateVector(FVector::RightVector);
+      FVector From = Start;
+      for (int32 Piece=0;Piece<5;++Piece)
+      {
+       const FVector To = Start+Direction*(48*(Piece+1))+Right*((Piece%2 ? -1 : 1)*22)
+        +FVector(0,0,12*(Piece+1));
+       const FVector Ray = To-From;
+       const FTransform Bolt(Ray.Rotation(),(From+To)*.5,FVector(Ray.Size()/100.,.075,.075));
+       Lightning->UpdateInstanceTransform(Slot*5+Piece,bCasting && !bFire && SpellTime < .42f ? Bolt : Hidden,false,false,true);
+       From = To;
+      }
+      const FVector Fireball = Start+Direction*(SpellTime*310)+FVector(0,0,50*FMath::Sin(SpellTime*2.6f));
+      Flames->UpdateInstanceTransform(Slot,bCasting && bFire
+       ? FTransform(FRotator::ZeroRotator,Fireball,FVector(.54,.39,.42)) : Hidden,false,false,true);
+     }
     }
    }
    if (bChanged)
-    for (auto* Component : {Heads,Bodies,Limbs,Pets}) Component->MarkRenderStateDirty();
+   {
+    for (const auto& Appearance : Appearances)
+     for (auto* Mesh : Appearance.Mesh) Mesh->MarkRenderStateDirty();
+    for (auto* Component : {Pets,Staff,Lightning,Flames}) Component->MarkRenderStateDirty();
+   }
   };
   FTimerHandle Timer;
   World->GetTimerManager().SetTimer(Timer,FTimerDelegate::CreateWeakLambda(District, Update),.083f,true);

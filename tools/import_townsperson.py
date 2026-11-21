@@ -1,6 +1,9 @@
 """Import the townsperson mesh before cooking the Unreal build."""
 
 from pathlib import Path
+import os
+import subprocess
+import tempfile
 
 import unreal
 
@@ -35,3 +38,37 @@ if not task.imported_object_paths or not isinstance(mesh, unreal.StaticMesh):
     raise RuntimeError(f"Townsperson import failed: {task.imported_object_paths}")
 unreal.EditorAssetLibrary.save_directory(destination, only_if_is_dirty=False)
 print(f"TOWNSPERSON_IMPORT_SUCCESS {asset_path}")
+
+# Match the same Windows Blender installation used by the character bake.
+install_root = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Blender Foundation"
+def version(exe):
+    return tuple(int(part) for part in exe.parent.name.removeprefix("Blender ").split(".")
+                 if part.isdigit())
+blender = max(install_root.glob("Blender */blender.exe"), key=version, default=None)
+if not blender:
+    raise RuntimeError(f"Blender install missing under {install_root}")
+
+with tempfile.TemporaryDirectory(prefix="mindcontrol-settlers-") as folder:
+    subprocess.run([str(blender), "-b", "-t", "2", "--python-exit-code", "1", "--python",
+                    str(Path(__file__).with_name("bake_settlement_people.py")),
+                    "--", str(source), folder], check=True, timeout=180)
+    variants = sorted(Path(folder).glob("*.fbx"))
+    if len(variants) != 30:
+        raise RuntimeError(f"Expected 30 NPC mesh frames, found {len(variants)}")
+    tasks = []
+    for variant in variants:
+        frame = unreal.AssetImportTask()
+        frame.filename = str(variant)
+        frame.destination_path = destination + "/Settlers"
+        frame.destination_name = variant.stem
+        frame.automated = True
+        frame.replace_existing = True
+        frame.save = True
+        frame.options = options
+        tasks.append(frame)
+    unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(tasks)
+    missing = [item.destination_name for item in tasks if not item.imported_object_paths]
+    if missing:
+        raise RuntimeError(f"NPC frames failed to import: {missing}")
+unreal.EditorAssetLibrary.save_directory(destination, only_if_is_dirty=False)
+print("SETTLEMENT_PEOPLE_IMPORT_SUCCESS")
