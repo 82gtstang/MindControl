@@ -107,11 +107,18 @@ def gait(rig, phase, running, diagonal):
         rotate(shin, X, shin_pitch - thigh_pitch)
         rotate(foot, X, -shin_pitch + 1.1 * lift)
 
-        swing_angle = math.cos(math.tau * cycle) * (.46 if running else .27)
+        arm_phase = math.cos(math.tau * cycle)
+        swing_angle = arm_phase * (.38 if running else .23)
         upper = rig.pose.bones[f"upperarm_{side}"]
         fore = rig.pose.bones[f"forearm_{side}"]
-        rotate(upper, X, swing_angle)
-        rotate(fore, X, -.12 - (.32 if running else .14) * (1 + math.cos(math.tau * cycle)))
+        # Keep the hands clear of the hips while the elbows stay softly bent.
+        outward = -math.copysign(.13 if running else .16, upper.bone.head_local.x)
+        rest_to_local = upper.bone.matrix_local.to_quaternion().inverted()
+        upper.rotation_quaternion = (
+            Quaternion(rest_to_local @ Vector((0, 1, 0)), outward)
+            @ Quaternion(rest_to_local @ X, swing_angle)
+        )
+        rotate(fore, X, -(.38 if running else .28) - (.16 if running else .09) * arm_phase)
 
 
 def side_punch(rig, phase):
@@ -188,7 +195,12 @@ def make_clips(scene, rig, source):
                 bone.keyframe_insert("rotation_quaternion", frame=sample + 1, group=bone.name)
                 if bone.name in ("root", "pelvis"):
                     bone.keyframe_insert("location", frame=sample + 1, group=bone.name)
-        for curve in action.fcurves:
+        # Blender 5 removed the legacy Action.fcurves accessor.
+        if action.is_action_layered:
+            curves = action.layers[0].strips[0].channelbag(action_data.action_slot).fcurves
+        else:
+            curves = action.fcurves
+        for curve in curves:
             for key in curve.keyframe_points:
                 key.interpolation = "LINEAR"
         tracks.append((name, action))
