@@ -182,7 +182,7 @@ namespace CryptSettlements
     }
     for (int32 Home = 0; Home < (Town < 10 ? 3 : 2); ++Home)
     {
-     const float HomeX = X - 940 + 620*Home;
+     const float HomeX = X - 940 + 590*Home;
      const float Depth = 355 + 48*((Town+Home)%5);
      const float HomeY = Street+400+Depth/2;
      Building(FVector(HomeX, HomeY, Ground), 330 + 45*((Town+2*Home)%5), Depth, Town+Home, false);
@@ -248,7 +248,10 @@ namespace CryptSettlements
     float Remaining = Distance*RoutePhase;
     int32 Segment = 1;
     while (Segment < Route.Num()-1 && Remaining > FVector::Dist(Route[Segment-1],Route[Segment]))
-     Remaining -= FVector::Dist(Route[Segment-1],Route[Segment++]);
+    {
+     Remaining -= FVector::Dist(Route[Segment-1],Route[Segment]);
+     ++Segment;
+    }
     const FVector Delta = Route[Segment]-Route[Segment-1];
     const FVector Position = Route[Segment-1] + Delta.GetClampedToMaxSize(Remaining);
     const bool bMoving = RoutePhase > 0.f && RoutePhase < 1.f;
