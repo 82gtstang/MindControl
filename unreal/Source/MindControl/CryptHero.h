@@ -4,6 +4,14 @@
 #include "CryptQuestData.h"
 #include "CryptCombat.h"
 #include "CryptHero.generated.h"
+enum class ECryptThumbAction : uint8
+{
+ Jump, Attack, Spin, Fire, Storm, Count
+};
+
+inline constexpr const TCHAR* CryptThumbActionLabels[]={TEXT("Jump"),TEXT("Attack"),TEXT("Spin"),TEXT("Fire"),TEXT("Storm")};
+static_assert(UE_ARRAY_COUNT(CryptThumbActionLabels)==int32(ECryptThumbAction::Count));
+
 struct FCryptQuestMarker
 {
  FVector Location;
@@ -54,8 +62,15 @@ public:
  UFUNCTION(BlueprintCallable) void ToggleInventory() { bInventoryOpen = !bInventoryOpen; bSatchelJournal=false; InspectedItem.Reset(); }
  UFUNCTION(BlueprintCallable) void AddTreasure(int32 Amount = 1) { TreasureCount += Amount; }
  void TouchPressed(ETouchIndex::Type FingerIndex, FVector Location);
+ ECryptThumbAction GetThumbAction() const { return ThumbAction; }
 protected:
  virtual void BeginPlay() override;
+ void TouchReleased(ETouchIndex::Type FingerIndex,FVector Location);
+ void SetThumbAction(ECryptThumbAction Action);
+ ECryptThumbAction ThumbAction=ECryptThumbAction::Jump;
+ int32 ThumbFinger=INDEX_NONE;
+ FVector2D ThumbStart=FVector2D::ZeroVector;
+ float ThumbStartTime=0.f;
  void MoveForward(float Value);
  void MoveRight(float Value);
  void Turn(float Value);

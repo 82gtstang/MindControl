@@ -521,6 +521,12 @@ void ACryptGameMode::BeginPlay()
    const FVector SlabCenter=(Mouth+End)*.5-Pitch.RotateVector(FVector(0,0,SlabThickness*.5));
    PlaceBlock(SlabCenter,FVector(Run.Size(),2*HalfWidth,SlabThickness)/100.,Pitch,Stone,Cube);
 
+   constexpr double PassageHeadroom=300.;
+   constexpr double RoofThickness=56.;
+   const FVector RoofCenter=(Mouth+End)*.5+FVector(0,0,PassageHeadroom)
+      +Pitch.RotateVector(FVector(0,0,RoofThickness*.5));
+   PlaceBlock(RoofCenter,FVector(Run.Size(),2*HalfWidth+48.,RoofThickness)/100.,Pitch,Stone,Cube);
+
    for(int32 Section=0;Section<10;++Section)
    {
     const double Fraction=(Section+.5)/10.;
@@ -529,7 +535,8 @@ void ACryptGameMode::BeginPlay()
     for(double Side : {-1.,1.})
     {
      const double Y=Mouth.Y+Side*(HalfWidth+10);
-     const double Top=FMath::Max(Bottom+110,GetGroundHeight(X,Y)+40);
+     const double RoofTop=FMath::Lerp(Mouth.Z,Center.Z,Section/10.)+PassageHeadroom+RoofThickness+8.;
+     const double Top=FMath::Max(RoofTop,GetGroundHeight(X,Y)+40);
      Block(FVector(X,Y,(Bottom+Top)*.5),FVector(RampLength/10.,24,Top-Bottom),Stone);
     }
    }
@@ -542,11 +549,14 @@ void ACryptGameMode::BeginPlay()
     const double Wing=RoomHalfWidth-HalfWidth;
     Block(FVector(East+6,Center.Y+Side*(HalfWidth+Wing*.5),Center.Z+CeilingHeight*.5),FVector(22,Wing,CeilingHeight),Stone);
    }
+   const double LintelBottom=PassageHeadroom-15.;
+   Block(FVector(East+6,Center.Y,Center.Z+(CeilingHeight+LintelBottom)*.5),
+         FVector(22,2*HalfWidth+12,CeilingHeight-LintelBottom),Stone);
    Block(Center+FVector(RoomHalfLength,0,CeilingHeight*.5),FVector(32,2*RoomHalfWidth,CeilingHeight),Stone);
    for(double Fraction : {.20,.52,.84})
    {
     const FVector Point=FMath::Lerp(Mouth,End,Fraction);
-    PassageLamp(Point+FVector(0,0,310),FLinearColor(1.f,.58f,.32f));
+    PassageLamp(Point+FVector(0,0,245),FLinearColor(1.f,.58f,.32f));
    }
    for(int32 Row=0;Row<3;++Row)
    {

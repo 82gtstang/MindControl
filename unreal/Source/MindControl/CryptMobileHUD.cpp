@@ -195,6 +195,12 @@ void ACryptMobileHUD::DrawHUD()
    DrawText(Encounter[I],FLinearColor::White,BarX,(86+17*I)*S,nullptr,.92f*S,false);
  }
  Button(Layout.Bag,EIcon::Bag,TEXT("BAG"),Hero->bInventoryOpen);
+ if(!Hero->bInventoryOpen)
+ {
+  const EIcon ThumbIcons[]={EIcon::Jump,WeaponIcon(Hero->EquippedWeapon),EIcon::Spin,EIcon::Fire,EIcon::Storm};
+  Icon(ThumbIcons[int32(Hero->GetThumbAction())],Layout.RightThumbCenter,17*S,Gold);
+ }
+
 
  const FVector2D Origin=Layout.MapOrigin,Size=Layout.MapSize;
  const FLinearColor RiverColor(.31f,.72f,.88f);
@@ -367,6 +373,26 @@ void ACryptMobileHUD::DrawHUD()
      Sprite(SupplySprites[Index],Point,FVector2D(1.96f*R));
      if(Index==1) CountBadge(Point,Hero->TreasureCount);
      if(Index==2) CountBadge(Point,Counts[Index]);
+    }
+   }
+
+   if(!Hero->bSatchelJournal)
+   {
+    const FVector2D Heading=Layout.InSatchel(.12f,.722f);
+    DrawText(TEXT("Right thumb tap"),Gold,Heading.X,Heading.Y,nullptr,1.08f*S,false);
+    const float HalfWidth=Layout.SatchelSize.X*.075f;
+    const float HalfHeight=Layout.SatchelSize.Y*.040f;
+    for(int32 Index=0;Index<int32(ECryptThumbAction::Count);++Index)
+    {
+     const FVector2D Option=Layout.ThumbActionOption(Index);
+     const bool bAssigned=Index==int32(Hero->GetThumbAction());
+     Frame(Option.X-HalfWidth,Option.Y-HalfHeight,2*HalfWidth,2*HalfHeight,
+       bAssigned?FLinearColor(.37f,.27f,.14f,.99f):Ink,bAssigned?Gold:Bronze);
+     float LabelWidth=0,LabelHeight=0;
+     const float TextScale=FMath::Min(.99f*S,HalfWidth/31.f);
+     GetTextSize(CryptThumbActionLabels[Index],LabelWidth,LabelHeight,nullptr,TextScale);
+     DrawText(CryptThumbActionLabels[Index],FLinearColor::White,Option.X-LabelWidth*.5f,
+       Option.Y-LabelHeight*.5f,nullptr,TextScale,false);
     }
    }
 

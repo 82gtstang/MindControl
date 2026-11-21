@@ -27,6 +27,8 @@ struct FCryptHudLayout
   UtilityRadius=FMath::Min(ItemRadius*.76f,32.f*Scale);
   Save=InSatchel(.18f,.95f);
   Restore=InSatchel(.82f,.95f);
+  RightThumbCenter=FVector2D(W*.875f,H*.855f);
+  RightThumbRadius=66.f*Scale;
  }
 
  bool Hit(const FVector2D& Point,const FVector2D& Center) const
@@ -48,6 +50,21 @@ struct FCryptHudLayout
  {
   return InSatchel(.215f+.1425f*Index,.61f);
  }
+
+ FVector2D ThumbActionOption(int32 Index) const
+ {
+  return InSatchel(.18f+.16f*Index,.80f);
+ }
+
+ bool HitThumbAction(const FVector2D& Point,int32 Index) const
+ {
+  const FVector2D Delta=Point-ThumbActionOption(Index);
+  return FMath::Abs(Delta.X)<=SatchelSize.X*.075 &&
+   FMath::Abs(Delta.Y)<=SatchelSize.Y*.040;
+ }
+
+ FVector2D RightThumbCenter;
+ float RightThumbRadius;
 
  bool HitPocket(const FVector2D& Point,const FVector2D& Center,float HalfSize) const
  {

@@ -1,4 +1,5 @@
 #include "CryptHero.h"
+#include "Misc/ConfigCacheIni.h"
 #include "CryptMonster.h"
 #include "CryptDungeons.h"
 #include "Engine/StaticMeshActor.h"
@@ -153,6 +154,10 @@ ACryptHero::ACryptHero()
 void ACryptHero::BeginPlay()
 {
  Super::BeginPlay();
+ int32 StoredAction=0;
+ if(GConfig && GConfig->GetInt(TEXT("MindControl.Controls"),TEXT("RightThumbAction"),StoredAction,GGameUserSettingsIni) &&
+    StoredAction>=0 && StoredAction<int32(ECryptThumbAction::Count))
+  ThumbAction=static_cast<ECryptThumbAction>(StoredAction);
  for(const FName Candidate : {FName(TEXT("hand_rSocket")),FName(TEXT("hand_R")),FName(TEXT("RightHand"))})
  {
   if(!GetMesh()->DoesSocketExist(Candidate)) continue;
@@ -286,6 +291,7 @@ void ACryptHero::SetupPlayerInputComponent(UInputComponent* Input)
 {
  Super::SetupPlayerInputComponent(Input);
  Input->BindTouch(IE_Pressed,this,&ACryptHero::TouchPressed);
+ Input->BindTouch(IE_Released,this,&ACryptHero::TouchReleased);
  Input->BindAxis("MoveForward",this,&ACryptHero::MoveForward);
  Input->BindAxis("MoveRight",this,&ACryptHero::MoveRight);
  Input->BindAxis("Turn",this,&ACryptHero::Turn);
@@ -658,7 +664,6 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
  if(ViewSize.X<=0 || ViewSize.Y<=0) return;
  const float W=ViewSize.X,H=ViewSize.Y;
  const FCryptHudLayout Layout(W,H);
- const float S=Layout.Scale;
  const FVector2D TouchPoint(Location.X,Location.Y);
  if(Layout.Hit(TouchPoint,Layout.Bag))
  {
@@ -667,6 +672,13 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
  }
  if(bInventoryOpen)
  {
+  if(!bSatchelJournal)
+   for(int32 Index=0;Index<int32(ECryptThumbAction::Count);++Index)
+    if(Layout.HitThumbAction(TouchPoint,Index))
+    {
+     SetThumbAction(static_cast<ECryptThumbAction>(Index));
+     return;
+    }
   if(Layout.HitPocket(TouchPoint,Layout.Save,Layout.UtilityRadius))
   {
    InspectedItem.Reset();
@@ -713,14 +725,11 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
   Interact();
   return;
  }
- // Right virtual thumb pad: a tap in its inner circle triggers jump.
- // Keep the outer ring available for normal right-stick camera movement.
- const FVector2D RightPadCenter(W*.875f,H*.855f);
- const float RightPadInnerRadius=66.f*S;
- if(FVector2D::Distance(TouchPoint,RightPadCenter)<=RightPadInnerRadius)
+ if(FVector2D::Distance(TouchPoint,Layout.RightThumbCenter)<=Layout.RightThumbRadius)
  {
-  Jump();
-  UE_LOG(LogTemp,Log,TEXT("MOBILE_RIGHT_PAD: center pressed, jump requested"));
+  ThumbFinger=int32(FingerIndex);
+  ThumbStart=TouchPoint;
+  ThumbStartTime=GetWorld()->GetRealTimeSeconds();
   return;
  }
  if(Layout.Hit(TouchPoint,Layout.Jump)) Jump();
@@ -731,6 +740,38 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
 }
 
 
+
+void ACryptHero::SetThumbAction(ECryptThumbAction Action)
+{
+ ThumbAction=Action;
+ InspectedItem=FString::Printf(TEXT("Right thumb: %s"),CryptThumbActionLabels[int32(Action)]);
+ if(GConfig)
+ {
+  GConfig->SetInt(TEXT("MindControl.Controls"),TEXT("RightThumbAction"),int32(Action),GGameUserSettingsIni);
+  GConfig->Flush(false,GGameUserSettingsIni);
+ }
+}
+
+void ACryptHero::TouchReleased(ETouchIndex::Type FingerIndex,FVector Location)
+{
+ if(ThumbFinger!=int32(FingerIndex)) return;
+ ThumbFinger=INDEX_NONE;
+ if(bInventoryOpen || !GEngine || !GEngine->GameViewport ||
+    GetWorld()->GetRealTimeSeconds()-ThumbStartTime>.38f) return;
+ FVector2D Size;
+ GEngine->GameViewport->GetViewportSize(Size);
+ const FCryptHudLayout Layout(Size.X,Size.Y);
+ if(FVector2D::Distance(ThumbStart,FVector2D(Location.X,Location.Y))>24.f*Layout.Scale) return;
+ switch(ThumbAction)
+ {
+  case ECryptThumbAction::Jump: Jump(); break;
+  case ECryptThumbAction::Attack: Attack(); break;
+  case ECryptThumbAction::Spin: SpinAttack(); break;
+  case ECryptThumbAction::Fire: CastFire(); break;
+  case ECryptThumbAction::Storm: CastStorm(); break;
+  default: break;
+ }
+}
 
 float ACryptHero::GetArmorRating() const
 {
