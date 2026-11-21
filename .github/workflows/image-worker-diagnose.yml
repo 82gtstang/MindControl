@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy high-detail worker and test a repository reference image
+      - name: Deploy smooth-surface worker and test a repository reference image
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'

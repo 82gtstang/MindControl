@@ -4,11 +4,13 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const status = document.getElementById('status');
 const reset = document.getElementById('reset');
+const turn = document.getElementById('turn');
 
 async function preview() {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x151a23);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     document.body.prepend(renderer.domElement);
 
@@ -17,11 +19,11 @@ async function preview() {
     controls.enablePan = false;
     controls.enableDamping = true;
     controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x73809b, 2.3));
-    const key = new THREE.DirectionalLight(0xfff2df, 2);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x9ba7bd, 1.65));
+    const key = new THREE.DirectionalLight(0xfff6ec, 1.45);
     key.position.set(2, 4, 3);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0xc8dcff, 1.1);
+    const fill = new THREE.DirectionalLight(0xe3eaff, 0.65);
     fill.position.set(-3, 1, -2);
     scene.add(fill);
 
@@ -38,8 +40,25 @@ async function preview() {
     scene.add(stage);
 
     const untextured = new Set();
+    const matteMaterials = new Map();
+    const matte = (original) => {
+        if (!original) return original;
+        if (!matteMaterials.has(original)) {
+            const material = new THREE.MeshStandardMaterial({
+                color: original.map ? 0xffffff : original.color ?? 0xffffff,
+                map: original.map ?? null,
+                roughness: 0.86,
+                metalness: 0,
+                side: original.side,
+                vertexColors: original.vertexColors,
+            });
+            matteMaterials.set(original, material);
+        }
+        return matteMaterials.get(original);
+    };
     model.traverse((node) => {
         if (node.isMesh) {
+            node.material = Array.isArray(node.material) ? node.material.map(matte) : matte(node.material);
             for (const material of [node.material].flat()) {
                 if (material && !material.map) untextured.add(material);
             }
@@ -71,7 +90,7 @@ async function preview() {
         const horizontal = Math.atan(Math.tan(vertical) * camera.aspect);
         const distance = 1.2 / Math.sin(Math.min(vertical, horizontal));
         controls.target.set(0, 0, 0);
-        camera.position.set(0.3, 0.12, 1).normalize().multiplyScalar(distance);
+        camera.position.set(0.18, 0.07, 1).normalize().multiplyScalar(distance);
         controls.minDistance = 0.35;
         controls.maxDistance = distance * 3;
         controls.update();
@@ -79,6 +98,11 @@ async function preview() {
     frame();
     reset.addEventListener('click', frame);
     reset.hidden = false;
+    turn.hidden = false;
+    turn.addEventListener('click', () => {
+        stage.rotation.z -= Math.PI / 2;
+        frame();
+    });
     status.textContent = 'Drag to rotate · Pinch to zoom';
     renderer.setAnimationLoop(() => {
         controls.update();

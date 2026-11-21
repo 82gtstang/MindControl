@@ -103,7 +103,11 @@ def add_photo_detail(pixels, colors):
     # Recover small surface details while keeping the model's broad color and
     # leaving occluded surfaces and uncertain alignment entirely model-derived.
     detail = np.clip(photo_pixel - base, -.13, .13)
-    colors[visible_indices, :3] = np.clip(expected + blend * (.78 * detail + .10 * (base - expected)), 0, 1)
+    # Increase fine contrast only within the lowest-error part of a match.
+    # Keep the stronger transfer away from seams and uncertain boundaries.
+    strong_match = np.clip((.145 - difference) / .105, 0, 1)[:, None]
+    recovered = (.78 + .42 * strong_match) * detail
+    colors[visible_indices, :3] = np.clip(expected + blend * (recovered + .10 * (base - expected)), 0, 1)
     print(f"Source photo details transferred to {np.count_nonzero(blend > .1)} texels (match {correlation:.2f}).", flush=True)
 
 

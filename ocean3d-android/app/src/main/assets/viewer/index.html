@@ -8,9 +8,10 @@
   html,body { margin:0; height:100%; overflow:hidden; background:#151a23; color:#f0f3fb; font:15px system-ui,sans-serif }
   canvas { display:block; width:100%; height:100%; touch-action:none }
   aside { position:absolute; right:12px; bottom:14px; left:12px; display:flex; align-items:center; justify-content:space-between; gap:12px; pointer-events:none }
+  .actions { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end }
   #status { padding:9px 12px; border-radius:12px; background:#222a38 }
   button { pointer-events:auto; color:#f0f3fb; background:#2f415c; border:0; border-radius:12px; min-height:44px; padding:0 14px; font:inherit }
 </style>
-<aside><span id="status" role="status">Opening FBX…</span><button id="reset" hidden>Reset view</button></aside>
+<aside><span id="status" role="status">Opening FBX…</span><div class="actions"><button id="turn" hidden>Turn 90°</button><button id="reset" hidden>Reset view</button></div></aside>
 <script defer src="viewer.js"></script>
 </html>
