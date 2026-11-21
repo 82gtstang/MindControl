@@ -20,6 +20,7 @@ jobs:
           $task = 'MindControl-ImageToUnreal-Worker'
           $key = [IO.File]::ReadAllText((Join-Path $root 'token.txt'))
           Stop-ScheduledTask -TaskName $task
+          Copy-Item tools/ocean3d/unreal_server.py,tools/ocean3d/run_triposr.py,tools/ocean3d/export_unreal.py -Destination $root -Force
           @'
           $ErrorActionPreference = 'Stop'
           $c = Get-Content (Join-Path $PSScriptRoot 'config.json') -Raw | ConvertFrom-Json

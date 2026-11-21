@@ -50,7 +50,7 @@ def generate():
             triposr = Path(os.environ["OCEAN3D_TRIPOSR"]).resolve()
             out = root / "model"
             subprocess.run(
-                [sys.executable, str(triposr / "run.py"), str(photo),
+                [sys.executable, str(Path(__file__).with_name("run_triposr.py").resolve()), str(photo),
                  "--output-dir", str(out), "--model-save-format", "obj",
                  "--bake-texture", "--texture-resolution", "1024"],
                 cwd=triposr, check=True, timeout=480,
