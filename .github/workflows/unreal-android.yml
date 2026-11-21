@@ -174,9 +174,8 @@ jobs:
           $log = Join-Path $env:RUNNER_TEMP 'Townsperson-UnrealImport.log'
           $arguments = @(
             "`"$project`""
-            '-run=pythonscript'
             '-Interchange.FeatureFlags.Import.FBX=False'
-            "-script=`"$script`""
+            "-ExecutePythonScript=`"$script`""
             '-unattended'
             '-nop4'
             '-nosplash'
