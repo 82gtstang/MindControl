@@ -6,6 +6,7 @@ on:
     paths:
       - 'assets/ocean3d/OceanSerenity.fbx'
       - 'tools/rig_ocean_serenity.py'
+      - 'tools/animate_valkyrie.py'
       - 'tools/open3d_ocean_serenity.py'
       - '.github/workflows/ocean-serenity-rig.yml'
       - 'tools/preview_ocean_serenity.py'
@@ -22,19 +23,29 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@v4
-      - name: Stage the approved Ocean Serenity character
+      - name: Bake 60 FPS animations into the existing rig
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $source = Join-Path $env:GITHUB_WORKSPACE 'assets\ocean3d\OceanSerenity.fbx'
           $expected = 'ff1d7f378a5fa9d84377cc5f98634df517dfaa48a693dcb0b524b82d625abf4b'
           if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ine $expected) {
-            throw 'Ocean Serenity FBX checksum mismatch'
+            throw 'Ocean Serenity FBX checksum mismatch; do not bake an unreviewed replacement'
           }
+          $blenders = @(Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
+          $command = Get-Command blender.exe -ErrorAction SilentlyContinue
+          if ($command) { $blenders += $command.Source }
+          $blender = $blenders | Select-Object -Unique | Select-Object -First 1
+          if (!$blender) { throw 'Blender executable not found on runner' }
           New-Item -ItemType Directory -Path 'rig-output' -Force | Out-Null
-          Copy-Item -LiteralPath $source -Destination 'rig-output\OceanSerenity.fbx'
-          Write-Host "Approved Ocean Serenity FBX SHA-256: $expected"
-      - name: Upload the approved rigged character
+          $output = Join-Path $env:GITHUB_WORKSPACE 'rig-output\OceanSerenity.fbx'
+          & $blender -b -t 2 --python 'tools/animate_valkyrie.py' -- "$source" "$output"
+          if ($LASTEXITCODE -ne 0) { throw "Animation bake failed with exit code $LASTEXITCODE; no APK should be packaged" }
+          if (!(Test-Path $output) -or (Get-Item $output).Length -lt 1024) {
+            throw 'Animation bake did not produce a valid-sized FBX'
+          }
+          Write-Host "Baked animation FBX: $output"
+      - name: Upload the animation-baked character
         uses: actions/upload-artifact@v4
         with:
           name: OceanSerenity-Experimental-Rig-FBX
