@@ -27,8 +27,26 @@ namespace CryptDungeons
  inline constexpr int32 Count=UE_ARRAY_COUNT(Chambers);
  inline constexpr int32 EnemyId(int32 Chamber,int32 Slot) { return 1000+Chamber*10+Slot; }
  inline FVector SurfaceGate() { return FVector(-2450,440,-20); }
- inline FVector Hub() { return FVector(9200,0,0); }
- inline FVector Room(int32 Index) { return FVector(14000+3600*(Index%5),-4800+9600*(Index/5),0); }
+ inline constexpr float FloorElevation=240.f;
+ double GetGroundHeight(double X,double Y);
+ inline const FVector2D EntrancePoints[]={
+  {-4950,1750},{-3150,2700},{-1200,4100},{950,4250},{3170,3670},
+  {4870,2350},{-4650,-1450},{-2450,-2950},{-940,-4250},{2800,-3650}
+ };
+ static_assert(UE_ARRAY_COUNT(EntrancePoints)==Count);
+
+ inline FVector Entrance(int32 Index)
+ {
+  const auto& P=EntrancePoints[Index];
+  return FVector(P.X,P.Y,GetGroundHeight(P.X,P.Y)+4);
+ }
+ inline FVector SurfaceArrival(int32 Index)
+ {
+  const auto& P=EntrancePoints[Index];
+  return FVector(P.X-285,P.Y,GetGroundHeight(P.X-285,P.Y)+115);
+ }
+ inline FVector Hub() { return FVector(9200,0,FloorElevation); }
+ inline FVector Room(int32 Index) { return FVector(14000+3600*(Index%5),-4800+9600*(Index/5),FloorElevation); }
  inline FVector Gate(int32 Index) { return Hub()+FVector(-1440+720*(Index%5),Index<5?-640:640,0); }
  inline FVector Exit(int32 Index) { return Room(Index)+FVector(-1050,0,0); }
  inline bool Near(const FVector& A,const FVector& B) { return FVector::DistSquared(A,B)<FMath::Square(250.); }
@@ -37,6 +55,23 @@ namespace CryptDungeons
   for(int32 I=0;I<Count;++I)
    if(FVector::DistSquared(Point,Room(I))<FMath::Square(1740.)) return I;
   return INDEX_NONE;
+ }
+ inline FVector RaiseOldSave(FVector Position)
+ {
+  // Previous builds placed these floors at Z=0.
+  if(Position.Z>=FloorElevation-5) return Position;
+  if(FMath::Abs(Position.X-Hub().X)<2140 && FMath::Abs(Position.Y)<1000)
+   Position.Z+=FloorElevation;
+  else for(int32 I=0;I<Count;++I)
+  {
+   const FVector Offset=Position-Room(I);
+   if(FMath::Abs(Offset.X)<1380 && FMath::Abs(Offset.Y)<870)
+   {
+    Position.Z+=FloorElevation;
+    break;
+   }
+  }
+  return Position;
  }
  inline bool Travel(const FVector& Point,FVector& Destination,FString& Label)
  {
@@ -54,7 +89,7 @@ namespace CryptDungeons
   }
   for(int32 I=0;I<Count;++I)
   {
-   if(Near(Point,Gate(I)))
+   if(Near(Point,Gate(I)) || Near(Point,Entrance(I)))
    {
     Destination=Room(I)+FVector(-780,0,100);
     Label=FString::Printf(TEXT("Enter %s"),Chambers[I].Name);
@@ -62,8 +97,8 @@ namespace CryptDungeons
    }
    if(Near(Point,Exit(I)))
    {
-    Destination=Gate(I)+FVector(0,I<5?280:-280,100);
-    Label=TEXT("Return to dungeon crossroads");
+    Destination=SurfaceArrival(I);
+    Label=TEXT("Return to the surface");
     return true;
    }
   }

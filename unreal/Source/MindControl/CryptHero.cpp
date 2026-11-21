@@ -601,7 +601,7 @@ void ACryptHero::RestoreProgress()
   SaveStatus=TEXT("This save cannot be restored.");
   return;
  }
- if(!TeleportTo(Save->HeroLocation,Save->HeroRotation,false,true))
+ if(!TeleportTo(CryptDungeons::RaiseOldSave(Save->HeroLocation),Save->HeroRotation,false,true))
  {
   SaveStatus=TEXT("Could not return to the saved location.");
   return;
@@ -636,7 +636,7 @@ void ACryptHero::RestoreProgress()
   const float* SavedEnemyHealth=Save->EnemyHealth.Find(It->SaveId);
   const FVector* Location=Save->EnemyLocations.Find(It->SaveId);
   if(SavedEnemyHealth && Location && FMath::IsFinite(*SavedEnemyHealth) && !Location->ContainsNaN())
-   It->RestoreState(Save->Version==1?(*SavedEnemyHealth/3.f)*It->Stats().Health:*SavedEnemyHealth,*Location);
+   It->RestoreState(Save->Version==1?(*SavedEnemyHealth/3.f)*It->Stats().Health:*SavedEnemyHealth,CryptDungeons::RaiseOldSave(*Location));
  }
  Dialogue.Reset();
  SaveStatus=TEXT("Adventure restored.");
@@ -794,7 +794,7 @@ void ACryptHero::ReceiveCombatHit(float Rating,float Dexterity,ECryptDamage Elem
  if(Health>0.f) return;
  const int32 Dungeon=CryptDungeons::Current(GetActorLocation());
  FVector Safe=CryptDungeons::SurfaceGate()+FVector(0,-270,110);
- if(Dungeon!=INDEX_NONE) Safe=CryptDungeons::Gate(Dungeon)+FVector(0,Dungeon<5?280:-280,105);
+ if(Dungeon!=INDEX_NONE) Safe=CryptDungeons::SurfaceArrival(Dungeon);
  SetActorLocation(Safe,false,nullptr,ETeleportType::TeleportPhysics);
  GetCharacterMovement()->StopMovementImmediately();
  Health=100.f;

@@ -244,7 +244,13 @@ void ACryptMobileHUD::DrawHUD()
   DrawText(Label,FLinearColor::White,Point.X-Width*.72f,Point.Y+OffsetY*S,nullptr,.87f*S,false);
  };
  const FVector Entry=CryptDungeons::SurfaceGate();
- Landmark(FVector2D(Entry.X,Entry.Y),TEXT("Dungeons"),-19.f,EIcon::Storm);
+ Landmark(FVector2D(Entry.X,Entry.Y),TEXT("Crossroads"),-19.f,EIcon::Storm);
+ for(int32 I=0;I<CryptDungeons::Count;++I)
+ {
+  const FVector Location=CryptDungeons::Entrance(I);
+  const FVector2D Point=ToMap(Location);
+  Icon(EIcon::Storm,Point,4.4f*S,FLinearColor(.78f,.54f,1.f));
+ }
  Landmark(CryptWorld::Town,TEXT("Town"),7.f,EIcon::Town);
  Landmark(CryptWorld::Castle,TEXT("Castle"),-23.f,EIcon::Castle);
  DrawText(TEXT("N"),FLinearColor::White,Origin.X+9*S,Origin.Y+4*S,nullptr,.9f*S,false);

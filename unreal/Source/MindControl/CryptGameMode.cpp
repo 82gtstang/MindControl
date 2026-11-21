@@ -161,6 +161,11 @@ namespace
  }
 }
 
+double CryptDungeons::GetGroundHeight(double X,double Y)
+{
+ return TerrainHeight(X,Y);
+}
+
 ACryptGameMode::ACryptGameMode() { DefaultPawnClass = ACryptHero::StaticClass(); HUDClass = ACryptMobileHUD::StaticClass(); }
 void ACryptGameMode::PlaceBlock(const FVector& Location,const FVector& Scale,const FRotator& Rotation,UMaterialInterface* Material,UStaticMesh* Mesh)
 {
@@ -278,6 +283,7 @@ void ACryptGameMode::BeginPlay()
    const auto& Definition=Chambers[I];
    auto* Mark=Accent(Definition.Accent);
    Portal(Gate(I),Definition.Name,Mark);
+   Portal(Entrance(I),Definition.Name,Mark);
    const FVector Center=Room(I);
    Block(Center+FVector(0,0,-25),FVector(2750,1740,50),Stone);
    for(float Side : {-1.f,1.f})
@@ -285,7 +291,7 @@ void ACryptGameMode::BeginPlay()
     Block(Center+FVector(0,Side*863,160),FVector(2760,46,320),Stone);
     Block(Center+FVector(Side*1370,0,160),FVector(46,1740,320),Stone);
    }
-   Portal(Exit(I),TEXT("Crossroads"),Mark);
+   Portal(Exit(I),TEXT("Surface"),Mark);
    const auto Fixture=[&](float X,float Y,float W,float D,float H)
    {
     Block(Center+FVector(X,Y,H/2),FVector(W,D,H),Mark);
@@ -306,7 +312,8 @@ void ACryptGameMode::BeginPlay()
      Fixture(670,-690,860,110,85);
      break;
     case ELayout::Marsh:
-     Fixture(220,0,2240,1460,10);
+     // Raised stepping blocks leave the stone floor as the only continuous surface.
+     for(int32 P=0;P<5;++P) Fixture(-470+315*P,P%2?260:-260,135,110,21);
      Fixture(90,420,210,120,155);
      Fixture(400,-475,240,170,180);
      break;

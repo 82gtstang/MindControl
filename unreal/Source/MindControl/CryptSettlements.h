@@ -86,7 +86,7 @@ namespace CryptSettlements
   constexpr float MinX = -24900;
   constexpr float HalfY = 5850;
   Box(GroundBatch, FVector((EntryX + MinX) / 2, 0, Ground - 42), FVector(EntryX - MinX, HalfY * 2, 84));
-  Box(Road, FVector((EntryX + MinX) / 2, 0, Ground + 1), FVector(EntryX - MinX, 410, 2));
+  Box(Road, FVector((EntryX + MinX) / 2, 0, Ground + 2), FVector(EntryX - MinX, 410, 12));
   for (const float Y : {-HalfY, HalfY})
    Box(Fence, FVector((EntryX + MinX) / 2, Y, Ground + 180), FVector(EntryX - MinX, 24, 360));
   Box(Fence, FVector(MinX, 0, Ground + 180), FVector(24, HalfY * 2, 360));
@@ -158,7 +158,7 @@ namespace CryptSettlements
   for (int32 Column = 0; Column < 5; ++Column)
   {
    const float X = StartX - Column * Spacing;
-   Box(Road, FVector(X+1100,0,Ground+1), FVector(340,HalfY*2,2));
+   Box(Road, FVector(X+1100,0,Ground+4), FVector(340,HalfY*2,16));
    for (int32 Row = 0; Row < 4; ++Row)
    {
     const int32 Town = Column * 4 + Row;
@@ -174,14 +174,14 @@ namespace CryptSettlements
     Sign->SetWorldSize(28);
     Sign->SetText(FText::FromString(TownNames[Town]));
     Sign->RegisterComponent();
-    Box(Road, FVector(X, Street, Ground+2), FVector(2560,340,2));
-    Box(Road, FVector(X+1100,Y+170,Ground+2), FVector(230,1300,2));
+    Box(Road, FVector(X, Street, Ground+6), FVector(2560,340,20));
+    Box(Road, FVector(X+1100,Y+8,Ground+8), FVector(230,976,24));
     const float WorkDepth = 490 + 35 * (Town % 4);
     for (int32 Shop = 0; Shop < 2; ++Shop)
     {
      const float ShopY = Y + 260 + Shop * 720;
      Building(FVector(X+800, ShopY, Ground), 440 + 42*(Town % 3), WorkDepth, Town+Shop, true);
-     Box(Road, FVector(X+940,ShopY-WorkDepth/2-65,Ground+2),FVector(440,138,2));
+     Box(Road, FVector(X+940,ShopY-WorkDepth/2-65,Ground+10),FVector(440,138,28));
     }
     for (int32 Home = 0; Home < (Town < 10 ? 3 : 2); ++Home)
     {
@@ -189,7 +189,7 @@ namespace CryptSettlements
      const float Depth = 355 + 48*((Town+Home)%5);
      const float HomeY = Street+400+Depth/2;
      Building(FVector(HomeX, HomeY, Ground), 330 + 45*((Town+2*Home)%5), Depth, Town+Home, false);
-     Box(Road, FVector(HomeX,Street+276,Ground+2),FVector(120,260,2));
+     Box(Road, FVector(HomeX,Street+276,Ground+7),FVector(120,260,22));
      for (int32 Member = 0; Member < 4; ++Member)
      {
       const float JobY = Y+260+(Member%2)*720-WorkDepth/2;
