@@ -1,0 +1,37 @@
+name: Image to Unreal worker readiness
+on:
+  workflow_dispatch:
+  push:
+    branches: [diagnostic/android-landscape-startup]
+    paths: [.github/workflows/image-worker-readiness.yml]
+permissions:
+  contents: read
+jobs:
+  readiness:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 5
+    steps:
+      - name: Check worker dependencies and private HTTPS prerequisites
+        shell: powershell
+        run: |
+          $root = Join-Path $env:LOCALAPPDATA 'Ocean3D'
+          $python = Join-Path $root 'venv\Scripts\python.exe'
+          $tripo = Test-Path (Join-Path $root 'TripoSR-main\run.py')
+          $blender = @(Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse -ErrorAction SilentlyContinue).Count -gt 0
+          $tailscale = Test-Path 'C:\Program Files\Tailscale\tailscale.exe'
+          $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+          $admin = (New-Object Security.Principal.WindowsPrincipal($identity)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+          $workerInstalled = (Test-Path $python) -and $tripo
+          Write-Host "TripoSR installed: $workerInstalled"
+          Write-Host "Blender installed: $blender"
+          Write-Host "Runner elevated: $admin"
+          Write-Host "Tailscale installed: $tailscale"
+          if ($tailscale) {
+            $state = & 'C:\Program Files\Tailscale\tailscale.exe' status --json | ConvertFrom-Json
+            Write-Host "Tailscale running: $($state.BackendState -eq 'Running')"
+            Write-Host "Tailscale HTTPS certificate domain present: $([bool]$state.CurrentTailnet.MagicDNSSuffix)"
+          }
+          if ($workerInstalled) {
+            & $python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
+            Write-Host "Torch check exit code: $LASTEXITCODE"
+          }
