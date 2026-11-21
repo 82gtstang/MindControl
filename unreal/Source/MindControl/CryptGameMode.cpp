@@ -427,7 +427,8 @@ void ACryptGameMode::BeginPlay()
      PlaceBlock(Brazier+FVector(0,0,70),FVector(.13,.13,.39),FRotator(13,0,0),Torch,Boulder);
      if(auto* Light=GetWorld()->SpawnActor<APointLight>(Brazier+FVector(-25,0,78),FRotator::ZeroRotator))
      {
-      auto* Lamp=Light->GetPointLightComponent();
+      auto* Lamp=Light->FindComponentByClass<UPointLightComponent>();
+      if(!Lamp) continue;
       Lamp->SetMobility(EComponentMobility::Movable);
       Lamp->SetIntensity(1200);
       Lamp->SetLightColor(FLinearColor(1.f,.42f,.18f));
