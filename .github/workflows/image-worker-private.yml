@@ -1,0 +1,94 @@
+name: Connect Image to Unreal privately
+on:
+  workflow_dispatch:
+  push:
+    branches: [diagnostic/android-landscape-startup]
+    paths: [.github/workflows/image-worker-private.yml]
+permissions:
+  contents: read
+jobs:
+  pair:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 15
+    steps:
+      - name: Install signed Tailscale client and request device sign-in
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cli = 'C:\Program Files\Tailscale\tailscale.exe'
+          if (!(Test-Path $cli)) {
+            $msi = Join-Path $env:RUNNER_TEMP 'tailscale-setup-amd64.msi'
+            Invoke-WebRequest -UseBasicParsing -Uri 'https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi' -OutFile $msi
+            $signature = Get-AuthenticodeSignature $msi
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Tailscale') { throw 'Invalid Tailscale installer signature' }
+            $install = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart TS_UNATTENDEDMODE=always" -Wait -PassThru
+            if ($install.ExitCode -notin @(0,3010) -or !(Test-Path $cli)) { throw "Tailscale install failed: $($install.ExitCode)" }
+          }
+          $state = & $cli status --json | ConvertFrom-Json
+          $link = ''
+          if ($state.BackendState -ne 'Running') {
+            $env:TS_LOG_TARGET = 'stderr'
+            $ErrorActionPreference = 'Continue'
+            $output = (& $cli up --unattended --timeout=15s 2>&1 | Out-String)
+            $ErrorActionPreference = 'Stop'
+            $state = & $cli status --json | ConvertFrom-Json
+            $link = $state.AuthURL
+            if (!$link) { $link = [regex]::Match($output,'https://login\.tailscale\.com/[A-Za-z0-9/_?&=.-]+').Value }
+            if ($state.BackendState -ne 'Running' -and $link -notmatch '^https://login\.tailscale\.com/') {
+              throw "Could not obtain a sign-in URL. Client state: $($state.BackendState)"
+            }
+          }
+          $data = if ($state.BackendState -eq 'Running') { 'already-connected' } else { $link }
+          $rsa = New-Object Security.Cryptography.RSACryptoServiceProvider
+          try {
+            $rsa.FromXmlString('<RSAKeyValue><Modulus>1QggBTjKYfX23rRuMgjqXTzuIt30KCsD+VX0jicRfefDzmmWpBXMJTtamkOWU1I58P/bIB4PGokFhxs+LfAvG/srPUsOVNl2jXubf8pRznJaMX8B8LQhzqTHhfL3Ar6iimcJWbPYOpH5PwYE1LUB5rcV8Z0yP2GXhsySdA4G/2TdtOEivK0uDBBZtr8tNNrPbe9U02yZHujcmfTxS8oTMmdQqUxx10INN+rLgukwu3J7ci5bEhJRfxiLo4x//hce0KTN4xQOWRGc3e+qaQvh14NHQh0casLrgOQ8w3x9YH177imnaQrCe4skSgcgLqWzobGxPgn4p12qd+BD1REzHYt+GuMdgXZqlc8EJ8oQAuO3lXXRzX92trN4Kg0LVlRpTTgNi61JWrFWU4NcMQhV00S1ir6e68Ww5fQWoSRXdww4STJ6/NlwRcVp9CwcdSKh3W4vJC5Keq4WOcGNNyorMriR9ln1h3hludKVnQVd/HF1obTkSW7vnxHzfWX3ckSt</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>')
+            [IO.File]::WriteAllBytes((Join-Path $env:GITHUB_WORKSPACE 'tailscale-pair.enc'),$rsa.Encrypt([Text.Encoding]::UTF8.GetBytes($data),$true))
+          } finally { $rsa.Dispose() }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sealed-tailscale-pairing
+          path: tailscale-pair.enc
+          if-no-files-found: error
+          retention-days: 1
+      - name: Wait for sign-in and enable private HTTPS
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cli = 'C:\Program Files\Tailscale\tailscale.exe'
+          $connected = $false
+          for ($i=0; $i -lt 100; $i++) {
+            $state = & $cli status --json | ConvertFrom-Json
+            if ($state.BackendState -eq 'Running') { $connected = $true; break }
+            Start-Sleep 6
+          }
+          if (!$connected) { throw 'Device sign-in is still pending.' }
+          $serveStatus = (& $cli serve status --json | Out-String) | ConvertFrom-Json
+          $hostName = $state.Self.DNSName.TrimEnd('.')
+          $target = "http://127.0.0.1:8787"
+          $web = if ($serveStatus.Web) { $serveStatus.Web.PSObject.Properties["${hostName}:443"] }
+          if ($web -and $web.Value.Handlers -and $web.Value.Handlers.'/' -and $web.Value.Handlers.'/'.Proxy -ne $target) {
+            throw 'A different HTTPS service is already using the tailnet hostname root.'
+          }
+          if ($serveStatus.AllowFunnel -and ($serveStatus.AllowFunnel.PSObject.Properties | Where-Object Value -eq $true)) {
+            throw 'Existing public Funnel configuration detected. Review it before adding the private worker.'
+          }
+          & $cli serve --bg --https=443 $target
+          if ($LASTEXITCODE -ne 0) { throw 'Could not enable Tailscale Serve. Confirm HTTPS certificates are enabled in the tailnet.' }
+          $verified = $false
+          try {
+            Invoke-WebRequest -Uri "https://$hostName/generate-unreal" -Method Post -UseBasicParsing -TimeoutSec 25 | Out-Null
+          } catch {
+            if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 401) { $verified = $true }
+          }
+          if (!$verified) { throw 'Private HTTPS endpoint did not return the expected authentication challenge.' }
+          $rsa = New-Object Security.Cryptography.RSACryptoServiceProvider
+          try {
+            $rsa.FromXmlString('<RSAKeyValue><Modulus>1QggBTjKYfX23rRuMgjqXTzuIt30KCsD+VX0jicRfefDzmmWpBXMJTtamkOWU1I58P/bIB4PGokFhxs+LfAvG/srPUsOVNl2jXubf8pRznJaMX8B8LQhzqTHhfL3Ar6iimcJWbPYOpH5PwYE1LUB5rcV8Z0yP2GXhsySdA4G/2TdtOEivK0uDBBZtr8tNNrPbe9U02yZHujcmfTxS8oTMmdQqUxx10INN+rLgukwu3J7ci5bEhJRfxiLo4x//hce0KTN4xQOWRGc3e+qaQvh14NHQh0casLrgOQ8w3x9YH177imnaQrCe4skSgcgLqWzobGxPgn4p12qd+BD1REzHYt+GuMdgXZqlc8EJ8oQAuO3lXXRzX92trN4Kg0LVlRpTTgNi61JWrFWU4NcMQhV00S1ir6e68Ww5fQWoSRXdww4STJ6/NlwRcVp9CwcdSKh3W4vJC5Keq4WOcGNNyorMriR9ln1h3hludKVnQVd/HF1obTkSW7vnxHzfWX3ckSt</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>')
+            [IO.File]::WriteAllBytes((Join-Path $env:GITHUB_WORKSPACE 'tailscale-endpoint.enc'),$rsa.Encrypt([Text.Encoding]::UTF8.GetBytes("https://$hostName"),$true))
+          } finally { $rsa.Dispose() }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sealed-tailscale-endpoint
+          path: tailscale-endpoint.enc
+          if-no-files-found: error
+          retention-days: 1
