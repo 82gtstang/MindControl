@@ -103,7 +103,8 @@ def gait(rig, phase, running, diagonal):
     bob = (.013 if running else .009) * (-.35 - math.cos(2 * wave))
     pelvis = rig.pose.bones["pelvis"]
     pelvis.location = pelvis.bone.matrix_local.to_3x3().inverted() @ Vector((0, 0, bob))
-    rotate(rig.pose.bones["spine"], X, math.radians(-11 if running else -9))
+    # The Valkyrie faces -Y in armature space. Positive X pitch leans forward.
+    rotate(rig.pose.bones["spine"], X, math.radians(11 if running else 7))
     rotate(rig.pose.bones["chest"], Z, math.sin(wave) * (.09 if diagonal else .05))
     rotate(rig.pose.bones["head"], Z, -math.sin(wave) * .025)
 
