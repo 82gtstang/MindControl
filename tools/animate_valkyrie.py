@@ -207,9 +207,16 @@ def main():
     scene = bpy.context.scene
     body, = [o for o in bpy.data.objects if o.type == "MESH"]
     rig, = [o for o in bpy.data.objects if o.type == "ARMATURE"]
-    originals = {a.name.split("|")[-1].removeprefix("Ocean_"): a for a in bpy.data.actions}
+    originals = {(a.name.split("|")[-1][6:] if a.name.split("|")[-1].startswith("Ocean_") else a.name.split("|")[-1]): a for a in bpy.data.actions}
     for action in originals.values():
         action.use_fake_user = True
+    required = {"root", "pelvis", "spine", "chest", "head", "thigh_L", "thigh_R", "shin_L", "shin_R", "foot_L", "foot_R", "upperarm_L", "upperarm_R", "forearm_L", "forearm_R"}
+    missing = sorted(required - set(rig.data.bones.keys()))
+    if missing:
+        raise RuntimeError("Incompatible Ocean Serenity skeleton; missing bones: " + ", ".join(missing))
+    missing_clips = sorted(set(CLIPS) - set(originals))
+    if missing_clips:
+        raise RuntimeError("Input FBX missing required source clips: " + ", ".join(missing_clips))
     add_hair_rig(body, rig)
     scene.render.fps = FPS
     make_clips(scene, rig, originals)
