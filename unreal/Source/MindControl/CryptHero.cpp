@@ -555,7 +555,7 @@ void ACryptHero::SaveProgress()
  Save->HeroRotation=GetActorRotation();
  Save->ViewRotation=GetControlRotation();
  Save->Treasure=TreasureCount;
- Save->Version=3;
+ Save->Version=4;
  Save->HeroHealth=Health;
  Save->HeroStamina=Stamina;
  Save->HeroMana=Mana;
@@ -583,14 +583,14 @@ void ACryptHero::RestoreProgress()
   SaveStatus=TEXT("No readable save was found.");
   return;
  }
- if((Save->Version<1 || Save->Version>3) || Save->QuestStates.Num()!=CryptQuests::Count ||
+ if((Save->Version<1 || Save->Version>4) || Save->QuestStates.Num()!=CryptQuests::Count ||
     Save->QuestCounts.Num()!=CryptQuests::Count || Save->HeroLocation.ContainsNaN() ||
     Save->HeroRotation.ContainsNaN() || Save->ViewRotation.ContainsNaN())
  {
   SaveStatus=TEXT("This save cannot be restored.");
   return;
  }
- if(!TeleportTo(Save->Version<3?CryptDungeons::MigrateLocation(Save->HeroLocation):Save->HeroLocation,Save->HeroRotation,false,true))
+ if(!TeleportTo(Save->Version<4?CryptDungeons::MigrateLocation(Save->HeroLocation,Save->Version):Save->HeroLocation,Save->HeroRotation,false,true))
  {
   SaveStatus=TEXT("Could not return to the saved location.");
   return;

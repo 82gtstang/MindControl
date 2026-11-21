@@ -31,16 +31,22 @@ namespace CryptDungeons
   {-4900,1200},{-3100,2700},{-1200,4100},{1000,2900},{3200,3700},
   {3500,2200},{-4600,-1500},{-2800,-3900},{-300,-4200},{2800,-3600}
  };
- inline const FVector2D EntrancePoints[]={
+ inline const FVector2D ExpandedWorldEntrancePoints[]={
   {-4900,1200},{-12600,14800},{-4900,26000},{14300,20400},{31600,11200},
   {3500,2200},{-16200,-12900},{-27400,-27600},{-300,-4200},{28800,-22800}
  };
+ inline const FVector2D EntrancePoints[]={
+  {-4900,1200},{-12600,14800},{-4900,34000},{14300,20400},{31600,10500},
+  {25000,-4000},{-41000,-12900},{-27400,-27600},{-300,-10500},{28800,-22800}
+ };
  static_assert(UE_ARRAY_COUNT(EntrancePoints)==Count);
- inline constexpr double RampLength=1000.;
+ inline constexpr double Enlargement=7.071067811865475244; // sqrt(50) on each axis
+ inline constexpr double CeilingHeight=620.;
+ inline constexpr double RampLength=4000.;
  inline constexpr double RampHalfWidth=200.;
- inline constexpr double LayoutScale=.72;
- inline constexpr double RoomHalfLength=1300.;
- inline constexpr double RoomHalfWidth=660.;
+ inline constexpr double LayoutScale=.72*Enlargement;
+ inline constexpr double RoomHalfLength=1300.*Enlargement;
+ inline constexpr double RoomHalfWidth=660.*Enlargement;
 
  inline FVector Entrance(int32 Index)
  {
@@ -54,14 +60,28 @@ namespace CryptDungeons
  }
  inline FVector Room(int32 Index)
  {
-  const auto& P=EntrancePoints[Index];
-  const double X=P.X+RampLength+RoomHalfLength;
-  double Ceiling=GetGroundHeight(P.X,P.Y)-115;
-  for(double DX : {-RoomHalfLength,-RoomHalfLength/2,0.,RoomHalfLength/2,RoomHalfLength})
-   for(double DY : {-RoomHalfWidth,0.,RoomHalfWidth})
-    Ceiling=FMath::Min(Ceiling,GetGroundHeight(X+DX,P.Y+DY)-45);
-  return FVector(X,P.Y,Ceiling-310);
+  static const TArray<FVector> Rooms=[]
+  {
+   TArray<FVector> Result;
+   Result.Reserve(Count);
+   for(const auto& P : EntrancePoints)
+   {
+    const double X=P.X+RampLength+RoomHalfLength;
+    double Roof=GetGroundHeight(P.X,P.Y)-160.;
+    for(int32 Row=0;Row<=12;++Row)
+     for(int32 Column=0;Column<=24;++Column)
+     {
+      const double SampleX=X+RoomHalfLength*(Column/12.-1.);
+      const double SampleY=P.Y+RoomHalfWidth*(Row/6.-1.);
+      Roof=FMath::Min(Roof,GetGroundHeight(SampleX,SampleY)-280.);
+     }
+    Result.Emplace(X,P.Y,Roof-CeilingHeight);
+   }
+   return Result;
+  }();
+  return Rooms[Index];
  }
+
  inline bool IsRampCell(double X,double Y)
  {
   for(const auto& P : EntrancePoints)
@@ -76,14 +96,28 @@ namespace CryptDungeons
    if(Point.X<P.X+RampLength-20 || Point.X>P.X+RampLength+2*RoomHalfLength+20 ||
       FMath::Abs(Point.Y-P.Y)>RoomHalfWidth+20) continue;
    const double Height=Point.Z-Room(I).Z;
-   if(Height>=-30 && Height<=283) return I;
+   if(Height>=-30 && Height<=CeilingHeight-10) return I;
   }
   return INDEX_NONE;
  }
 
- inline FVector MigrateLocation(FVector Position)
+ inline FVector MigrateLocation(FVector Position,int32 Version)
  {
-  // Move saves made in the old separate rooms to the matching walk-in dungeon.
+  if(Version==3)
+  {
+   for(int32 I=0;I<Count;++I)
+   {
+    const auto& P=ExpandedWorldEntrancePoints[I];
+    const double Along=Position.X-P.X;
+    const double Across=FMath::Abs(Position.Y-P.Y);
+    const double OldHalfWidth=Along<1000.?200.:660.;
+    if(Along>=0 && Along<=3616. && Across<=OldHalfWidth+12 &&
+       Position.Z<GetGroundHeight(Position.X,Position.Y)-100.)
+     return SurfaceArrival(I);
+   }
+   return Position;
+  }
+  // Move older saves from the old separate rooms to the matching walk-in dungeon.
   if(FMath::Abs(Position.X-9200)<2140 && FMath::Abs(Position.Y)<1000)
    return FVector(-2450,210,GetGroundHeight(-2450,210)+115);
   for(int32 I=0;I<Count;++I)

@@ -148,7 +148,8 @@ namespace
   Northings.AddUnique(5850);
   for(const auto& P : CryptDungeons::EntrancePoints)
   {
-   for(float X=P.X-300;X<=P.X+CryptDungeons::RampLength;X+=100) Eastings.AddUnique(X);
+   for(float X=P.X-300;X<=P.X+300;X+=100) Eastings.AddUnique(X);
+   Eastings.AddUnique(P.X+CryptDungeons::RampLength);
    for(float Y=P.Y-300;Y<=P.Y+300;Y+=100) Northings.AddUnique(Y);
   }
   Eastings.Sort();
@@ -495,9 +496,9 @@ void ACryptGameMode::BeginPlay()
     if(auto* Lamp=Light->FindComponentByClass<UPointLightComponent>())
     {
      Lamp->SetMobility(EComponentMobility::Movable);
-     Lamp->SetIntensity(1850);
+     Lamp->SetIntensity(4950);
      Lamp->SetLightColor(Tint);
-     Lamp->SetAttenuationRadius(810);
+     Lamp->SetAttenuationRadius(1875);
      Lamp->SetCastShadows(false);
     }
    }
@@ -534,23 +535,37 @@ void ACryptGameMode::BeginPlay()
    }
 
    Block(Center+FVector(0,0,-25),FVector(2*RoomHalfLength,2*RoomHalfWidth,50),Stone);
-   Block(Center+FVector(0,0,292),FVector(2*RoomHalfLength,2*RoomHalfWidth,44),Stone);
+   Block(Center+FVector(0,0,CeilingHeight+22),FVector(2*RoomHalfLength,2*RoomHalfWidth,44),Stone);
    for(double Side : {-1.,1.})
    {
-    Block(Center+FVector(0,Side*RoomHalfWidth,145),FVector(2*RoomHalfLength,35,290),Stone);
+    Block(Center+FVector(0,Side*RoomHalfWidth,CeilingHeight*.5),FVector(2*RoomHalfLength,35,CeilingHeight),Stone);
     const double Wing=RoomHalfWidth-HalfWidth;
-    Block(FVector(East+6,Center.Y+Side*(HalfWidth+Wing*.5),Center.Z+145),FVector(22,Wing,290),Stone);
+    Block(FVector(East+6,Center.Y+Side*(HalfWidth+Wing*.5),Center.Z+CeilingHeight*.5),FVector(22,Wing,CeilingHeight),Stone);
    }
-   Block(Center+FVector(RoomHalfLength,0,145),FVector(32,2*RoomHalfWidth,290),Stone);
-   PassageLamp(FVector(East-270,Center.Y,Center.Z+260),FLinearColor(1.f,.58f,.32f));
-   PassageLamp(Center+FVector(-280,-165,218),FLinearColor(1.f,.56f,.31f));
-   PassageLamp(Center+FVector(305,165,218),Definition.Accent);
-   PassageLamp(Center+FVector(-905,215,218),Definition.Accent);
-   PassageLamp(Center+FVector(940,-205,218),FLinearColor(1.f,.56f,.31f));
+   Block(Center+FVector(RoomHalfLength,0,CeilingHeight*.5),FVector(32,2*RoomHalfWidth,CeilingHeight),Stone);
+   for(double Fraction : {.20,.52,.84})
+   {
+    const FVector Point=FMath::Lerp(Mouth,End,Fraction);
+    PassageLamp(Point+FVector(0,0,310),FLinearColor(1.f,.58f,.32f));
+   }
+   for(int32 Row=0;Row<3;++Row)
+   {
+    const double Y=(Row-1)*RoomHalfWidth*.72;
+    for(int32 Bay=0;Bay<8;++Bay)
+    {
+     const double X=((Bay+.5)/4.-1.)*RoomHalfLength;
+     PassageLamp(Center+FVector(X,Y,525),
+       (Bay+Row)%2==0?FLinearColor(1.f,.56f,.31f):Definition.Accent);
+     if(Row==1) continue;
+     const FVector Pillar=Center+FVector(X,Y,CeilingHeight*.5);
+     Block(Pillar,FVector(148,148,CeilingHeight),Stone);
+     Block(Pillar-FVector(0,0,CeilingHeight*.5-26),FVector(210,210,52),Mark);
+    }
+   }
    const auto Fixture=[&](float X,float Y,float W,float D,float H)
    {
     const double Height=FMath::Min(235.,double(H));
-    Block(Center+FVector(X*LayoutScale,Y*LayoutScale,Height/2),FVector(W*LayoutScale,D*LayoutScale,Height),Mark);
+    Block(Center+FVector(X*LayoutScale,Y*LayoutScale,Height/2),FVector(W*1.65,D*1.65,Height),Mark);
    };
    switch(Definition.Layout)
    {
