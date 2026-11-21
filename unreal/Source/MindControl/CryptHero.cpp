@@ -1476,10 +1476,10 @@ void ACryptHero::FireBow()
 
  if(auto* Streak=GetWorld()->SpawnActor<AStaticMeshActor>((Start+Impact)*.5,(Impact-Start).Rotation()))
  {
-  auto* Mesh=Streak->GetStaticMeshComponent();
-  Mesh->SetMobility(EComponentMobility::Movable);
-  Mesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube")));
-  Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+  auto* ArrowTrail=Streak->GetStaticMeshComponent();
+  ArrowTrail->SetMobility(EComponentMobility::Movable);
+  ArrowTrail->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube")));
+  ArrowTrail->SetCollisionEnabled(ECollisionEnabled::NoCollision);
   Streak->SetActorScale3D(FVector(FMath::Max(.02,FVector::Dist(Start,Impact)/100.),.018,.018));
   Streak->SetLifeSpan(.095f);
  }
