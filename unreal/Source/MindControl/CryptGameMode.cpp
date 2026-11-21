@@ -3,6 +3,7 @@
 #include "CryptHudLayout.h"
 #include "Engine/GameViewportClient.h"
 #include "Widgets/Input/SVirtualJoystick.h"
+#include "GameFramework/TouchInterface.h"
 #include "CryptHero.h"
 #include "CryptMonster.h"
 #include "CryptMobileHUD.h"
@@ -316,6 +317,20 @@ namespace
  };
 }
 
+void ACryptPlayerController::CreateTouchInterface()
+{
+ Super::CreateTouchInterface();
+ if(!IsLocalController()) return;
+ auto* Default=LoadObject<UTouchInterface>(nullptr,
+  TEXT("/Engine/MobileResources/HUD/DefaultVirtualJoysticks.DefaultVirtualJoysticks"));
+ if(!Default || Default->Controls.Num()<2) return;
+ auto* Fixed=DuplicateObject<UTouchInterface>(Default,this);
+ Fixed->bPreventRecenter=true;
+ Fixed->Controls[0].Center=FCryptHudLayout::LeftStickAnchor();
+ Fixed->Controls[1].Center=FCryptHudLayout::RightStickAnchor();
+ ActivateTouchInterface(Fixed);
+}
+
 TSharedPtr<SVirtualJoystick> ACryptPlayerController::CreateVirtualJoystick()
 {
  TSharedRef<SCryptVirtualJoystick> Joystick=SNew(SCryptVirtualJoystick);
@@ -376,6 +391,7 @@ void ACryptGameMode::BeginPlay()
   PlaceBlock(FVector(X,Y,75),FVector(1.2f,1.2f,2.5f+(i%3)),FRotator::ZeroRotator,Stone);
  }
  PlaceBlock(FVector(-6048,0,-24),FVector(11.04,4,.10),FRotator::ZeroRotator,Cobble?Cobble:Stone);
+ CryptSettlements::SpawnMerchant(GetWorld(),FVector(2400,435,25),20);
  CryptSettlements::Build(GetWorld(),Grass,Stone,Cobble?Cobble:Stone,Dirt?Dirt:Stone,-20.f);
  {
   using namespace CryptDungeons;

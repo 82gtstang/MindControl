@@ -27,6 +27,7 @@
 #include "Animation/AnimSingleNodeInstance.h"
 namespace
 {
+ int32 GearGrade(int32 Id) { return Id>=0?1+Id/256:0; }
  int32 CompletedDungeonCount(uint32 Mask)
  {
   int32 Count=0;
@@ -418,6 +419,7 @@ ACryptTownActor* ACryptHero::GetInteractionTarget() const
 FString ACryptHero::GetInteractionLabel() const
 {
  if(FindSecret()) return TEXT("Inspect loose stone");
+ if(FindMerchant()!=INDEX_NONE) return TEXT("Trade with merchant");
  if(const ACryptTownActor* Target=GetInteractionTarget())
   return Target->bQuestGiver ? FString(CryptQuests::Data[Target->QuestIndex].Giver) : FString(TEXT("Inspect objective"));
  return {};
@@ -450,6 +452,16 @@ void ACryptHero::Interact()
   Secret->SetActorHiddenInGame(true);
   Secret->SetActorEnableCollision(false);
   AppendEvent(TEXT("A hidden passage opens."));
+  return;
+ }
+ const int32 Shop=FindMerchant();
+ if(Shop!=INDEX_NONE)
+ {
+  ToggleInventory();
+  bInventoryOpen=true;
+  bGearPage=true;
+  MerchantId=Shop;
+  StockIndex=0;
   return;
  }
  ACryptTownActor* Target=GetInteractionTarget();
@@ -497,6 +509,7 @@ bool ACryptHero::OwnsWeapon(ECryptWeapon Weapon) const
 void ACryptHero::EquipWeapon(ECryptWeapon Weapon)
 {
  if(!OwnsWeapon(Weapon) || StrikeDuration>0.f) return;
+ LootWeapon=INDEX_NONE;
  EquippedWeapon=Weapon;
  bSwordEquipped=Weapon==ECryptWeapon::Sword;
  const bool bArmed=Weapon!=ECryptWeapon::Unarmed;
@@ -540,9 +553,9 @@ void ACryptHero::CycleWeapon()
 
 float ACryptHero::WeaponDamage() const
 {
- if(EquippedWeapon==ECryptWeapon::Axe) return 29.f;
- if(EquippedWeapon==ECryptWeapon::Spear) return 21.f;
- return EquippedWeapon==ECryptWeapon::Unarmed?13.f:24.f;
+ const float Base=EquippedWeapon==ECryptWeapon::Axe?29.f:EquippedWeapon==ECryptWeapon::Spear?21.f:
+  EquippedWeapon==ECryptWeapon::Unarmed?13.f:24.f;
+ return Base+GearGrade(LootWeapon)*1.4f;
 }
 
 float ACryptHero::WeaponReach() const
@@ -577,6 +590,8 @@ void ACryptHero::SaveProgress()
  Save->OpenSecrets=OpenSecrets;
  Save->EventLog=EventLog;
  Save->Relics=Relics;
+ Save->LootWeapon=LootWeapon;
+ Save->LootArmor=LootArmor;
  Save->HeroHealth=Health;
  Save->HeroStamina=Stamina;
  Save->HeroMana=Mana;
@@ -647,6 +662,10 @@ void ACryptHero::RestoreProgress()
  EquipWeapon(ECryptWeapon::Unarmed);
  if(Save->Equipped<=static_cast<uint8>(ECryptWeapon::Spear))
   EquipWeapon(static_cast<ECryptWeapon>(Save->Equipped));
+ LootWeapon=Relics.Contains(Save->LootWeapon)?Save->LootWeapon:INDEX_NONE;
+ LootArmor=Relics.Contains(Save->LootArmor)?Save->LootArmor:INDEX_NONE;
+ GearIndex=0;
+ StockIndex=0;
  for(int32 Index=0;Index<CryptQuests::Count;++Index)
  {
   QuestState[Index]=FMath::Min<uint8>(Save->QuestStates[Index],2);
@@ -700,6 +719,31 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
  }
  if(bInventoryOpen)
  {
+  if(Layout.HitGear(TouchPoint,Layout.GearTab()))
+  {
+   bGearPage=!bGearPage;
+   bSatchelJournal=false;
+   return;
+  }
+  if(bGearPage && !Layout.HitPocket(TouchPoint,Layout.Save,Layout.UtilityRadius) &&
+     !Layout.HitPocket(TouchPoint,Layout.Restore,Layout.UtilityRadius))
+  {
+   for(int32 Control=0;Control<4;++Control)
+    if(Layout.HitGear(TouchPoint,Layout.GearButton(Control)))
+    {
+     if(Control==0 && !Relics.IsEmpty()) GearIndex=(GearIndex+Relics.Num()-1)%Relics.Num();
+     if(Control==1 && !Relics.IsEmpty()) GearIndex=(GearIndex+1)%Relics.Num();
+     if(Control==2) UseGear();
+     if(Control==3 && MerchantId!=INDEX_NONE) SellGear();
+     return;
+    }
+   if(MerchantId!=INDEX_NONE)
+   {
+    if(Layout.HitGear(TouchPoint,Layout.InSatchel(.59f,.51f))) StockIndex=(StockIndex+1)%8;
+    if(Layout.HitGear(TouchPoint,Layout.InSatchel(.79f,.51f))) BuyGear();
+   }
+   return;
+  }
   if(!bSatchelJournal)
    for(int32 Index=0;Index<int32(ECryptThumbAction::Count);++Index)
     if(Layout.HitThumbAction(TouchPoint,Index))
@@ -821,7 +865,7 @@ void ACryptHero::TouchReleased(ETouchIndex::Type FingerIndex,FVector Location)
 
 float ACryptHero::GetArmorRating() const
 {
- return 4.f+CompletedDungeonCount(ClearedDungeons)*1.5f;
+ return 4.f+CompletedDungeonCount(ClearedDungeons)*1.5f+GearGrade(LootArmor)*1.25f;
 }
 
 float ACryptHero::GetDexterity() const
@@ -1011,7 +1055,7 @@ namespace
  constexpr int32 RelicCount=RelicShapes*RelicFinishes*RelicGrades;
  const TCHAR* RelicNames[]={
   TEXT("Knife"),TEXT("Shortsword"),TEXT("Longsword"),TEXT("Ritual blade"),
-  TEXT("Brooch"),TEXT("Pendant"),TEXT("Medallion"),TEXT("Talisman"),
+  TEXT("Shield"),TEXT("Armguard"),TEXT("Chestguard"),TEXT("Ward plate"),
   TEXT("Flask"),TEXT("Tonic"),TEXT("Elixir"),TEXT("Draught"),
   TEXT("Shard"),TEXT("Crystal"),TEXT("Geode"),TEXT("Crownstone")
  };
@@ -1130,4 +1174,153 @@ FString ACryptHero::GetRelicSummary() const
 {
  return Relics.IsEmpty()?FString(TEXT("No relics collected")):
   FString::Printf(TEXT("Relics %d  |  %s"),Relics.Num(),*RelicName(Relics.Last()));
+}
+
+int32 ACryptHero::FindMerchant() const
+{
+ if(ChartIndex!=INDEX_NONE) return INDEX_NONE;
+ double Nearest=FMath::Square(290.);
+ int32 Shop=INDEX_NONE;
+ for(TActorIterator<AStaticMeshActor> It(GetWorld());It;++It)
+ {
+  if(!It->ActorHasTag(TEXT("TownMerchant")) || It->Tags.Num()<2) continue;
+  const double Distance=FVector::DistSquared(GetActorLocation(),It->GetActorLocation());
+  if(Distance<Nearest)
+  {
+   Nearest=Distance;
+   Shop=FCString::Atoi(*It->Tags[1].ToString());
+  }
+ }
+ return Shop;
+}
+
+int32 ACryptHero::StockItem() const
+{
+ if(MerchantId==INDEX_NONE) return INDEX_NONE;
+ const int32 Pitch[]={0,2,4,7,8,9,10,11};
+ const int32 Shape=Pitch[StockIndex];
+ return Shape+((MerchantId+StockIndex*3)%16)*16+((MerchantId/6+StockIndex/4)%4)*256;
+}
+
+FString ACryptHero::GetGearSelection() const
+{
+ if(!Relics.IsValidIndex(GearIndex)) return TEXT("No loot in the bag");
+ const int32 Item=Relics[GearIndex];
+ const int32 Shape=Item%16;
+ FString Info;
+ if(Shape<4) Info=FString::Printf(TEXT("Weapon bonus %d"),FMath::RoundToInt(GearGrade(Item)*1.4f));
+ else if(Shape<8) Info=FString::Printf(TEXT("Armor bonus %d"),FMath::RoundToInt(GearGrade(Item)*1.25f));
+ else if(Shape<12) Info=FString::Printf(TEXT("Restore health and mana"));
+ else Info=TEXT("Collectible");
+ if(Item==LootWeapon || Item==LootArmor) Info+=TEXT(" (equipped)");
+ return FString::Printf(TEXT("%d / %d   %s\n%s"),GearIndex+1,Relics.Num(),*RelicName(Item),*Info);
+}
+
+FString ACryptHero::GetMerchantStock() const
+{
+ const int32 Item=StockItem();
+ return Item==INDEX_NONE ? FString() : FString::Printf(TEXT("%s   |   %d treasure"),*RelicName(Item),3+GearGrade(Item)*2);
+}
+
+FString ACryptHero::GetEquippedGear() const
+{
+ const FString Weapon=LootWeapon==INDEX_NONE?FString(TEXT("Base weapon")):RelicName(LootWeapon);
+ const FString Armor=LootArmor==INDEX_NONE?FString(TEXT("Base armor")):RelicName(LootArmor);
+ return FString::Printf(TEXT("%s  /  %s"),*Weapon,*Armor);
+}
+
+FString ACryptHero::GetGearAction() const
+{
+ if(!Relics.IsValidIndex(GearIndex)) return TEXT("Use");
+ const int32 Shape=Relics[GearIndex]%16;
+ if(Shape<8) return (Relics[GearIndex]==LootWeapon || Relics[GearIndex]==LootArmor)?TEXT("Unequip"):TEXT("Equip");
+ if(Shape<12) return TEXT("Drink");
+ return TEXT("Inspect");
+}
+
+void ACryptHero::UseGear()
+{
+ if(!Relics.IsValidIndex(GearIndex)) return;
+ const int32 Item=Relics[GearIndex];
+ const int32 Shape=Item%16;
+ const FString Label=RelicName(Item);
+ if(Shape<4)
+ {
+  if(StrikeDuration>0.f) return;
+  if(LootWeapon==Item)
+  {
+   EquipWeapon(ECryptWeapon::Unarmed);
+   InspectedItem=TEXT("Weapon unequipped.");
+   return;
+  }
+  const ECryptWeapon Family=Shape==3?ECryptWeapon::Spear:ECryptWeapon::Sword;
+  ActiveWeaponMask|=1<<int32(Family);
+  EquipWeapon(Family);
+  LootWeapon=Item;
+  InspectedItem=FString::Printf(TEXT("Equipped %s."),*Label);
+ }
+ else if(Shape<8)
+ {
+  if(LootArmor==Item)
+  {
+   LootArmor=INDEX_NONE;
+   InspectedItem=TEXT("Armor unequipped.");
+   return;
+  }
+  LootArmor=Item;
+  InspectedItem=FString::Printf(TEXT("Equipped %s."),*Label);
+ }
+ else if(Shape<12)
+ {
+  if(Health>=100.f && Mana>=75.f)
+  {
+   InspectedItem=TEXT("Health and mana are full.");
+   return;
+  }
+  Health=FMath::Min(100.f,Health+18.f+GearGrade(Item)*4.f);
+  Mana=FMath::Min(75.f,Mana+6.f+GearGrade(Item)*2.f);
+  Relics.RemoveAt(GearIndex);
+  GearIndex=FMath::Clamp(GearIndex,0,FMath::Max(0,Relics.Num()-1));
+  InspectedItem=FString::Printf(TEXT("Drank %s."),*Label);
+ }
+ else
+ {
+  InspectedItem=Label;
+  return;
+ }
+ AppendEvent(InspectedItem);
+}
+
+void ACryptHero::BuyGear()
+{
+ const int32 Item=StockItem();
+ if(Item==INDEX_NONE || FindMerchant()!=MerchantId) return;
+ const int32 Price=3+GearGrade(Item)*2;
+ if(TreasureCount<Price)
+ {
+  InspectedItem=TEXT("Not enough treasure.");
+  return;
+ }
+ TreasureCount-=Price;
+ Relics.Add(Item);
+ GearIndex=Relics.Num()-1;
+ InspectedItem=FString::Printf(TEXT("Bought %s."),*RelicName(Item));
+ AppendEvent(InspectedItem);
+}
+
+void ACryptHero::SellGear()
+{
+ if(MerchantId==INDEX_NONE || FindMerchant()!=MerchantId || !Relics.IsValidIndex(GearIndex)) return;
+ const int32 Item=Relics[GearIndex];
+ if(Item==LootWeapon || Item==LootArmor)
+ {
+  InspectedItem=TEXT("Unequip this item before selling.");
+  return;
+ }
+ const int32 Price=1+GearGrade(Item);
+ TreasureCount+=Price;
+ Relics.RemoveAt(GearIndex);
+ GearIndex=FMath::Clamp(GearIndex,0,FMath::Max(0,Relics.Num()-1));
+ InspectedItem=FString::Printf(TEXT("Sold %s for %d."),*RelicName(Item),Price);
+ AppendEvent(InspectedItem);
 }

@@ -4,6 +4,8 @@
 
 struct FCryptHudLayout
 {
+ static FVector2D LeftStickAnchor() { return FVector2D(.125f,.855f); }
+ static FVector2D RightStickAnchor() { return FVector2D(.875f,.855f); }
  FCryptHudLayout(float W,float H)
  {
   Scale=FMath::Max(.7f,FMath::Min(W/1600.f,H/900.f));
@@ -25,9 +27,9 @@ struct FCryptHudLayout
   UtilityRadius=FMath::Min(ItemRadius*.76f,32.f*Scale);
   Save=InSatchel(.18f,.95f);
   Restore=InSatchel(.82f,.95f);
-  RightThumbCenter=FVector2D(W*.875f,H*.855f);
+  RightThumbCenter=RightStickAnchor()*FVector2D(W,H);
   RightThumbRadius=66.f*Scale;
-  LogSize=FVector2D(FMath::Min(W*.36f,395.f*Scale),105.f*Scale);
+  LogSize=FVector2D(FMath::Min(W*.235f,255.f*Scale),105.f*Scale);
   LogOrigin=FVector2D(20.f*Scale,H*.62f-LogSize.Y);
   LogOlder=LogOrigin+FVector2D(LogSize.X-46.f*Scale,13.f*Scale);
   LogNewer=LogOrigin+FVector2D(LogSize.X-18.f*Scale,13.f*Scale);
@@ -68,6 +70,14 @@ struct FCryptHudLayout
  FVector2D LogSize,LogOrigin,LogOlder,LogNewer;
  FVector2D RightThumbCenter;
  float RightThumbRadius;
+
+ FVector2D GearButton(int32 Index) const { return InSatchel(.19f+.20f*Index,.70f); }
+ FVector2D GearTab() const { return InSatchel(.72f,.27f); }
+ bool HitGear(const FVector2D& Point,const FVector2D& Center) const
+ {
+  return FMath::Abs(Point.X-Center.X)<=SatchelSize.X*.085 &&
+         FMath::Abs(Point.Y-Center.Y)<=SatchelSize.Y*.045;
+ }
 
  bool HitPocket(const FVector2D& Point,const FVector2D& Center,float HalfSize) const
  {

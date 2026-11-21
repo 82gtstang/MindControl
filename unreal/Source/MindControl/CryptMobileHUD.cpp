@@ -367,7 +367,40 @@ void ACryptMobileHUD::DrawHUD()
     DrawText(Digits,Gold,Point.X+R-Width-3*S,Point.Y+R-Height-2*S,nullptr,.91f*S,false);
    };
 
-   if(Hero->bSatchelJournal)
+   const auto GearControl=[&](FVector2D Position,const FString& Label,bool bSelected=false)
+   {
+    const float DX=Layout.SatchelSize.X*.085f;
+    const float DY=Layout.SatchelSize.Y*.045f;
+    Frame(Position.X-DX,Position.Y-DY,DX*2,DY*2,Ink,bSelected?Gold:Bronze);
+    float LabelWidth=0,LabelHeight=0;
+    const float TextScale=FMath::Min(.94f*S,DX/30.f);
+    GetTextSize(Label,LabelWidth,LabelHeight,nullptr,TextScale);
+    DrawText(Label,FLinearColor::White,Position.X-LabelWidth*.5f,Position.Y-LabelHeight*.5f,nullptr,TextScale,false);
+   };
+   if(Hero->bGearPage)
+   {
+    const FVector2D Top=Layout.InSatchel(.09f,.32f);
+    const FVector2D Bottom=Layout.InSatchel(.91f,.84f);
+    Frame(Top.X,Top.Y,Bottom.X-Top.X,Bottom.Y-Top.Y,Ink,Bronze);
+    DrawText(Hero->GetEquippedGear(),Gold,Top.X+10*S,Top.Y+8*S,nullptr,.80f*S,false);
+    if(Hero->MerchantId!=INDEX_NONE)
+    {
+     const FVector2D Stock=Layout.InSatchel(.13f,.40f);
+     DrawText(Hero->GetMerchantStock(),FLinearColor::White,Stock.X,Stock.Y,nullptr,.87f*S,false);
+     GearControl(Layout.InSatchel(.59f,.51f),TEXT("Next stock"));
+     GearControl(Layout.InSatchel(.79f,.51f),TEXT("Buy"));
+    }
+    TArray<FString> ItemLines;
+    Hero->GetGearSelection().ParseIntoArrayLines(ItemLines);
+    const FVector2D Gear=Layout.InSatchel(.13f,.565f);
+    for(int32 I=0;I<ItemLines.Num();++I)
+     DrawText(ItemLines[I],FLinearColor::White,Gear.X,Gear.Y+15*S*I,nullptr,.86f*S,false);
+    GearControl(Layout.GearButton(0),TEXT("Previous"));
+    GearControl(Layout.GearButton(1),TEXT("Next"));
+    GearControl(Layout.GearButton(2),Hero->GetGearAction(),true);
+    if(Hero->MerchantId!=INDEX_NONE) GearControl(Layout.GearButton(3),TEXT("Sell"));
+   }
+   else if(Hero->bSatchelJournal)
    {
     const FVector2D Top=Layout.InSatchel(.12f,.29f);
     const FVector2D Bottom=Layout.InSatchel(.88f,.78f);
@@ -407,7 +440,7 @@ void ACryptMobileHUD::DrawHUD()
     }
    }
 
-   if(!Hero->bSatchelJournal)
+   if(!Hero->bSatchelJournal && !Hero->bGearPage)
    {
     const FVector2D Heading=Layout.InSatchel(.12f,.722f);
     DrawText(TEXT("Right thumb tap"),Gold,Heading.X,Heading.Y,nullptr,1.08f*S,false);
@@ -427,7 +460,7 @@ void ACryptMobileHUD::DrawHUD()
     }
    }
 
-   if(!Hero->bSatchelJournal)
+   if(!Hero->bSatchelJournal && !Hero->bGearPage)
    {
     const FVector2D Relic=Layout.InSatchel(.17f,.30f);
     DrawText(Hero->GetRelicSummary(),Gold,Relic.X,Relic.Y,nullptr,.87f*S,false);
@@ -438,6 +471,7 @@ void ACryptMobileHUD::DrawHUD()
     Frame(Point.X-R,Point.Y-R,2*R,2*R,Ink,Bronze);
     Icon(Shape,Point,.52f*R,Gold);
    };
+   GearControl(Layout.GearTab(),Hero->bGearPage?TEXT("Bag"):TEXT("Loot & gear"),Hero->bGearPage);
    Utility(Layout.Save,EIcon::Save);
    Utility(Layout.Restore,EIcon::Restore);
    const FString& Message=Hero->InspectedItem.IsEmpty()?Hero->SaveStatus:Hero->InspectedItem;

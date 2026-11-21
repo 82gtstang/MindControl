@@ -46,6 +46,12 @@ public:
  const TArray<FString>& GetEventLog() const { return EventLog; }
  int32 GetLogOffset() const { return LogOffset; }
  FString GetRelicSummary() const;
+ FString GetGearSelection() const;
+ FString GetMerchantStock() const;
+ FString GetEquippedGear() const;
+ FString GetGearAction() const;
+ bool bGearPage=false;
+ int32 MerchantId=INDEX_NONE;
  const class ACryptMonster* GetCombatEnemy() const;
  void NoticeEnemy(class ACryptMonster* Enemy);
  void ReportEnemyHit(class ACryptMonster* Enemy,float Damage);
@@ -67,7 +73,7 @@ public:
  UPROPERTY(BlueprintReadOnly) bool bSwordEquipped = false;
  UPROPERTY(BlueprintReadOnly) int32 TreasureCount = 0;
  UPROPERTY(BlueprintReadOnly) bool bInventoryOpen = false;
- UFUNCTION(BlueprintCallable) void ToggleInventory() { bInventoryOpen = !bInventoryOpen; bSatchelJournal=false; InspectedItem.Reset(); }
+ UFUNCTION(BlueprintCallable) void ToggleInventory() { bInventoryOpen = !bInventoryOpen; bSatchelJournal=false; bGearPage=false; MerchantId=INDEX_NONE; InspectedItem.Reset(); }
  UFUNCTION(BlueprintCallable) void AddTreasure(int32 Amount = 1) { TreasureCount += Amount; }
  void TouchPressed(ETouchIndex::Type FingerIndex, FVector Location);
  void TouchReleased(ETouchIndex::Type FingerIndex,FVector Location);
@@ -101,6 +107,13 @@ protected:
  TSet<int32> OpenSecrets;
  TArray<FString> EventLog;
  TArray<int32> Relics;
+ int32 GearIndex=0, StockIndex=0;
+ int32 LootWeapon=INDEX_NONE, LootArmor=INDEX_NONE;
+ int32 FindMerchant() const;
+ int32 StockItem() const;
+ void UseGear();
+ void BuyGear();
+ void SellGear();
  int32 ChartIndex=INDEX_NONE;
  int32 LogOffset=0;
  TWeakObjectPtr<class ACryptMonster> CombatEnemy;

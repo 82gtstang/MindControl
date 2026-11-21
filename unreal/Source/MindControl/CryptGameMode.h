@@ -11,6 +11,7 @@ class MINDCONTROL_API ACryptPlayerController : public APlayerController
 {
  GENERATED_BODY()
 protected:
+ virtual void CreateTouchInterface() override;
  virtual TSharedPtr<class SVirtualJoystick> CreateVirtualJoystick() override;
 };
 

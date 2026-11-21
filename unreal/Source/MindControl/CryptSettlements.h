@@ -6,6 +6,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
+#include "Engine/StaticMeshActor.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "TimerManager.h"
 
@@ -22,6 +23,32 @@ namespace CryptSettlements
   int32 MeshSlot = INDEX_NONE;
   int32 SpellSlot = INDEX_NONE;
  };
+
+ inline void SpawnMerchant(UWorld* World,FVector Floor,int32 Id)
+ {
+  auto* Mesh=LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Characters/Town/Townsperson.Townsperson"));
+  if(!Mesh) return;
+  auto* Merchant=World->SpawnActor<AStaticMeshActor>(Floor,FRotator(0,-90,0));
+  if(!Merchant) return;
+  auto* Body=Merchant->GetStaticMeshComponent();
+  Body->SetMobility(EComponentMobility::Movable);
+  Body->SetStaticMesh(Mesh);
+  Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+  const auto Bounds=Mesh->GetBounds();
+  const double Scale=174./FMath::Max(1.,2.*Bounds.BoxExtent.Z);
+  Merchant->SetActorScale3D(FVector(Scale));
+  Merchant->AddActorWorldOffset(FVector(0,0,(Bounds.BoxExtent.Z-Bounds.Origin.Z)*Scale));
+  Merchant->Tags.Add(TEXT("TownMerchant"));
+  Merchant->Tags.Add(FName(*FString::FromInt(Id)));
+  auto* Label=NewObject<UTextRenderComponent>(Merchant);
+  Merchant->AddInstanceComponent(Label);
+  Label->SetupAttachment(Body);
+  Label->SetRelativeLocation(FVector(0,0,203./Scale));
+  Label->SetHorizontalAlignment(EHTA_Center);
+  Label->SetWorldSize(25./Scale);
+  Label->SetText(FText::FromString(TEXT("Merchant")));
+  Label->RegisterComponent();
+ }
 
  inline void Build(UWorld* World, UMaterialInterface* Grass, UMaterialInterface* Stone,
                    UMaterialInterface* Cobble, UMaterialInterface* Dirt, float Ground)
@@ -164,6 +191,7 @@ namespace CryptSettlements
     const int32 Town = Column * 4 + Row;
     const float Y = (Row - 1.5f) * 2640;
     const float Street = Y - 480;
+    SpawnMerchant(World,FVector(X+490,Street+118,Ground+16),Town);
     Box(Timber,FVector(X+870,Street+210,Ground+81),FVector(13,13,162));
     auto* Sign = NewObject<UTextRenderComponent>(District);
     District->AddInstanceComponent(Sign);
