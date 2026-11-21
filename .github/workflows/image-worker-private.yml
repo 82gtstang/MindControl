@@ -75,18 +75,22 @@ jobs:
             Stop-Process -Id $serve.Id -Force
             throw 'Tailscale Serve did not finish within 20 seconds.'
           }
-          if ($serve.ExitCode -ne 0) {
+          $verified = $false
+          for ($i=0; $i -lt 4 -and !$verified; $i++) {
+            try {
+              Invoke-WebRequest -Uri "https://$hostName/generate-unreal" -Method Post -UseBasicParsing -TimeoutSec 20 | Out-Null
+            } catch {
+              if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 401) { $verified = $true }
+              else { Write-Host "HTTPS probe did not receive HTTP 401 on attempt $($i+1)." }
+            }
+            if (!$verified) { Start-Sleep 2 }
+          }
+          if (!$verified) {
             $details = (Get-Content $output,$errors -Raw -ErrorAction SilentlyContinue) -join ' '
             $details = $details -replace 'https?://[^\s]+','[URL redacted]'
-            throw "Tailscale Serve setup failed: $details"
+            throw "Private HTTPS verification failed: $details"
           }
-          $verified = $false
-          try {
-            Invoke-WebRequest -Uri "https://$hostName/generate-unreal" -Method Post -UseBasicParsing -TimeoutSec 25 | Out-Null
-          } catch {
-            if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 401) { $verified = $true }
-          }
-          if (!$verified) { throw 'Private HTTPS endpoint did not return the expected authentication challenge.' }
+          Write-Host 'Verified HTTPS authentication challenge from the private worker.'
           $rsa = New-Object Security.Cryptography.RSACryptoServiceProvider
           try {
             $rsa.FromXmlString('<RSAKeyValue><Modulus>1QggBTjKYfX23rRuMgjqXTzuIt30KCsD+VX0jicRfefDzmmWpBXMJTtamkOWU1I58P/bIB4PGokFhxs+LfAvG/srPUsOVNl2jXubf8pRznJaMX8B8LQhzqTHhfL3Ar6iimcJWbPYOpH5PwYE1LUB5rcV8Z0yP2GXhsySdA4G/2TdtOEivK0uDBBZtr8tNNrPbe9U02yZHujcmfTxS8oTMmdQqUxx10INN+rLgukwu3J7ci5bEhJRfxiLo4x//hce0KTN4xQOWRGc3e+qaQvh14NHQh0casLrgOQ8w3x9YH177imnaQrCe4skSgcgLqWzobGxPgn4p12qd+BD1REzHYt+GuMdgXZqlc8EJ8oQAuO3lXXRzX92trN4Kg0LVlRpTTgNi61JWrFWU4NcMQhV00S1ir6e68Ww5fQWoSRXdww4STJ6/NlwRcVp9CwcdSKh3W4vJC5Keq4WOcGNNyorMriR9ln1h3hludKVnQVd/HF1obTkSW7vnxHzfWX3ckSt</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>')
