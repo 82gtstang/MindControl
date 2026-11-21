@@ -1,0 +1,24 @@
+name: Diagnose Image to Unreal worker
+on:
+  workflow_dispatch:
+  push:
+    branches: [diagnostic/android-landscape-startup]
+    paths: [.github/workflows/image-worker-diagnose.yml]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 5
+    steps:
+      - name: Report sanitized generation failure
+        shell: powershell
+        run: |
+          $root = Join-Path $env:ProgramData 'MindControl-ImageWorker'
+          $log = Join-Path $root 'worker.log'
+          $key = [IO.File]::ReadAllText((Join-Path $root 'token.txt'))
+          if (!(Test-Path $log)) { throw 'Worker log missing' }
+          Get-Content $log -Tail 125 | ForEach-Object {
+            $line = $_.Replace($key,'[token redacted]') -replace 'https?://\S+','[URL redacted]'
+            if ($line -notmatch '(?i)authorization|bearer|signedurl|api[_-]?key') { Write-Host $line }
+          }
