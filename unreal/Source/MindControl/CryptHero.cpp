@@ -555,7 +555,7 @@ void ACryptHero::SaveProgress()
  Save->HeroRotation=GetActorRotation();
  Save->ViewRotation=GetControlRotation();
  Save->Treasure=TreasureCount;
- Save->Version=2;
+ Save->Version=3;
  Save->HeroHealth=Health;
  Save->HeroStamina=Stamina;
  Save->HeroMana=Mana;
@@ -583,14 +583,14 @@ void ACryptHero::RestoreProgress()
   SaveStatus=TEXT("No readable save was found.");
   return;
  }
- if((Save->Version!=1 && Save->Version!=2) || Save->QuestStates.Num()!=CryptQuests::Count ||
+ if((Save->Version<1 || Save->Version>3) || Save->QuestStates.Num()!=CryptQuests::Count ||
     Save->QuestCounts.Num()!=CryptQuests::Count || Save->HeroLocation.ContainsNaN() ||
     Save->HeroRotation.ContainsNaN() || Save->ViewRotation.ContainsNaN())
  {
   SaveStatus=TEXT("This save cannot be restored.");
   return;
  }
- if(!TeleportTo(CryptDungeons::MigrateLocation(Save->HeroLocation),Save->HeroRotation,false,true))
+ if(!TeleportTo(Save->Version<3?CryptDungeons::MigrateLocation(Save->HeroLocation):Save->HeroLocation,Save->HeroRotation,false,true))
  {
   SaveStatus=TEXT("Could not return to the saved location.");
   return;
@@ -602,10 +602,10 @@ void ACryptHero::RestoreProgress()
  OceanActionTime=0.f;
  if(AController* PC=GetController()) PC->SetControlRotation(Save->ViewRotation);
  TreasureCount=FMath::Max(0,Save->Treasure);
- Health=Save->Version==2 && FMath::IsFinite(Save->HeroHealth)?FMath::Clamp(Save->HeroHealth,1.f,100.f):100.f;
- Stamina=Save->Version==2 && FMath::IsFinite(Save->HeroStamina)?FMath::Clamp(Save->HeroStamina,0.f,100.f):100.f;
- Mana=Save->Version==2 && FMath::IsFinite(Save->HeroMana)?FMath::Clamp(Save->HeroMana,0.f,75.f):75.f;
- ClearedDungeons=Save->Version==2?uint32(Save->ClearedDungeons)&1023u:0u;
+ Health=Save->Version>=2 && FMath::IsFinite(Save->HeroHealth)?FMath::Clamp(Save->HeroHealth,1.f,100.f):100.f;
+ Stamina=Save->Version>=2 && FMath::IsFinite(Save->HeroStamina)?FMath::Clamp(Save->HeroStamina,0.f,100.f):100.f;
+ Mana=Save->Version>=2 && FMath::IsFinite(Save->HeroMana)?FMath::Clamp(Save->HeroMana,0.f,75.f):75.f;
+ ClearedDungeons=Save->Version>=2?uint32(Save->ClearedDungeons)&1023u:0u;
  SpellCooldown=0.f;
  HurtCooldown=1.f;
  RecoveryDelay=0.f;
@@ -625,7 +625,7 @@ void ACryptHero::RestoreProgress()
   const float* SavedEnemyHealth=Save->EnemyHealth.Find(It->SaveId);
   const FVector* Location=Save->EnemyLocations.Find(It->SaveId);
   if(SavedEnemyHealth && Location && FMath::IsFinite(*SavedEnemyHealth) && !Location->ContainsNaN())
-   It->RestoreState(Save->Version==1?(*SavedEnemyHealth/3.f)*It->Stats().Health:*SavedEnemyHealth,CryptDungeons::MigrateLocation(*Location,true));
+   It->RestoreState(Save->Version==1?(*SavedEnemyHealth/3.f)*It->Stats().Health:*SavedEnemyHealth,Save->Version<3 && It->SaveId>=1000 ? It->GetActorLocation() : *Location);
  }
  Dialogue.Reset();
  SaveStatus=TEXT("Adventure restored.");

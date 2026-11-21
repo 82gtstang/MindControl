@@ -4,6 +4,8 @@
 
 namespace CryptWorld
 {
+ inline constexpr float HalfWorldX=66000.f;
+ inline constexpr float HalfWorldY=60000.f;
  inline constexpr float West=-6000.f;
  inline constexpr float East=6000.f;
  inline constexpr float South=-5500.f;
@@ -33,8 +35,11 @@ namespace CryptWorld
   {-5200.f,-1300.f,4710.f,175.f,2.4f,false}
  };
 
- inline FVector2D MapPoint(const FVector& Location)
+ inline FVector2D MapPoint(const FVector& Location,bool bOverview=false)
  {
+  if(bOverview)
+   return FVector2D(FMath::Clamp((Location.X+HalfWorldX)/(2*HalfWorldX),0.,1.),
+     FMath::Clamp((HalfWorldY-Location.Y)/(2*HalfWorldY),0.,1.));
   return FVector2D(FMath::Clamp((Location.X-West)/(East-West),0.,1.),
     FMath::Clamp((North-Location.Y)/(North-South),0.,1.));
  }

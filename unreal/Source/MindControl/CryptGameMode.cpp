@@ -34,7 +34,20 @@ namespace
      550.f*FMath::Exp(-FMath::Square((X-4375.f)/1100.f)));
   float Height=-20.f+South*(WestHill+EastHill-Valley)+North;
   const float Edge=FMath::Max(FMath::Abs(X)/5600.f,FMath::Abs(Y)/5100.f);
-  Height+=760.f*FMath::SmoothStep(.96f,1.16f,Edge);
+  const float CoreDistance=FMath::Max(FMath::Abs(X),FMath::Abs(Y));
+  Height+=760.f*FMath::SmoothStep(.96f,1.16f,Edge)*(1.f-FMath::SmoothStep(6300.f,12200.f,CoreDistance));
+  const float Wilder=FMath::SmoothStep(6600.f,12200.f,CoreDistance);
+  const float Ridges=610.f*FMath::Sin((X+.32f*Y)/5900.f)+420.f*FMath::Cos((Y-.24f*X)/4600.f);
+  const float Rolling=175.f*FMath::Sin(X/1960.f)*FMath::Cos(Y/2420.f);
+  Height+=Wilder*(Ridges+Rolling+750.f);
+  const float MapEdge=FMath::Max(FMath::Abs(X)/CryptWorld::HalfWorldX,FMath::Abs(Y)/CryptWorld::HalfWorldY);
+  Height+=1800.f*FMath::SmoothStep(.94f,1.f,MapEdge);
+  if(X<-6600.f)
+  {
+   const float ByTown=(1.f-FMath::SmoothStep(24900.f,27600.f,-X))*
+      (1.f-FMath::SmoothStep(5850.f,8400.f,FMath::Abs(Y)));
+   Height=FMath::Lerp(Height,-33.f,ByTown);
+  }
   for(const auto& River : CryptWorld::Rivers)
   {
    if(Y<River.Start || Y>River.End) continue;
@@ -125,9 +138,24 @@ namespace
  {
   auto* Surface=CreateSurface(World,TEXT("GroundSurface"),true);
   if(!Surface) return;
-  constexpr int32 Columns=132;
-  constexpr int32 Rows=120;
-  constexpr int32 Stride=Columns+1;
+  TArray<float> Eastings,Northings;
+  for(float X=-CryptWorld::HalfWorldX;X<=CryptWorld::HalfWorldX;X+=1500.f) Eastings.Add(X);
+  for(float Y=-CryptWorld::HalfWorldY;Y<=CryptWorld::HalfWorldY;Y+=1500.f) Northings.Add(Y);
+  for(float X=-6600;X<=6600;X+=100) Eastings.AddUnique(X);
+  for(float Y=-6000;Y<=6000;Y+=100) Northings.AddUnique(Y);
+  Eastings.AddUnique(-24900);
+  Northings.AddUnique(-5850);
+  Northings.AddUnique(5850);
+  for(const auto& P : CryptDungeons::EntrancePoints)
+  {
+   for(float X=P.X-300;X<=P.X+CryptDungeons::RampLength;X+=100) Eastings.AddUnique(X);
+   for(float Y=P.Y-300;Y<=P.Y+300;Y+=100) Northings.AddUnique(Y);
+  }
+  Eastings.Sort();
+  Northings.Sort();
+  const int32 Columns=Eastings.Num()-1;
+  const int32 Rows=Northings.Num()-1;
+  const int32 Stride=Columns+1;
   TArray<FVector> Vertices,Normals;
   TArray<FVector2D> UVs;
   TArray<FProcMeshTangent> Tangents;
@@ -140,23 +168,27 @@ namespace
   DirtTriangles.Reserve(Columns*Rows);
   for(int32 Row=0;Row<=Rows;++Row)
   {
-   const float Y=-6000.f+100.f*Row;
+   const float Y=Northings[Row];
    for(int32 Column=0;Column<=Columns;++Column)
    {
-    const float X=-6600.f+100.f*Column;
+    const float X=Eastings[Column];
     const float Dx=(TerrainHeight(X+5,Y)-TerrainHeight(X-5,Y))*.1f;
     const float Dy=(TerrainHeight(X,Y+5)-TerrainHeight(X,Y-5))*.1f;
     Vertices.Emplace(X,Y,TerrainHeight(X,Y));
     Normals.Add(FVector(-Dx,-Dy,1).GetSafeNormal());
     Tangents.Emplace(FVector(1,0,Dx).GetSafeNormal(),false);
     UVs.Emplace(float(Column)/Columns,float(Row)/Rows);
-    if(Row<Rows && Column<Columns && !CryptDungeons::IsRampCell(X+50.f,Y+50.f))
+    if(Row<Rows && Column<Columns)
     {
+     const float TileX=(X+Eastings[Column+1])*.5f;
+     const float TileY=(Y+Northings[Row+1])*.5f;
+     if((TileX>-24900 && TileX<-6600 && FMath::Abs(TileY)<5850) ||
+        CryptDungeons::IsRampCell(TileX,TileY)) continue;
      const int32 A=Row*Stride+Column;
      const int32 B=A+1;
      const int32 C=A+Stride;
      const int32 D=C+1;
-     auto& Section=(Dirt && IsDirt(X+50.f,Y+50.f))?DirtTriangles:Triangles;
+     auto& Section=(Dirt && IsDirt(TileX,TileY))?DirtTriangles:Triangles;
      Section.Append({A,C,B,B,C,D});
     }
    }
@@ -251,15 +283,14 @@ void ACryptGameMode::BeginPlay()
  {
   for(const bool bAlongX : {false,true})
   {
-   if (!bAlongX && Side < 0.f) continue;
    auto* Boundary=GetWorld()->SpawnActor<AStaticMeshActor>(
-     FVector(bAlongX?0.f:Side*6020.f,bAlongX?Side*5480.f:0.f,375),FRotator::ZeroRotator);
+     FVector(bAlongX?0.f:Side*(CryptWorld::HalfWorldX-80),bAlongX?Side*(CryptWorld::HalfWorldY-80):0.f,3000),FRotator::ZeroRotator);
    if(!Boundary) continue;
    auto* Collision=Boundary->GetStaticMeshComponent();
    Collision->SetMobility(EComponentMobility::Movable);
    Collision->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube")));
    Collision->SetCollisionProfileName(TEXT("BlockAll"));
-   Boundary->SetActorScale3D(bAlongX?FVector(125,1,28):FVector(1,115,28));
+   Boundary->SetActorScale3D(bAlongX?FVector(2*CryptWorld::HalfWorldX/100,1,130):FVector(1,2*CryptWorld::HalfWorldY/100,130));
    Boundary->SetActorHiddenInGame(true);
    Collision->SetMobility(EComponentMobility::Static);
   }
@@ -272,19 +303,6 @@ void ACryptGameMode::BeginPlay()
   const float X=-3100+i*420.f;
   const float Y=(i%2==0?1.f:-1.f)*(600.f+(i%3)*220.f);
   PlaceBlock(FVector(X,Y,75),FVector(1.2f,1.2f,2.5f+(i%3)),FRotator::ZeroRotator,Stone);
- }
- // Leave a road-sized opening in the west boundary for the town district.
- for (float Y : {-2965.f,2965.f})
- {
-  auto* Boundary=GetWorld()->SpawnActor<AStaticMeshActor>(FVector(-6020,Y,375),FRotator::ZeroRotator);
-  if (!Boundary) continue;
-  auto* Collision=Boundary->GetStaticMeshComponent();
-  Collision->SetMobility(EComponentMobility::Movable);
-  Collision->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube")));
-  Collision->SetCollisionProfileName(TEXT("BlockAll"));
-  Boundary->SetActorScale3D(FVector(1,54.3f,28));
-  Boundary->SetActorHiddenInGame(true);
-  Collision->SetMobility(EComponentMobility::Static);
  }
  PlaceBlock(FVector(-6048,0,-24),FVector(11.04,4,.10),FRotator::ZeroRotator,Cobble?Cobble:Stone);
  CryptSettlements::Build(GetWorld(),Grass,Stone,Cobble?Cobble:Stone,Dirt?Dirt:Stone,-20.f);
@@ -527,6 +545,8 @@ void ACryptGameMode::BeginPlay()
    PassageLamp(FVector(East-270,Center.Y,Center.Z+260),FLinearColor(1.f,.58f,.32f));
    PassageLamp(Center+FVector(-280,-165,218),FLinearColor(1.f,.56f,.31f));
    PassageLamp(Center+FVector(305,165,218),Definition.Accent);
+   PassageLamp(Center+FVector(-905,215,218),Definition.Accent);
+   PassageLamp(Center+FVector(940,-205,218),FLinearColor(1.f,.56f,.31f));
    const auto Fixture=[&](float X,float Y,float W,float D,float H)
    {
     const double Height=FMath::Min(235.,double(H));

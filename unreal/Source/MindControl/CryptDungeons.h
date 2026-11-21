@@ -27,16 +27,20 @@ namespace CryptDungeons
  inline constexpr int32 Count=UE_ARRAY_COUNT(Chambers);
  inline constexpr int32 EnemyId(int32 Chamber,int32 Slot) { return 1000+Chamber*10+Slot; }
  double GetGroundHeight(double X,double Y);
- inline const FVector2D EntrancePoints[]={
+ inline const FVector2D LegacyEntrancePoints[]={
   {-4900,1200},{-3100,2700},{-1200,4100},{1000,2900},{3200,3700},
   {3500,2200},{-4600,-1500},{-2800,-3900},{-300,-4200},{2800,-3600}
+ };
+ inline const FVector2D EntrancePoints[]={
+  {-4900,1200},{-12600,14800},{-4900,26000},{14300,20400},{31600,11200},
+  {3500,2200},{-16200,-12900},{-27400,-27600},{-300,-4200},{28800,-22800}
  };
  static_assert(UE_ARRAY_COUNT(EntrancePoints)==Count);
  inline constexpr double RampLength=1000.;
  inline constexpr double RampHalfWidth=200.;
- inline constexpr double LayoutScale=.5;
- inline constexpr double RoomHalfLength=687.5;
- inline constexpr double RoomHalfWidth=435.;
+ inline constexpr double LayoutScale=.72;
+ inline constexpr double RoomHalfLength=1300.;
+ inline constexpr double RoomHalfWidth=660.;
 
  inline FVector Entrance(int32 Index)
  {
@@ -77,17 +81,23 @@ namespace CryptDungeons
   return INDEX_NONE;
  }
 
- inline FVector MigrateLocation(FVector Position,bool bEnemy=false)
+ inline FVector MigrateLocation(FVector Position)
  {
   // Move saves made in the old separate rooms to the matching walk-in dungeon.
   if(FMath::Abs(Position.X-9200)<2140 && FMath::Abs(Position.Y)<1000)
    return FVector(-2450,210,GetGroundHeight(-2450,210)+115);
   for(int32 I=0;I<Count;++I)
   {
+   const auto& Legacy=LegacyEntrancePoints[I];
+   const bool bLegacyRoom=Position.X>=Legacy.X+980 && Position.X<=Legacy.X+2395 &&
+       FMath::Abs(Position.Y-Legacy.Y)<=455 &&
+       Position.Z<GetGroundHeight(Position.X,Position.Y)-140;
+   if(bLegacyRoom) return SurfaceArrival(I);
+
    const FVector OldCenter(14000+3600*(I%5),-4800+9600*(I/5),0);
    const FVector Offset=Position-OldCenter;
    if(FMath::Abs(Offset.X)<1400 && FMath::Abs(Offset.Y)<900)
-    return bEnemy ? Room(I)+FVector(Offset.X*LayoutScale,Offset.Y*LayoutScale,95) : SurfaceArrival(I);
+    return SurfaceArrival(I);
   }
   return Position;
  }
