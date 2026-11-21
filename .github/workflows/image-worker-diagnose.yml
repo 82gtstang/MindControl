@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-      - name: Capture worker diagnostics and test a repository reference image
+      - name: Deploy high-detail worker and test a repository reference image
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -65,6 +65,8 @@ jobs:
             try {
               if (!$zip.GetEntry('Character.fbx') -or !$zip.GetEntry('Character_BaseColor.png')) { throw 'Output missing the FBX or texture' }
             } finally { $zip.Dispose() }
+            & $config.python -c "import sys, zipfile; from PIL import Image; z=zipfile.ZipFile(sys.argv[1]); image=Image.open(z.open('Character_BaseColor.png')); assert image.size == (2048,2048), image.size; print('Verified 2048 x 2048 texture')" $out
+            if ($LASTEXITCODE -ne 0) { throw 'High-detail texture verification failed' }
             Write-Host 'Generated FBX and texture through private HTTPS.'
           } finally {
             foreach ($name in @('worker.stdout.log','worker.stderr.log')) {

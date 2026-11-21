@@ -52,7 +52,7 @@ def generate():
             subprocess.run(
                 [sys.executable, str(Path(__file__).with_name("run_triposr.py").resolve()), str(photo),
                  "--output-dir", str(out), "--model-save-format", "obj",
-                 "--bake-texture", "--texture-resolution", "1024"],
+                 "--mc-resolution", "320", "--bake-texture", "--texture-resolution", "2048"],
                 cwd=triposr, check=True, timeout=480,
             )
             model = out / "0"
