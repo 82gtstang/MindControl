@@ -26,6 +26,10 @@ ACryptHero::ACryptHero()
  GetCharacterMovement()->MaxWalkSpeed = 520;
  GetCharacterMovement()->JumpZVelocity = 650;
  GetCharacterMovement()->AirControl = .45f;
+ // Keep the orbit camera independent while turning the hero toward travel.
+ bUseControllerRotationYaw = false;
+ GetCharacterMovement()->bOrientRotationToMovement = true;
+ GetCharacterMovement()->RotationRate = FRotator(0.f,680.f,0.f);
  CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
  CameraBoom->SetupAttachment(RootComponent);
  CameraBoom->TargetArmLength = 380;
@@ -63,7 +67,10 @@ ACryptHero::ACryptHero()
   static ConstructorHelpers::FObjectFinder<UAnimSequence> JumpAnim(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Jump.OceanSerenityOcean_Jump"));
   static ConstructorHelpers::FObjectFinder<UAnimSequence> AttackAnim(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Attack.OceanSerenityOcean_Attack"));
   static ConstructorHelpers::FObjectFinder<UAnimSequence> SpinAnim(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Spin.OceanSerenityOcean_Spin"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> WalkDiagonal(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_WalkDiagonal.OceanSerenityOcean_WalkDiagonal"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> RunDiagonal(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_RunDiagonal.OceanSerenityOcean_RunDiagonal"));
   OceanIdle=Idle.Object; OceanWalk=Walk.Object; OceanRun=Run.Object;
+  OceanWalkDiagonal=WalkDiagonal.Object; OceanRunDiagonal=RunDiagonal.Object;
   OceanJump=JumpAnim.Object; OceanAttack=AttackAnim.Object; OceanSpin=SpinAnim.Object;
   // Start the relaxed idle immediately; never leave the mesh in FBX reference pose.
   if (OceanIdle)
@@ -177,7 +184,14 @@ void ACryptHero::Tick(float DeltaSeconds)
  }
  if (!OceanIdle || !GetMesh()) return;
  if (OceanActionTime > 0.f) OceanActionTime=FMath::Max(0.f,OceanActionTime-DeltaSeconds);
+ auto IsGait=[this](const UAnimSequence* Sequence)
+ {
+  return Sequence && (Sequence==OceanWalk || Sequence==OceanRun ||
+                      Sequence==OceanWalkDiagonal || Sequence==OceanRunDiagonal);
+ };
  UAnimSequence* Desired=OceanIdle;
+ const FVector Velocity=GetVelocity();
+ const float Speed=Velocity.Size2D();
  bool bLoop=true;
  if (OceanActionTime > 0.f && ActiveOceanAnimation)
  {
@@ -191,17 +205,44 @@ void ACryptHero::Tick(float DeltaSeconds)
  }
  else
  {
-  const float Speed=GetVelocity().Size2D();
-  if (Speed > 380.f && OceanRun) Desired=OceanRun;
-  else if (Speed > 15.f && OceanWalk) Desired=OceanWalk;
+  if (Speed > 15.f)
+  {
+   const FRotator CameraYaw(0.f,GetControlRotation().Yaw,0.f);
+   const FVector LocalVelocity=CameraYaw.UnrotateVector(Velocity);
+   const float DiagonalAmount=FMath::Min(FMath::Abs(LocalVelocity.X),FMath::Abs(LocalVelocity.Y))/Speed;
+   const bool bWasDiagonal=ActiveOceanAnimation &&
+     (ActiveOceanAnimation==OceanWalkDiagonal || ActiveOceanAnimation==OceanRunDiagonal);
+   const bool bDiagonal=DiagonalAmount>(bWasDiagonal?.28f:.40f);
+   const bool bWasRunning=ActiveOceanAnimation &&
+     (ActiveOceanAnimation==OceanRun || ActiveOceanAnimation==OceanRunDiagonal);
+   if (Speed>(bWasRunning?165.f:195.f) && OceanRun)
+    Desired=bDiagonal && OceanRunDiagonal?OceanRunDiagonal:OceanRun;
+   else if (OceanWalk)
+    Desired=bDiagonal && OceanWalkDiagonal?OceanWalkDiagonal:OceanWalk;
+  }
  }
  if (GetMesh()->GetAnimationMode()!=EAnimationMode::AnimationSingleNode ||
      ActiveOceanAnimation!=Desired)
  {
+  float StridePhase=0.f;
+  if (IsGait(ActiveOceanAnimation) && IsGait(Desired))
+   if (auto* Player=GetMesh()->GetSingleNodeInstance())
+    StridePhase=Player->GetCurrentTime()/FMath::Max(.01f,ActiveOceanAnimation->GetPlayLength());
   GetMesh()->PlayAnimation(Desired,bLoop);
-  if(auto* Player=GetMesh()->GetSingleNodeInstance()) Player->SetPlayRate(1.f);
+  if (auto* Player=GetMesh()->GetSingleNodeInstance())
+  {
+   Player->SetPlayRate(1.f);
+   Player->SetPosition(StridePhase*Desired->GetPlayLength(),false);
+  }
   ActiveOceanAnimation=Desired;
-  GetMesh()->SetMorphTarget(TEXT("OceanRunLeftLeg"), Desired == OceanRun ? 1.f : 0.f);
+  GetMesh()->SetMorphTarget(TEXT("OceanRunLeftLeg"), Desired==OceanRun || Desired==OceanRunDiagonal ? 1.f : 0.f);
+ }
+ if (bLoop)
+ {
+  const bool bRunning=Desired && (Desired==OceanRun || Desired==OceanRunDiagonal);
+  const float ReferenceSpeed=bRunning?290.f:105.f;
+  const float Rate=IsGait(Desired)?FMath::Clamp(Speed/ReferenceSpeed,.50f,1.85f):1.f;
+  if (auto* Player=GetMesh()->GetSingleNodeInstance()) Player->SetPlayRate(Rate);
  }
 }
 void ACryptHero::PlayOceanAction(UAnimSequence* Sequence,float Duration)
@@ -641,3 +682,4 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
  else if(Layout.Hit(TouchPoint,Layout.Attack)) Attack();
  else if(Layout.Hit(TouchPoint,Layout.Spin)) SpinAttack();
 }
+

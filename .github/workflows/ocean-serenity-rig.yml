@@ -27,7 +27,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $source = Join-Path $env:GITHUB_WORKSPACE 'assets\ocean3d\OceanSerenity.fbx'
-          $expected = 'c016fc05ee9572e19ce2e119c7ea91aab235d1e4c79705011cdeae974c9730da'
+          $expected = 'ff1d7f378a5fa9d84377cc5f98634df517dfaa48a693dcb0b524b82d625abf4b'
           if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ine $expected) {
             throw 'Ocean Serenity FBX checksum mismatch'
           }
@@ -40,3 +40,4 @@ jobs:
           name: OceanSerenity-Experimental-Rig-FBX
           path: rig-output/OceanSerenity.fbx
           if-no-files-found: error
+

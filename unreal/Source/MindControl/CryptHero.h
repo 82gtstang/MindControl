@@ -77,6 +77,8 @@ protected:
  UPROPERTY() class UAnimSequence* OceanIdle = nullptr;
  UPROPERTY() class UAnimSequence* OceanWalk = nullptr;
  UPROPERTY() class UAnimSequence* OceanRun = nullptr;
+ UPROPERTY() class UAnimSequence* OceanWalkDiagonal = nullptr;
+ UPROPERTY() class UAnimSequence* OceanRunDiagonal = nullptr;
  UPROPERTY() class UAnimSequence* OceanJump = nullptr;
  UPROPERTY() class UAnimSequence* OceanAttack = nullptr;
  UPROPERTY() class UAnimSequence* OceanSpin = nullptr;
@@ -84,3 +86,4 @@ protected:
  float OceanActionTime = 0.f;
  void PlayOceanAction(class UAnimSequence* Sequence, float Duration);
 };
+
