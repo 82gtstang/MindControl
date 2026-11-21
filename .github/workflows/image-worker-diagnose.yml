@@ -23,7 +23,11 @@ jobs:
           $configPath = Join-Path $root 'config.json'
           $config = Get-Content $configPath -Raw | ConvertFrom-Json
           $newBlender = Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse |
-            Where-Object { $_.Directory.Name -match '^Blender ([\d.]+)          Copy-Item tools/ocean3d/unreal_server.py,tools/ocean3d/run_triposr.py,tools/ocean3d/export_unreal.py -Destination $root -Force
+            Where-Object { $_.Directory.Name -match '^Blender [\d.]+$' } |
+            Sort-Object { [version]($_.Directory.Name -replace '^Blender ','') } -Descending | Select-Object -First 1
+          if ($newBlender) { $config.blender = $newBlender.FullName }
+          $config | ConvertTo-Json | Set-Content $configPath
+          Copy-Item tools/ocean3d/unreal_server.py,tools/ocean3d/run_triposr.py,tools/ocean3d/export_unreal.py -Destination $root -Force
           @'
           $ErrorActionPreference = 'Stop'
           $c = Get-Content (Join-Path $PSScriptRoot 'config.json') -Raw | ConvertFrom-Json
