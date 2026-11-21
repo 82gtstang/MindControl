@@ -424,7 +424,8 @@ void ACryptGameMode::BeginPlay()
    auto* Sculpt=LoadObject<UStaticMesh>(nullptr,*MeshPath);
    if(Sculpt)
    {
-    if(auto* RockFace=GetWorld()->SpawnActor<AStaticMeshActor>(Origin,FRotator(0,90,0)))
+    // Use the sculpt as side masonry. The collision-built arch owns the opening.
+    if(auto* RockFace=GetWorld()->SpawnActor<AStaticMeshActor>(Origin+FVector(35,640,0),FRotator(0,90,0)))
     {
      auto* Visual=RockFace->GetStaticMeshComponent();
      Visual->SetMobility(EComponentMobility::Movable);
@@ -438,7 +439,7 @@ void ACryptGameMode::BeginPlay()
    const auto Rock=[&](FVector Offset,FVector Size)
    {
     PlaceBlock(Origin+Offset,Size/100.,FRotator(Random.FRandRange(-14,14),
-       Random.FRandRange(-180,180),Random.FRandRange(-18,18)),Stone,Boulder);
+       Random.FRandRange(-18,18),Random.FRandRange(-12,12)),Stone,Boulder);
    };
    const auto Tree=[&](double DX,double DY)
    {
@@ -466,7 +467,7 @@ void ACryptGameMode::BeginPlay()
    {
     const double Side=R%2?1.:-1.;
     const double OffsetX=Random.FRandRange(-425,810);
-    const double OffsetY=Side*Random.FRandRange(260,685);
+    const double OffsetY=Side*Random.FRandRange(370,785);
     const double Ground=TerrainHeight(Origin.X+OffsetX,Origin.Y+OffsetY);
     const float Size=Random.FRandRange(65,225);
     Rock(FVector(OffsetX,OffsetY,Ground-Origin.Z+Size*.26),FVector(Size*1.22,Size,Size*.75));
@@ -474,13 +475,9 @@ void ACryptGameMode::BeginPlay()
 
    if(bSinkhole)
    {
-    // Arc around the far side, with a walkable gap on the west approach.
-    for(int32 R=0;R<11;++R)
-    {
-     const double Angle=FMath::DegreesToRadians(-128.+R*25.6);
-     if(!Sculpt) Rock(FVector(30+FMath::Cos(Angle)*167,FMath::Sin(Angle)*188,28),
-      FVector(138,128,109));
-    }
+    for(double Side : {-1.,1.})
+     for(int32 R=0;R<5;++R)
+      Rock(FVector(-140+R*80,Side*(260+R*15),28),FVector(138,128,109));
 
    }
    else if(bCutStone)
@@ -488,27 +485,27 @@ void ACryptGameMode::BeginPlay()
     // Recessed lintel and stepped jambs on a textured escarpment.
     for(const double Side : {-1.,1.})
     {
-     Rock(FVector(190,Side*307,151),FVector(670,364,439));
+     Rock(FVector(190,Side*365,151),FVector(670,364,439));
      Rock(FVector(230,Side*457,250),FVector(583,285,438));
-     Block(Origin+FVector(-3,Side*146,121),FVector(126,61,255),Stone);
-     if(!Sculpt) Block(Origin+FVector(-37,Side*187,109),FVector(104,35,229),Stone);
-     Block(Origin+FVector(-17,Side*151,18),FVector(151,85,41),Stone);
+     Block(Origin+FVector(-3,Side*197,121),FVector(126,61,255),Stone);
+     if(!Sculpt) Block(Origin+FVector(-37,Side*237,109),FVector(104,35,229),Stone);
+     Block(Origin+FVector(-17,Side*216,18),FVector(151,85,41),Stone);
     }
     Block(Origin+FVector(-3,0,263),FVector(160,354,52),Stone);
     Block(Origin+FVector(-18,0,297),FVector(164,421,29),Stone);
-    Rock(FVector(190,0,353),FVector(673,752,229));
+    Rock(FVector(190,0,438),FVector(673,752,229));
    }
    else
    {
     // Layered boulders form an irregular arch without filling its opening.
     for(const double Side : {-1.,1.})
     {
-     Rock(FVector(131,Side*236,123),FVector(462,235,327));
+     Rock(FVector(131,Side*295,123),FVector(462,235,327));
      Rock(FVector(163,Side*346,157),FVector(469,295,360));
-     Rock(FVector(209,Side*209,258),FVector(449,195,157));
+     Rock(FVector(209,Side*254,258),FVector(449,195,157));
     }
-    Rock(FVector(138,0,322),FVector(448,490,169));
-    Rock(FVector(362,0,388),FVector(444,565,166));
+    Rock(FVector(138,0,387),FVector(448,490,169));
+    Rock(FVector(362,0,450),FVector(444,565,166));
    }
 
    if(!bSinkhole)
@@ -528,7 +525,7 @@ void ACryptGameMode::BeginPlay()
      // Original angular glyphs inset along each edge, visible from the trail.
      for(int32 Row=0;Row<4;++Row)
      {
-      const FVector Glyph=Origin+FVector(-114,Side*153,77+Row*43);
+      const FVector Glyph=Origin+FVector(-114,Side*202,77+Row*43);
       Block(Glyph,FVector(3,5,27),Rune);
       PlaceBlock(Glyph+FVector(0,Side*8,4),FVector(.03,.22,.035),FRotator(0,0,Side*36),Rune,Cube);
       PlaceBlock(Glyph+FVector(0,-Side*5,-7),FVector(.03,.18,.035),FRotator(0,0,-Side*43),Rune,Cube);
@@ -536,7 +533,7 @@ void ACryptGameMode::BeginPlay()
     }
     else if(!bSinkhole)
     {
-     const FVector Brazier=Origin+FVector(-82,Side*194,79);
+     const FVector Brazier=Origin+FVector(-82,Side*245,79);
      PlaceBlock(Brazier,FVector(.19,.19,.91),FRotator::ZeroRotator,Bark,Trunk);
      PlaceBlock(Brazier+FVector(0,0,51),FVector(.32,.32,.24),FRotator::ZeroRotator,Stone,Boulder);
      PlaceBlock(Brazier+FVector(0,0,70),FVector(.13,.13,.39),FRotator(13,0,0),Torch,Boulder);
@@ -690,9 +687,13 @@ void ACryptGameMode::BeginPlay()
    {
     Walls->AddInstance(FTransform(FRotator::ZeroRotator,Floor+FVector(0,0,CeilingHeight*.5),Size/100.),true);
    };
+   const auto IsEntranceEdge=[Start](int32 A,int32 B)
+   {
+    return B==A+1 && (A==Start || A==Start+1);
+   };
    const auto Connected=[&](int32 A,int32 B)
    {
-    return Parent[A]==B || Parent[B]==A;
+    return Parent[A]==B || Parent[B]==A || IsEntranceEdge(FMath::Min(A,B),FMath::Max(A,B));
    };
    for(int32 Cell=0;Cell<Cells;++Cell)
    {
@@ -703,7 +704,7 @@ void ACryptGameMode::BeginPlay()
      Wall(Floor+FVector(0,CellDepth*.5,0),FVector(CellWidth,WallThickness,CeilingHeight));
     // Partial walls make doorways between selected cells, leaving 3.4 m clear.
     constexpr double Opening=340.;
-    if((Cell+I)%4==0 && Cell%Columns+1<Columns && Connected(Cell,Cell+1))
+    if((Cell+I)%4==0 && Cell%Columns+1<Columns && Connected(Cell,Cell+1) && !IsEntranceEdge(Cell,Cell+1))
     {
      const double Wing=(CellDepth-Opening)*.5;
      for(double Side : {-1.,1.})
@@ -724,10 +725,12 @@ void ACryptGameMode::BeginPlay()
     if(Cell/Columns+1<Rows && Connected(Cell,Cell+Columns)) ++Degree;
     if(Degree>=3 || (Cell+I*7)%9==0)
      PassageLamp(Floor+FVector(0,0,480),Degree>=3?Definition.Accent:FLinearColor(1.f,.50f,.23f));
-    if(Degree==1 && Cell!=Start && Cell!=ExitCell && (Cell+I)%3==0)
+    if(Degree==1 && (Cell<Start || Cell>Start+2) && Cell!=ExitCell && (Cell+I)%3==0)
      Block(Floor+FVector(0,0,29),FVector(148,148,58),Mark);
    }
 
+   PassageLamp(CellPoint(Start)+FVector(0,0,480),FLinearColor(1.f,.58f,.31f));
+   PassageLamp(CellPoint(Start+1)+FVector(0,0,480),FLinearColor(1.f,.58f,.31f));
    const double DoorY=CellPoint(ExitCell).Y;
    constexpr double DoorHalfWidth=180.;
    const double SouthSpan=DoorY-DoorHalfWidth-SouthEdge;
