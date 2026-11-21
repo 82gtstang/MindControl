@@ -752,6 +752,16 @@ void ACryptHero::SetThumbAction(ECryptThumbAction Action)
  }
 }
 
+void ACryptHero::TouchMoved(ETouchIndex::Type FingerIndex,FVector Location)
+{
+ if(ThumbFinger!=int32(FingerIndex) || !GEngine || !GEngine->GameViewport) return;
+ FVector2D Size;
+ GEngine->GameViewport->GetViewportSize(Size);
+ const FCryptHudLayout Layout(Size.X,Size.Y);
+ if(FVector2D::Distance(ThumbStart,FVector2D(Location.X,Location.Y))>24.f*Layout.Scale)
+  ThumbFinger=INDEX_NONE;
+}
+
 void ACryptHero::TouchReleased(ETouchIndex::Type FingerIndex,FVector Location)
 {
  if(ThumbFinger!=int32(FingerIndex)) return;

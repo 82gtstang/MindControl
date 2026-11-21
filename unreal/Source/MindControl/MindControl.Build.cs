@@ -6,6 +6,6 @@ public class MindControl : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore" });
-        PrivateDependencyModuleNames.Add("ProceduralMeshComponent");
+        PrivateDependencyModuleNames.AddRange(new string[] { "ProceduralMeshComponent", "Slate", "SlateCore" });
     }
 }

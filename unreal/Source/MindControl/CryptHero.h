@@ -62,10 +62,11 @@ public:
  UFUNCTION(BlueprintCallable) void ToggleInventory() { bInventoryOpen = !bInventoryOpen; bSatchelJournal=false; InspectedItem.Reset(); }
  UFUNCTION(BlueprintCallable) void AddTreasure(int32 Amount = 1) { TreasureCount += Amount; }
  void TouchPressed(ETouchIndex::Type FingerIndex, FVector Location);
+ void TouchReleased(ETouchIndex::Type FingerIndex,FVector Location);
+ void TouchMoved(ETouchIndex::Type FingerIndex,FVector Location);
  ECryptThumbAction GetThumbAction() const { return ThumbAction; }
 protected:
  virtual void BeginPlay() override;
- void TouchReleased(ETouchIndex::Type FingerIndex,FVector Location);
  void SetThumbAction(ECryptThumbAction Action);
  ECryptThumbAction ThumbAction=ECryptThumbAction::Jump;
  int32 ThumbFinger=INDEX_NONE;

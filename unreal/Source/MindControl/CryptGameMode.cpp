@@ -1,4 +1,7 @@
 #include "CryptGameMode.h"
+#include "CryptHudLayout.h"
+#include "Engine/GameViewportClient.h"
+#include "Widgets/Input/SVirtualJoystick.h"
 #include "CryptHero.h"
 #include "CryptMonster.h"
 #include "CryptMobileHUD.h"
@@ -253,7 +256,73 @@ double CryptDungeons::GetGroundHeight(double X,double Y)
  return TerrainHeight(X,Y);
 }
 
-ACryptGameMode::ACryptGameMode() { DefaultPawnClass = ACryptHero::StaticClass(); HUDClass = ACryptMobileHUD::StaticClass(); }
+namespace
+{
+ class SCryptVirtualJoystick : public SVirtualJoystick
+ {
+ public:
+  TWeakObjectPtr<ACryptPlayerController> Owner;
+
+  FReply OnTouchStarted(const FGeometry& Geometry,const FPointerEvent& Event) override
+  {
+   if(auto* Hero=GetHero();Hero && !Hero->bInventoryOpen)
+   {
+    FVector2D Point,Size;
+    if(ViewportPoint(Geometry,Event,Point,Size))
+    {
+     const FCryptHudLayout Layout(Size.X,Size.Y);
+     if(FVector2D::Distance(Point,Layout.RightThumbCenter)<=Layout.RightThumbRadius)
+      Hero->TouchPressed(Finger(Event),FVector(Point.X,Point.Y,0));
+    }
+   }
+   return SVirtualJoystick::OnTouchStarted(Geometry,Event);
+  }
+
+  FReply OnTouchMoved(const FGeometry& Geometry,const FPointerEvent& Event) override
+  {
+   FVector2D Point,Size;
+   if(auto* Hero=GetHero();Hero && ViewportPoint(Geometry,Event,Point,Size))
+    Hero->TouchMoved(Finger(Event),FVector(Point.X,Point.Y,0));
+   return SVirtualJoystick::OnTouchMoved(Geometry,Event);
+  }
+
+  FReply OnTouchEnded(const FGeometry& Geometry,const FPointerEvent& Event) override
+  {
+   FVector2D Point,Size;
+   if(auto* Hero=GetHero();Hero && ViewportPoint(Geometry,Event,Point,Size))
+    Hero->TouchReleased(Finger(Event),FVector(Point.X,Point.Y,0));
+   return SVirtualJoystick::OnTouchEnded(Geometry,Event);
+  }
+
+ private:
+  ACryptHero* GetHero() const { return Owner.IsValid()?Cast<ACryptHero>(Owner->GetPawn()):nullptr; }
+
+  static ETouchIndex::Type Finger(const FPointerEvent& Event)
+  {
+   return static_cast<ETouchIndex::Type>(Event.GetPointerIndex());
+  }
+
+  static bool ViewportPoint(const FGeometry& Geometry,const FPointerEvent& Event,FVector2D& Point,FVector2D& Size)
+  {
+   if(!GEngine || !GEngine->GameViewport) return false;
+   GEngine->GameViewport->GetViewportSize(Size);
+   const FVector2D LocalSize=Geometry.GetLocalSize();
+   if(Size.X<=0 || Size.Y<=0 || LocalSize.X<=0 || LocalSize.Y<=0) return false;
+   const FVector2D Local=Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
+   Point=FVector2D(Local.X*Size.X/LocalSize.X,Local.Y*Size.Y/LocalSize.Y);
+   return true;
+  }
+ };
+}
+
+TSharedPtr<SVirtualJoystick> ACryptPlayerController::CreateVirtualJoystick()
+{
+ TSharedRef<SCryptVirtualJoystick> Joystick=SNew(SCryptVirtualJoystick);
+ Joystick->Owner=this;
+ return Joystick;
+}
+
+ACryptGameMode::ACryptGameMode() { PlayerControllerClass=ACryptPlayerController::StaticClass(); DefaultPawnClass = ACryptHero::StaticClass(); HUDClass = ACryptMobileHUD::StaticClass(); }
 void ACryptGameMode::PlaceBlock(const FVector& Location,const FVector& Scale,const FRotator& Rotation,UMaterialInterface* Material,UStaticMesh* Mesh)
 {
  UWorld* World=GetWorld(); if(!World) return;

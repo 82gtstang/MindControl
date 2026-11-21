@@ -1,9 +1,18 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "GameFramework/PlayerController.h"
 #include "CryptGameMode.generated.h"
 class UMaterialInterface;
 class UStaticMesh;
+
+UCLASS()
+class MINDCONTROL_API ACryptPlayerController : public APlayerController
+{
+ GENERATED_BODY()
+protected:
+ virtual TSharedPtr<class SVirtualJoystick> CreateVirtualJoystick() override;
+};
 
 UCLASS()
 class MINDCONTROL_API ACryptGameMode : public AGameModeBase
