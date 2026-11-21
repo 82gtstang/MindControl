@@ -19,6 +19,10 @@ public:
  UPROPERTY(SaveGame) float HeroStamina=100.f;
  UPROPERTY(SaveGame) float HeroMana=75.f;
  UPROPERTY(SaveGame) int32 ClearedDungeons=0;
+ UPROPERTY(SaveGame) TSet<int32> ChartTiles;
+ UPROPERTY(SaveGame) TSet<int32> OpenSecrets;
+ UPROPERTY(SaveGame) TArray<FString> EventLog;
+ UPROPERTY(SaveGame) TArray<int32> Relics;
  UPROPERTY(SaveGame) int32 Weapons=1;
  UPROPERTY(SaveGame) uint8 Equipped=0;
  UPROPERTY(SaveGame) TArray<uint8> QuestStates;

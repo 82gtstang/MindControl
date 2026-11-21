@@ -708,11 +708,40 @@ void ACryptGameMode::BeginPlay()
    {
     return Parent[A]==B || Parent[B]==A || IsEntranceEdge(FMath::Min(A,B),FMath::Max(A,B));
    };
+   int32 SecretCount=0;
    for(int32 Cell=0;Cell<Cells;++Cell)
    {
     const FVector Floor=CellPoint(Cell);
     if(Cell%Columns+1<Columns && !Connected(Cell,Cell+1))
-     Wall(Floor+FVector(CellWidth*.5,0,0),FVector(WallThickness,CellDepth,CeilingHeight));
+    {
+     const FVector Edge=Floor+FVector(CellWidth*.5,0,0);
+     const bool bSecret=SecretCount<3 && Depth[Cell]>10 && FMath::Abs(Depth[Cell]-Depth[Cell+1])>12;
+     if(bSecret)
+     {
+      constexpr double DoorWidth=290.;
+      const double Wing=(CellDepth-DoorWidth)*.5;
+      for(double Side : {-1.,1.})
+       Wall(Edge+FVector(0,Side*(DoorWidth+Wing)*.5,0),FVector(WallThickness,Wing,CeilingHeight));
+      auto* Secret=GetWorld()->SpawnActor<AStaticMeshActor>(Edge+FVector(0,0,CeilingHeight*.5),FRotator::ZeroRotator);
+      if(Secret)
+      {
+       auto* Panel=Secret->GetStaticMeshComponent();
+       Panel->SetMobility(EComponentMobility::Movable);
+       Panel->SetStaticMesh(Cube);
+       Panel->SetMaterial(0,Stone);
+       Panel->SetCollisionProfileName(TEXT("BlockAll"));
+       Secret->SetActorScale3D(FVector(WallThickness-12.,DoorWidth,CeilingHeight)/100.);
+       Secret->Tags.Add(TEXT("DungeonSecret"));
+       Secret->Tags.Add(FName(*FString::FromInt(I*3+SecretCount)));
+       ++SecretCount;
+       // A small stone inlay is the only clue on either side of the seam.
+       for(double Side : {-1.,1.})
+        Block(Edge+FVector(Side*38,0,126),FVector(8,26,26),Mark);
+      }
+      else Wall(Edge,FVector(WallThickness,DoorWidth,CeilingHeight));
+     }
+     else Wall(Edge,FVector(WallThickness,CellDepth,CeilingHeight));
+    }
     if(Cell/Columns+1<Rows && !Connected(Cell,Cell+Columns))
      Wall(Floor+FVector(0,CellDepth*.5,0),FVector(CellWidth,WallThickness,CeilingHeight));
     // Partial walls make doorways between selected cells, leaving 3.4 m clear.

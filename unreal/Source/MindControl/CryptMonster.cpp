@@ -18,9 +18,7 @@ ACryptMonster::ACryptMonster()
  Body=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MonsterBody"));
  Body->SetupAttachment(RootComponent);
  Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
- static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
- Body->SetStaticMesh(Sphere.Object);
- Body->SetRelativeScale3D(FVector(1.2,1.2,1.8));
+
 }
 
 void ACryptMonster::ConfigureCreature(int32 Index,int32 InDungeon,bool bInBoss)
@@ -31,7 +29,7 @@ void ACryptMonster::ConfigureCreature(int32 Index,int32 InDungeon,bool bInBoss)
  Profile=CryptCombat::Creatures[Creature];
  if(bBoss)
  {
-  Profile.Health*=1.85f;
+  Profile.Health*=2.4f;
   Profile.Weapon*=1.20f;
   Profile.Armor+=3.f;
  }
@@ -39,65 +37,18 @@ void ACryptMonster::ConfigureCreature(int32 Index,int32 InDungeon,bool bInBoss)
  Stamina=Profile.Stamina;
  Mana=Profile.Mana;
  Home=GetActorLocation();
- auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
- UMaterialInstanceDynamic* Hide=Base?UMaterialInstanceDynamic::Create(Base,this):nullptr;
- if(Hide)
- {
-  Hide->SetVectorParameterValue(TEXT("Color"),Profile.Color);
-  Body->SetMaterial(0,Hide);
- }
- const auto Part=[&](FVector Location,FVector Scale,FRotator Rotation=FRotator::ZeroRotator)
- {
-  auto* Mesh=NewObject<UStaticMeshComponent>(this);
-  AddInstanceComponent(Mesh);
-  Mesh->SetupAttachment(RootComponent);
-  Mesh->SetStaticMesh(Body->GetStaticMesh());
-  Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-  Mesh->SetRelativeTransform(FTransform(Rotation,Location,Scale));
-  if(Hide) Mesh->SetMaterial(0,Hide);
-  Mesh->RegisterComponent();
- };
- if(Creature==2 || Creature==4)
- {
-  Body->SetRelativeScale3D(FVector(1.35,1.05,.55));
-  Body->SetRelativeLocation(FVector(0,0,-38));
-  Part(FVector(68,0,-39),FVector(.60,.72,.50));
-  for(int32 Leg=0;Leg<(Creature==2?8:6);++Leg)
-  {
-   const int32 Pair=Leg/2;
-   const float Side=Leg%2?1.f:-1.f;
-   Part(FVector(40-31*Pair,Side*65,-49),FVector(.12,.79,.15),FRotator(0,Side*(20+Pair*12),0));
-  }
- }
- else if(Creature==5)
- {
-  Body->SetRelativeScale3D(FVector(.63,.63,.77));
-  Body->SetRelativeLocation(FVector(0,0,17));
-  Part(FVector(-11,0,-31),FVector(.32,.32,.59));
- }
- else if(Creature==8)
- {
-  Body->SetRelativeScale3D(FVector(1.62,.77,.78));
-  Part(FVector(75,0,19),FVector(.91,.48,.5));
-  Part(FVector(-90,0,-16),FVector(1.23,.22,.22),FRotator(-10,0,0));
-  for(float Side : {-1.f,1.f})
-  {
-   Part(FVector(-15,Side*74,41),FVector(.88,1.35,.15),FRotator(0,Side*30,-Side*25));
-   Part(FVector(30,Side*37,-42),FVector(.31,.32,.51));
-   Part(FVector(-37,Side*37,-42),FVector(.31,.32,.51));
-  }
- }
- else
- {
-  const float Size=Creature==11?1.34f:Creature==3?.75f:1.f;
-  Body->SetRelativeScale3D(FVector(.68,.82,.98)*Size);
-  Part(FVector(10,0,61)*Size,FVector(.47,.46,.49)*Size);
-  for(float Side : {-1.f,1.f})
-  {
-   Part(FVector(0,Side*48,4)*Size,FVector(.26,.29,.77)*Size,FRotator(0,0,Side*12));
-   Part(FVector(0,Side*19,-48)*Size,FVector(.33,.32,.63)*Size);
-  }
- }
+ const FString Model=FString::Printf(TEXT("/Game/Characters/Town/DungeonAssets/Enemy%02d.Enemy%02d"),Creature,Creature);
+ auto* Mesh=LoadObject<UStaticMesh>(nullptr,*Model);
+ if(!ensureMsgf(Mesh,TEXT("Missing Blender creature %s"),*Model)) return;
+ Body->SetStaticMesh(Mesh);
+ const auto Bounds=Mesh->GetBounds();
+ const double Height=bBoss?365.:Creature==2||Creature==4?100.:Creature==5?205.:195.;
+ const double Scale=Height/FMath::Max(1.,Bounds.BoxExtent.Z*2.);
+ Body->SetRelativeScale3D(FVector(Scale));
+ Body->SetRelativeLocation(FVector(0,0,-95-(Bounds.Origin.Z-Bounds.BoxExtent.Z)*Scale));
+ Body->SetRelativeRotation(FRotator(0,-90,0));
+ if(bBoss) Collision->SetSphereRadius(72.);
+
 }
 
 void ACryptMonster::Tick(float Dt)
@@ -131,6 +82,7 @@ void ACryptMonster::Tick(float Dt)
   Mana-=14.f;
   Player->ShowSpell(From,Player->GetActorLocation(),CombatProfile.Element,CombatProfile.Color);
  }
+ Player->NoticeEnemy(this);
  Player->ReceiveCombatHit(CombatProfile.Weapon,CombatProfile.Dexterity,bRanged?CombatProfile.Element:ECryptDamage::Physical);
 }
 
@@ -140,7 +92,10 @@ bool ACryptMonster::TakeHit(float Rating,float Dexterity,ECryptDamage Element)
  const auto& CombatProfile=Stats();
  if(Element==ECryptDamage::Physical && FMath::FRand()>CryptCombat::HitChance(Dexterity,CombatProfile.Dexterity)) return false;
  const float Multiplier=Element==ECryptDamage::Fire?CombatProfile.Fire:Element==ECryptDamage::Storm?CombatProfile.Storm:1.f;
+ const float Before=Health;
  Health=FMath::Max(0.f,Health-CryptCombat::Damage(Rating,CombatProfile.Armor,Element)*Multiplier);
+ if(auto* Hero=Cast<ACryptHero>(UGameplayStatics::GetPlayerPawn(this,0)))
+  Hero->ReportEnemyHit(this,Before-Health);
  if(Health>0.f) return true;
  if(bRoadRaider)
   if(auto* Hero=Cast<ACryptHero>(UGameplayStatics::GetPlayerPawn(this,0))) Hero->DefeatedRoadRaider();

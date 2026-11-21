@@ -91,4 +91,26 @@ with tempfile.TemporaryDirectory(prefix="mindcontrol-entrances-") as folder:
     if missing:
         raise RuntimeError(f"Entrance models failed to import: {missing}")
 unreal.EditorAssetLibrary.save_directory(destination + "/Entrances", only_if_is_dirty=False)
+with tempfile.TemporaryDirectory(prefix="mindcontrol-dungeon-assets-") as folder:
+    subprocess.run([str(blender), "-b", "-t", "2", "--python-exit-code", "1", "--python",
+                    str(Path(__file__).with_name("bake_dungeon_assets.py")),
+                    "--", folder], check=True, timeout=240)
+    names = [f"Enemy{i:02}" for i in range(12)] + [f"Loot{i:02}" for i in range(16)]
+    tasks = []
+    for name in names:
+        task = unreal.AssetImportTask()
+        task.filename = str(Path(folder) / f"{name}.fbx")
+        task.destination_path = destination + "/DungeonAssets"
+        task.destination_name = name
+        task.automated = True
+        task.replace_existing = True
+        task.save = True
+        task.options = options
+        tasks.append(task)
+    unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(tasks)
+    missing = [name for name in names if not isinstance(
+        unreal.EditorAssetLibrary.load_asset(destination + "/DungeonAssets/" + name), unreal.StaticMesh)]
+    if missing:
+        raise RuntimeError(f"Missing required dungeon meshes: {missing}")
+unreal.EditorAssetLibrary.save_directory(destination + "/DungeonAssets", only_if_is_dirty=False)
 print("SETTLEMENT_PEOPLE_IMPORT_SUCCESS")

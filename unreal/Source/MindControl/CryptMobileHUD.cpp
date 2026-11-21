@@ -1,5 +1,6 @@
 #include "CryptMobileHUD.h"
 #include "CryptHero.h"
+#include "CryptMonster.h"
 #include "CryptDungeons.h"
 #include "CryptHudLayout.h"
 #include "CryptWorldLayout.h"
@@ -201,6 +202,36 @@ void ACryptMobileHUD::DrawHUD()
 
 
  const FVector2D Origin=Layout.MapOrigin,Size=Layout.MapSize;
+ const int32 Chart=Hero->GetChartIndex();
+ if(Chart!=INDEX_NONE)
+ {
+  Frame(Origin.X,Origin.Y,Size.X,Size.Y,FLinearColor(.029f,.027f,.024f,.98f),Bronze);
+  DrawText(CryptDungeons::Chambers[Chart].Name,Gold,Origin.X+9*S,Origin.Y+5*S,nullptr,.82f*S,false);
+  const FVector2D Cell((Size.X-16*S)/CryptDungeons::ChartColumns,
+                        (Size.Y-30*S)/CryptDungeons::ChartRows);
+  const FVector2D Grid=Origin+FVector2D(8*S,23*S);
+  constexpr int32 Tiles=CryptDungeons::ChartColumns*CryptDungeons::ChartRows;
+  for(int32 Key : Hero->GetChartTiles())
+  {
+   if(Key<Chart*Tiles || Key>=(Chart+1)*Tiles) continue;
+   const int32 Tile=Key%Tiles;
+   DrawRect(FLinearColor(.49f,.42f,.31f),Grid.X+(Tile%CryptDungeons::ChartColumns)*Cell.X,
+    Grid.Y+(Tile/CryptDungeons::ChartColumns)*Cell.Y,Cell.X,Cell.Y);
+  }
+  const int32 Tile=CryptDungeons::ChartTile(Chart,Hero->GetActorLocation());
+  if(Tile!=INDEX_NONE)
+  {
+   const FVector2D Point=Grid+FVector2D((Tile%CryptDungeons::ChartColumns+.5)*Cell.X,
+     (Tile/CryptDungeons::ChartColumns+.5)*Cell.Y);
+   const FVector Forward=Hero->GetActorForwardVector();
+   const FVector2D Direction=FVector2D(Forward.X,-Forward.Y).GetSafeNormal();
+   const FVector2D Across(-Direction.Y,Direction.X);
+   Stroke(Point+Direction*5*S,Point-Direction*3*S+Across*3*S,FLinearColor::White);
+   Stroke(Point+Direction*5*S,Point-Direction*3*S-Across*3*S,FLinearColor::White);
+  }
+ }
+ else
+ {
  const FLinearColor RiverColor(.31f,.72f,.88f);
  Frame(Origin.X,Origin.Y,Size.X,Size.Y,FLinearColor(.068f,.115f,.080f,.97f),Bronze);
  const FVector HeroPosition=Hero->GetActorLocation();
@@ -287,6 +318,8 @@ void ACryptMobileHUD::DrawHUD()
  MapLine(Tip,Left,FLinearColor::White,2.f);
  MapLine(Left,Right,FLinearColor::White,2.f);
  MapLine(Right,Tip,FLinearColor::White,2.f);
+
+ }
 
  Frame(20*S,12*S,210*S,44*S,Ink,Bronze);
  Icon(WeaponIcon(Hero->EquippedWeapon),FVector2D(38*S,33*S),10*S,Gold);
@@ -394,6 +427,11 @@ void ACryptMobileHUD::DrawHUD()
     }
    }
 
+   if(!Hero->bSatchelJournal)
+   {
+    const FVector2D Relic=Layout.InSatchel(.17f,.30f);
+    DrawText(Hero->GetRelicSummary(),Gold,Relic.X,Relic.Y,nullptr,.87f*S,false);
+   }
    const auto Utility=[&](FVector2D Point,EIcon Shape)
    {
     const float R=Layout.UtilityRadius;
@@ -412,6 +450,48 @@ void ACryptMobileHUD::DrawHUD()
    }
   }
   if(Hero->bInventoryOpen) return;
+ }
+
+ const auto& Log=Hero->GetEventLog();
+ const int32 Offset=Hero->GetLogOffset();
+ const FVector2D LogAt=Layout.LogOrigin;
+ Frame(LogAt.X,LogAt.Y,Layout.LogSize.X,Layout.LogSize.Y,Ink,Bronze);
+ DrawText(TEXT("Adventure log"),Gold,LogAt.X+9*S,LogAt.Y+6*S,nullptr,.9f*S,false);
+ const auto Scroller=[&](FVector2D Point,bool bUp,bool bActive)
+ {
+  const FLinearColor Color=bActive?Gold:Bronze;
+  Frame(Point.X-11*S,Point.Y-9*S,22*S,18*S,Ink,Color);
+  const float Sign=bUp?-1.f:1.f;
+  Stroke(Point+FVector2D(-4,Sign*-2)*S,Point+FVector2D(0,Sign*3)*S,Color);
+  Stroke(Point+FVector2D(4,Sign*-2)*S,Point+FVector2D(0,Sign*3)*S,Color);
+ };
+ Scroller(Layout.LogOlder,true,Offset<FMath::Max(0,Log.Num()-3));
+ Scroller(Layout.LogNewer,false,Offset>0);
+ const int32 LogEnd=Log.Num()-Offset;
+ const int32 LogStart=FMath::Max(0,LogEnd-3);
+ for(int32 I=LogStart;I<LogEnd;++I)
+ {
+  FString Line=Log[I];
+  float TextWidth=0,TextHeight=0;
+  GetTextSize(Line,TextWidth,TextHeight,nullptr,.85f*S);
+  if(TextWidth>Layout.LogSize.X-18*S)
+  {
+   const int32 Limit=FMath::Max(1,FMath::FloorToInt(Line.Len()*(Layout.LogSize.X-30*S)/TextWidth));
+   Line=Line.Left(Limit)+TEXT("...");
+  }
+  DrawText(Line,FLinearColor::White,LogAt.X+9*S,LogAt.Y+(30+20*(I-LogStart))*S,nullptr,.85f*S,false);
+ }
+
+ if(const auto* Enemy=Hero->GetCombatEnemy())
+ {
+  const float Width=FMath::Min(270.f*S,W*.25f);
+  const float X=(W-Width)*.5f,Y=H*.155f;
+  const float Progress=FMath::Clamp(Enemy->GetRemainingHealth()/Enemy->Stats().Health,0.f,1.f);
+  Frame(X,Y,Width,30*S,Ink,Enemy->IsBoss()?Gold:Bronze);
+  DrawRect(FLinearColor(.67f,.16f,.12f),X+3*S,Y+20*S,(Width-6*S)*Progress,6*S);
+  DrawText(FString::Printf(TEXT("%s%s  %d / %d"),Enemy->IsBoss()?TEXT("Boss: "):TEXT(""),
+    Enemy->Stats().Name,FMath::CeilToInt(Enemy->GetRemainingHealth()),FMath::CeilToInt(Enemy->Stats().Health)),
+   FLinearColor::White,X+7*S,Y+3*S,nullptr,.91f*S,false);
  }
 
  const FString Nearby=Hero->GetInteractionLabel();

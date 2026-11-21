@@ -27,6 +27,10 @@ struct FCryptHudLayout
   Restore=InSatchel(.82f,.95f);
   RightThumbCenter=FVector2D(W*.875f,H*.855f);
   RightThumbRadius=66.f*Scale;
+  LogSize=FVector2D(FMath::Min(W*.36f,395.f*Scale),105.f*Scale);
+  LogOrigin=FVector2D(20.f*Scale,H*.62f-LogSize.Y);
+  LogOlder=LogOrigin+FVector2D(LogSize.X-46.f*Scale,13.f*Scale);
+  LogNewer=LogOrigin+FVector2D(LogSize.X-18.f*Scale,13.f*Scale);
  }
 
  bool Hit(const FVector2D& Point,const FVector2D& Center) const
@@ -61,6 +65,7 @@ struct FCryptHudLayout
    FMath::Abs(Delta.Y)<=SatchelSize.Y*.040;
  }
 
+ FVector2D LogSize,LogOrigin,LogOlder,LogNewer;
  FVector2D RightThumbCenter;
  float RightThumbRadius;
 

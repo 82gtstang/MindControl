@@ -41,6 +41,14 @@ public:
  float GetDexterity() const;
  float WeaponDamage() const;
  FString GetCombatTarget() const;
+ int32 GetChartIndex() const { return ChartIndex; }
+ const TSet<int32>& GetChartTiles() const { return ChartTiles; }
+ const TArray<FString>& GetEventLog() const { return EventLog; }
+ int32 GetLogOffset() const { return LogOffset; }
+ FString GetRelicSummary() const;
+ const class ACryptMonster* GetCombatEnemy() const;
+ void NoticeEnemy(class ACryptMonster* Enemy);
+ void ReportEnemyHit(class ACryptMonster* Enemy,float Damage);
  void EquipWeapon(ECryptWeapon Weapon);
  bool OwnsWeapon(ECryptWeapon Weapon) const;
  FString GetQuestJournal() const;
@@ -85,6 +93,18 @@ protected:
  int32 ActiveWeaponMask = 1;
  int32 QuestProgress[CryptQuests::Count] = {};
  uint8 QuestState[CryptQuests::Count] = {};
+ void AppendEvent(const FString& Message);
+ void UpdateChart();
+ AActor* FindSecret() const;
+ void ScrollLog(int32 Delta);
+ TSet<int32> ChartTiles;
+ TSet<int32> OpenSecrets;
+ TArray<FString> EventLog;
+ TArray<int32> Relics;
+ int32 ChartIndex=INDEX_NONE;
+ int32 LogOffset=0;
+ TWeakObjectPtr<class ACryptMonster> CombatEnemy;
+ float CombatEnemyTime=0.f;
  void CastSpell(ECryptDamage Element);
  void CastFire() { CastSpell(ECryptDamage::Fire); }
  void CastStorm() { CastSpell(ECryptDamage::Storm); }

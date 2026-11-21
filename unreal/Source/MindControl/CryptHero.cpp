@@ -201,6 +201,7 @@ void ACryptHero::BeginPlay()
 void ACryptHero::Tick(float DeltaSeconds)
 {
  Super::Tick(DeltaSeconds);
+ UpdateChart();
  AttackCooldown=FMath::Max(0.f,AttackCooldown-DeltaSeconds);
  HurtCooldown=FMath::Max(0.f,HurtCooldown-DeltaSeconds);
  SpellCooldown=FMath::Max(0.f,SpellCooldown-DeltaSeconds);
@@ -416,6 +417,7 @@ ACryptTownActor* ACryptHero::GetInteractionTarget() const
 
 FString ACryptHero::GetInteractionLabel() const
 {
+ if(FindSecret()) return TEXT("Inspect loose stone");
  if(const ACryptTownActor* Target=GetInteractionTarget())
   return Target->bQuestGiver ? FString(CryptQuests::Data[Target->QuestIndex].Giver) : FString(TEXT("Inspect objective"));
  return {};
@@ -442,6 +444,14 @@ FString ACryptHero::GetQuestJournal() const
 
 void ACryptHero::Interact()
 {
+ if(AActor* Secret=FindSecret())
+ {
+  OpenSecrets.Add(FCString::Atoi(*Secret->Tags[1].ToString()));
+  Secret->SetActorHiddenInGame(true);
+  Secret->SetActorEnableCollision(false);
+  AppendEvent(TEXT("A hidden passage opens."));
+  return;
+ }
  ACryptTownActor* Target=GetInteractionTarget();
  if(!Target)
  {
@@ -470,6 +480,7 @@ void ACryptHero::Interact()
  }
  else
   Dialogue=FString::Printf(TEXT("%s: %s"),Quest.Giver,QuestState[Index]==2?Quest.Thanks:Quest.Objective);
+ AppendEvent(Dialogue);
  DialogueTime=7.f;
 }
 
@@ -562,6 +573,10 @@ void ACryptHero::SaveProgress()
  Save->ViewRotation=GetControlRotation();
  Save->Treasure=TreasureCount;
  Save->Version=5;
+ Save->ChartTiles=ChartTiles;
+ Save->OpenSecrets=OpenSecrets;
+ Save->EventLog=EventLog;
+ Save->Relics=Relics;
  Save->HeroHealth=Health;
  Save->HeroStamina=Stamina;
  Save->HeroMana=Mana;
@@ -608,6 +623,19 @@ void ACryptHero::RestoreProgress()
  OceanActionTime=0.f;
  if(AController* PC=GetController()) PC->SetControlRotation(Save->ViewRotation);
  TreasureCount=FMath::Max(0,Save->Treasure);
+ ChartTiles=Save->ChartTiles;
+ OpenSecrets=Save->OpenSecrets;
+ EventLog=Save->EventLog;
+ Relics=Save->Relics;
+ LogOffset=0;
+ ChartIndex=INDEX_NONE;
+ for(TActorIterator<AStaticMeshActor> It(GetWorld());It;++It)
+  if(It->ActorHasTag(TEXT("DungeonSecret")) && It->Tags.Num()>1)
+  {
+   const bool bOpened=OpenSecrets.Contains(FCString::Atoi(*It->Tags[1].ToString()));
+   It->SetActorHiddenInGame(bOpened);
+   It->SetActorEnableCollision(!bOpened);
+  }
  Health=Save->Version>=2 && FMath::IsFinite(Save->HeroHealth)?FMath::Clamp(Save->HeroHealth,1.f,100.f):100.f;
  Stamina=Save->Version>=2 && FMath::IsFinite(Save->HeroStamina)?FMath::Clamp(Save->HeroStamina,0.f,100.f):100.f;
  Mana=Save->Version>=2 && FMath::IsFinite(Save->HeroMana)?FMath::Clamp(Save->HeroMana,0.f,75.f):75.f;
@@ -720,6 +748,16 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
     InspectedItem=Supplies[Index];
   return;
  }
+ if(Layout.HitPocket(TouchPoint,Layout.LogOlder,13.f*Layout.Scale))
+ {
+  ScrollLog(1);
+  return;
+ }
+ if(Layout.HitPocket(TouchPoint,Layout.LogNewer,13.f*Layout.Scale))
+ {
+  ScrollLog(-1);
+  return;
+ }
  if(Layout.Hit(TouchPoint,Layout.Interact) && !GetInteractionLabel().IsEmpty())
  {
   Interact();
@@ -829,6 +867,7 @@ void ACryptHero::ReceiveCombatHit(float Rating,float Dexterity,ECryptDamage Elem
  HurtCooldown=.33f;
  Health=FMath::Max(0.f,Health-CryptCombat::Damage(Rating,GetArmorRating(),Element));
  RecoveryDelay=5.f;
+ AppendEvent(FString::Printf(TEXT("You take %d damage."),FMath::CeilToInt(CryptCombat::Damage(Rating,GetArmorRating(),Element))));
  if(Health>0.f) return;
  const int32 Dungeon=CryptDungeons::Current(GetActorLocation());
  FVector Safe=FVector(-2450,175,110);
@@ -845,6 +884,7 @@ void ACryptHero::ReceiveCombatHit(float Rating,float Dexterity,ECryptDamage Elem
  StrikeTrail.Reset();
  HurtCooldown=2.f;
  Dialogue=TEXT("You were defeated and retreated to safety.");
+ AppendEvent(Dialogue);
  DialogueTime=4.f;
 }
 
@@ -859,6 +899,7 @@ void ACryptHero::CheckDungeonClear(int32 Dungeon)
  Stamina=100.f;
  Mana=75.f;
  Dialogue=FString::Printf(TEXT("%s cleared. Armor and dexterity increased."),CryptDungeons::Chambers[Dungeon].Name);
+ AppendEvent(Dialogue);
  DialogueTime=6.f;
 }
 
@@ -960,4 +1001,133 @@ void ACryptHero::CastSpell(ECryptDamage Element)
   ShowSpell(Hit,Chain->GetActorLocation(),Element,Color);
   Chain->TakeHit(17.f,GetDexterity(),Element);
  }
+}
+
+namespace
+{
+ constexpr int32 RelicShapes=16;
+ constexpr int32 RelicFinishes=16;
+ constexpr int32 RelicGrades=16;
+ constexpr int32 RelicCount=RelicShapes*RelicFinishes*RelicGrades;
+ const TCHAR* RelicNames[]={
+  TEXT("Knife"),TEXT("Shortsword"),TEXT("Longsword"),TEXT("Ritual blade"),
+  TEXT("Brooch"),TEXT("Pendant"),TEXT("Medallion"),TEXT("Talisman"),
+  TEXT("Flask"),TEXT("Tonic"),TEXT("Elixir"),TEXT("Draught"),
+  TEXT("Shard"),TEXT("Crystal"),TEXT("Geode"),TEXT("Crownstone")
+ };
+ const TCHAR* FinishNames[]={
+  TEXT("Iron"),TEXT("Silver"),TEXT("Bronze"),TEXT("Gold"),TEXT("Jade"),TEXT("Ruby"),
+  TEXT("Sapphire"),TEXT("Amethyst"),TEXT("Onyx"),TEXT("Pearl"),TEXT("Copper"),TEXT("Amber"),
+  TEXT("Quartz"),TEXT("Obsidian"),TEXT("Moonstone"),TEXT("Verdigris")
+ };
+
+ FString RelicName(int32 Id)
+ {
+  if(Id<0 || Id>=RelicCount) return FString();
+  return FString::Printf(TEXT("%s %s +%d"),FinishNames[(Id/RelicShapes)%RelicFinishes],
+     RelicNames[Id%RelicShapes],1+Id/(RelicShapes*RelicFinishes));
+ }
+}
+
+void ACryptHero::AppendEvent(const FString& Message)
+{
+ if(Message.IsEmpty()) return;
+ EventLog.Add(Message);
+ if(EventLog.Num()>120) EventLog.RemoveAt(0);
+ if(LogOffset>0) ScrollLog(1);
+}
+
+void ACryptHero::ScrollLog(int32 Delta)
+{
+ LogOffset=FMath::Clamp(LogOffset+Delta,0,FMath::Max(0,EventLog.Num()-3));
+}
+
+void ACryptHero::UpdateChart()
+{
+ const int32 Here=CryptDungeons::ChartDungeon(GetActorLocation());
+ if(Here!=ChartIndex)
+ {
+  if(Here!=INDEX_NONE) AppendEvent(FString::Printf(TEXT("Entered %s."),CryptDungeons::Chambers[Here].Name));
+  else if(ChartIndex!=INDEX_NONE) AppendEvent(TEXT("Returned to the surface."));
+  ChartIndex=Here;
+ }
+ if(Here!=INDEX_NONE)
+ {
+  const int32 Tile=CryptDungeons::ChartTile(Here,GetActorLocation());
+  if(Tile!=INDEX_NONE)
+   ChartTiles.Add(Here*CryptDungeons::ChartColumns*CryptDungeons::ChartRows+Tile);
+ }
+}
+
+AActor* ACryptHero::FindSecret() const
+{
+ if(ChartIndex==INDEX_NONE) return nullptr;
+ AActor* Closest=nullptr;
+ double Distance=FMath::Square(345.);
+ for(TActorIterator<AStaticMeshActor> It(GetWorld());It;++It)
+ {
+  if(!It->ActorHasTag(TEXT("DungeonSecret")) || It->IsHidden() || It->Tags.Num()<2) continue;
+  const FVector Offset=It->GetActorLocation()-GetActorLocation();
+  const double Candidate=Offset.SizeSquared();
+  if(Candidate<Distance && CombatVisible(this,*It))
+  {
+   Closest=*It;
+   Distance=Candidate;
+  }
+ }
+ return Closest;
+}
+
+void ACryptHero::NoticeEnemy(ACryptMonster* Enemy)
+{
+ CombatEnemy=Enemy;
+ CombatEnemyTime=GetWorld()->GetTimeSeconds();
+}
+
+const ACryptMonster* ACryptHero::GetCombatEnemy() const
+{
+ const auto* Enemy=CombatEnemy.Get();
+ return Enemy && Enemy->GetRemainingHealth()>0.f && GetWorld()->GetTimeSeconds()-CombatEnemyTime<8.f
+  ? Enemy : nullptr;
+}
+
+void ACryptHero::ReportEnemyHit(ACryptMonster* Enemy,float Damage)
+{
+ NoticeEnemy(Enemy);
+ if(Enemy->GetRemainingHealth()>0.f)
+ {
+  AppendEvent(FString::Printf(TEXT("Hit %s for %d."),Enemy->Stats().Name,FMath::CeilToInt(Damage)));
+  return;
+ }
+ const int32 Item=FMath::RandRange(0,RelicCount-1);
+ Relics.Add(Item);
+ AppendEvent(FString::Printf(TEXT("%s defeated. Looted %s."),Enemy->Stats().Name,*RelicName(Item)));
+ const int32 Shape=Item%RelicShapes;
+ const FString Path=FString::Printf(TEXT("/Game/Characters/Town/DungeonAssets/Loot%02d.Loot%02d"),Shape,Shape);
+ auto* RelicMesh=LoadObject<UStaticMesh>(nullptr,*Path);
+ if(!RelicMesh) return;
+ const FVector At=Enemy->GetActorLocation()+FVector(0,0,8);
+ if(auto* Display=GetWorld()->SpawnActor<AStaticMeshActor>(At,FRotator(0,Item%360,0)))
+ {
+  auto* Visual=Display->GetStaticMeshComponent();
+  Visual->SetMobility(EComponentMobility::Movable);
+  Visual->SetStaticMesh(RelicMesh);
+  Visual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+  const int32 Finish=(Item/RelicShapes)%RelicFinishes;
+  auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+  if(Base)
+  {
+   auto* Tint=UMaterialInstanceDynamic::Create(Base,Display);
+   Tint->SetVectorParameterValue(TEXT("Color"),FLinearColor::MakeFromHSV8(uint8(Finish*16),170,215));
+   Visual->SetMaterial(0,Tint);
+  }
+  Display->SetActorScale3D(FVector(1.f+.025f*(Item/(RelicShapes*RelicFinishes))));
+  Display->SetLifeSpan(3.f);
+ }
+}
+
+FString ACryptHero::GetRelicSummary() const
+{
+ return Relics.IsEmpty()?FString(TEXT("No relics collected")):
+  FString::Printf(TEXT("Relics %d  |  %s"),Relics.Num(),*RelicName(Relics.Last()));
 }

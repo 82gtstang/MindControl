@@ -139,4 +139,29 @@ namespace CryptDungeons
   }
   return Position;
  }
+ inline constexpr int32 ChartColumns=96, ChartRows=48;
+ inline int32 ChartTile(int32 Index,const FVector& Position)
+ {
+  const FVector Center=Room(Index);
+  const double West=Center.X-RoomHalfLength-RampLength;
+  const double X=(Position.X-West)/(2*RoomHalfLength+RampLength);
+  const double Y=(Center.Y+RoomHalfWidth-Position.Y)/(2*RoomHalfWidth);
+  if(X<0 || X>=1 || Y<0 || Y>=1) return INDEX_NONE;
+  return int32(X*ChartColumns)+int32(Y*ChartRows)*ChartColumns;
+ }
+ inline int32 ChartDungeon(const FVector& Position)
+ {
+  const int32 Chamber=Current(Position);
+  if(Chamber!=INDEX_NONE) return Chamber;
+  for(int32 Index=0;Index<Count;++Index)
+  {
+   const auto& Point=EntrancePoints[Index];
+   const double Along=Position.X-Point.X;
+   if(Along<0 || Along>=RampLength || FMath::Abs(Position.Y-Point.Y)>RampHalfWidth) continue;
+   const FVector Mouth=Entrance(Index);
+   const double Floor=FMath::Lerp(Mouth.Z,Room(Index).Z,Along/RampLength);
+   if(Position.Z>=Floor-15 && Position.Z<=Floor+270) return Index;
+  }
+  return INDEX_NONE;
+ }
 }
