@@ -28,8 +28,8 @@ namespace CryptDungeons
  inline constexpr int32 EnemyId(int32 Chamber,int32 Slot) { return 1000+Chamber*10+Slot; }
  double GetGroundHeight(double X,double Y);
  inline const FVector2D EntrancePoints[]={
-  {-4900,1200},{-3100,2700},{-1200,4100},{1000,4200},{3200,3700},
-  {3500,2200},{-4600,-1500},{-2800,-3900},{-900,-4200},{2800,-3600}
+  {-4900,1200},{-3100,2700},{-1200,4100},{1000,2900},{3200,3700},
+  {3500,2200},{-4600,-1500},{-2800,-3900},{-300,-4200},{2800,-3600}
  };
  static_assert(UE_ARRAY_COUNT(EntrancePoints)==Count);
  inline constexpr double RampLength=1000.;
