@@ -633,10 +633,10 @@ void ACryptHero::RestoreProgress()
   if(It->ObjectiveId!=INDEX_NONE) It->SetCollected(Save->CollectedObjectives.Contains(It->ObjectiveId));
  for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
  {
-  const float* Health=Save->EnemyHealth.Find(It->SaveId);
+  const float* SavedEnemyHealth=Save->EnemyHealth.Find(It->SaveId);
   const FVector* Location=Save->EnemyLocations.Find(It->SaveId);
-  if(Health && Location && FMath::IsFinite(*Health) && !Location->ContainsNaN())
-   It->RestoreState(Save->Version==1?(*Health/3.f)*It->Stats().Health:*Health,*Location);
+  if(SavedEnemyHealth && Location && FMath::IsFinite(*SavedEnemyHealth) && !Location->ContainsNaN())
+   It->RestoreState(Save->Version==1?(*SavedEnemyHealth/3.f)*It->Stats().Health:*SavedEnemyHealth,*Location);
  }
  Dialogue.Reset();
  SaveStatus=TEXT("Adventure restored.");
@@ -826,7 +826,7 @@ void ACryptHero::CheckDungeonClear(int32 Dungeon)
 
 void ACryptHero::ShowSpell(FVector From,FVector To,ECryptDamage Element,FLinearColor Color)
 {
- auto* Mesh=LoadObject<UStaticMesh>(nullptr,Element==ECryptDamage::Fire
+ auto* EffectMesh=LoadObject<UStaticMesh>(nullptr,Element==ECryptDamage::Fire
   ?TEXT("/Engine/BasicShapes/Sphere.Sphere"):TEXT("/Engine/BasicShapes/Cube.Cube"));
  auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
  const auto Part=[&](FVector Position,FVector Scale,FRotator Rotation,float Duration)
@@ -835,7 +835,7 @@ void ACryptHero::ShowSpell(FVector From,FVector To,ECryptDamage Element,FLinearC
   if(!Effect) return;
   auto* Shape=Effect->GetStaticMeshComponent();
   Shape->SetMobility(EComponentMobility::Movable);
-  Shape->SetStaticMesh(Mesh);
+  Shape->SetStaticMesh(EffectMesh);
   Shape->SetCollisionEnabled(ECollisionEnabled::NoCollision);
   Shape->SetCastShadow(false);
   if(Base)
