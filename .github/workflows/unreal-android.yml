@@ -162,6 +162,31 @@ jobs:
             Write-Warning 'Known UE 5.7 post-save Content Browser assertion detected; mesh file exists. Continuing to cook for asset validation.'
           }
           Write-Host "Ocean Serenity skeletal mesh asset exists: $mesh"
+      - name: Import the townsperson mesh
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $editor = Join-Path $env:UE_ROOT 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
+          $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\MindControl.uproject'
+          $script = Join-Path $env:GITHUB_WORKSPACE 'tools\import_townsperson.py'
+          $log = Join-Path $env:RUNNER_TEMP 'Townsperson-UnrealImport.log'
+          $arguments = @(
+            "`"$project`""
+            '-run=pythonscript'
+            '-Interchange.FeatureFlags.Import.FBX=False'
+            "-script=`"$script`""
+            '-unattended'
+            '-nop4'
+            '-nosplash'
+            '-nullrhi'
+            "-abslog=`"$log`""
+          )
+          $process = Start-Process -FilePath $editor -ArgumentList $arguments -Wait -PassThru
+          $mesh = Join-Path $env:GITHUB_WORKSPACE 'unreal\Content\Characters\Town\Townsperson.uasset'
+          if ($process.ExitCode -ne 0 -or !(Test-Path $mesh) -or !(Select-String -Path $log -SimpleMatch 'TOWNSPERSON_IMPORT_SUCCESS' -Quiet)) {
+            if (Test-Path $log) { Get-Content $log -Tail 120 }
+            throw "Townsperson import failed with exit code $($process.ExitCode)"
+          }
       - name: Import environment materials
         shell: powershell
         run: |

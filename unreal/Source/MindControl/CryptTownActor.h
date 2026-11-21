@@ -5,7 +5,6 @@
 #include "CryptTownActor.generated.h"
 
 class USceneComponent;
-class USkeletalMeshComponent;
 class UStaticMeshComponent;
 
 UCLASS()
@@ -29,6 +28,6 @@ public:
 
 private:
  UPROPERTY() USceneComponent* VisualRoot;
- UPROPERTY() USkeletalMeshComponent* Person;
+ UPROPERTY() UStaticMeshComponent* Person;
  UPROPERTY() UStaticMeshComponent* Marker;
 };
