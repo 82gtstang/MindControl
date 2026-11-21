@@ -17,7 +17,9 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.*
 
 internal data class MeshVertex(val x: Float, val y: Float, val z: Float)
-internal data class LocalMesh(val vertices: List<MeshVertex>, val indices: IntArray, val colors: IntArray)
+internal data class LocalMesh(val vertices: List<MeshVertex>, val indices: IntArray, val colors: IntArray, val reference: PreparedPhoto? = null)
+
+internal data class PreparedPhoto(val rgb: FloatArray, val alpha: FloatArray)
 
 internal class LocalReconstruction(private val context: Context) {
     private val environment = OrtEnvironment.getEnvironment()
@@ -34,7 +36,7 @@ internal class LocalReconstruction(private val context: Context) {
             options.setIntraOpNumThreads(4)
             environment.createSession(encoder.path, options).use { session ->
                 progress("Reconstructing the shape on your phone…")
-                OnnxTensor.createTensor(environment, FloatBuffer.wrap(image), longArrayOf(1, 3, 512, 512)).use { tensor ->
+                OnnxTensor.createTensor(environment, FloatBuffer.wrap(image.rgb), longArrayOf(1, 3, 512, 512)).use { tensor ->
                     session.run(mapOf("image" to tensor)).use { result ->
                         val output = result[0] as OnnxTensor
                         val shape = output.info.shape
@@ -71,7 +73,7 @@ internal class LocalReconstruction(private val context: Context) {
                         colors[start + item] = (channel(r) shl 16) or (channel(g) shl 8) or channel(b)
                     }
                 }
-                return LocalMesh(vertices, triangles, colors)
+                return LocalMesh(vertices, triangles, colors, image)
             }
         }
     }
@@ -94,7 +96,7 @@ internal class LocalReconstruction(private val context: Context) {
         return model
     }
 
-    private fun prepare(uri: Uri): FloatArray {
+    private fun prepare(uri: Uri): PreparedPhoto {
         val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, info, _ ->
             decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
             val longest = max(info.size.width, info.size.height)
@@ -144,18 +146,20 @@ internal class LocalReconstruction(private val context: Context) {
         val extent = max(right-left+1,bottom-top+1) / .85f
         val plane = 512 * 512
         val input = FloatArray(plane * 3) { .5f }
+        val alpha = FloatArray(plane)
         for (y in 0 until 512) for (x in 0 until 512) {
             val sx = (centerX + ((x + .5f) / 512 - .5f) * extent).roundToInt()
             val sy = (centerY + ((y + .5f) / 512 - .5f) * extent).roundToInt()
             if (sx !in 0 until width || sy !in 0 until height) continue
             val index = sy * width + sx
             val a = mask[index]
+            alpha[y * 512 + x] = a
             for (c in 0..2) {
                 val color = (pixels[index] ushr (16 - c * 8)) and 255
                 input[c * plane + y * 512 + x] = .5f * (1 - a) + a * color / 255f
             }
         }
-        return input
+        return PreparedPhoto(input, alpha)
     }
 
     private fun channel(logit: Float) = (255f / (1f + exp(-logit))).roundToInt().coerceIn(0, 255)

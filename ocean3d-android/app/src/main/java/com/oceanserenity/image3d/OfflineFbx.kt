@@ -19,9 +19,13 @@ internal fun saveOfflineBundle(mesh: LocalMesh, destination: File) {
     val bitmap = Bitmap.createBitmap(atlasSize, atlasSize, Bitmap.Config.ARGB_8888)
     val uv = DoubleArray(faces * 6)
     val texels = IntArray(tile * tile)
+    val projection = PhotoProjection.bestMatch(mesh)
     for (face in 0 until faces) {
         val tx = (face % columnCount) * tile
         val ty = (face / columnCount) * tile
+        val p0 = mesh.vertices[mesh.indices[face * 3]]
+        val p1 = mesh.vertices[mesh.indices[face * 3 + 1]]
+        val p2 = mesh.vertices[mesh.indices[face * 3 + 2]]
         val c0 = mesh.colors[mesh.indices[face * 3]]
         val c1 = mesh.colors[mesh.indices[face * 3 + 1]]
         val c2 = mesh.colors[mesh.indices[face * 3 + 2]]
@@ -35,7 +39,7 @@ internal fun saveOfflineBundle(mesh: LocalMesh, destination: File) {
                     (c1 ushr shift and 255) * a / sum + (c2 ushr shift and 255) * b / sum).toInt()
                 color = color or (value.coerceIn(0,255) shl shift)
             }
-            texels[y * tile + x] = color
+            texels[y * tile + x] = projection?.enhance(p0, p1, p2, a / sum, b / sum, color) ?: color
         }
         bitmap.setPixels(texels,0,tile,tx,ty,tile,tile)
         val start = face * 6
