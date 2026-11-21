@@ -20,6 +20,38 @@ def smooth(a, b, value):
     return t * t * (3.0 - 2.0 * t)
 
 
+def separate_hand_hip_geometry(body):
+    """Separate the fused contact surfaces on the approved Valkyrie mesh."""
+    import bmesh
+
+    mesh = bmesh.new()
+    mesh.from_mesh(body.data)
+    deform = mesh.verts.layers.deform.active
+    for side, sign in (("L", -1), ("R", 1)):
+        arm_groups = tuple(body.vertex_groups[f"{part}_{side}"].index for part in ("forearm", "hand"))
+        hip_groups = tuple(body.vertex_groups[name].index for name in ("pelvis", "spine", f"thigh_{side}"))
+        contact = {v for v in mesh.verts if sign * v.co.x > .16 and .84 < v.co.z < 1.23}
+        arm = {v for v in contact if sum(v[deform].get(i, 0) for i in arm_groups) > .5}
+        hips = {v for v in contact if sum(v[deform].get(i, 0) for i in hip_groups) > .5}
+        bridges = [f for f in mesh.faces if any(v in arm for v in f.verts) and any(v in hips for v in f.verts)]
+        if not bridges:
+            raise RuntimeError(f"Missing expected hand-to-hip contact on {side}")
+        cut_edges = {edge for face in bridges for edge in face.edges}
+        bmesh.ops.delete(mesh, geom=bridges, context="FACES_ONLY")
+        boundary = [edge for edge in cut_edges if edge.is_boundary]
+        bmesh.ops.delete(mesh, geom=[edge for edge in cut_edges if edge.is_wire], context="EDGES")
+        # Fill each cut using only vertices from its own side of the contact.
+        for region in (arm, hips):
+            rim = [edge for edge in boundary if edge.is_valid and all(v in region for v in edge.verts)]
+            caps = bmesh.ops.holes_fill(mesh, edges=rim, sides=0)["faces"]
+            for face in caps:
+                bmesh.ops.triangulate(mesh, faces=[face])
+        print(f"Separated {len(bridges)} hand-to-hip faces on {side}")
+    mesh.to_mesh(body.data)
+    mesh.free()
+    body.data.update()
+
+
 def add_hair_rig(body, rig):
     bpy.context.view_layer.objects.active = rig
     rig.select_set(True)
@@ -196,7 +228,7 @@ def make_clips(scene, rig, source):
                 if bone.name in ("root", "pelvis"):
                     bone.keyframe_insert("location", frame=sample + 1, group=bone.name)
         # Blender 5 removed the legacy Action.fcurves accessor.
-        if action.is_action_layered:
+        if not hasattr(action, "fcurves"):
             curves = action.layers[0].strips[0].channelbag(action_data.action_slot).fcurves
         else:
             curves = action.fcurves
@@ -229,6 +261,7 @@ def main():
     missing_clips = sorted(set(CLIPS) - set(originals))
     if missing_clips:
         raise RuntimeError("Input FBX missing required source clips: " + ", ".join(missing_clips))
+    separate_hand_hip_geometry(body)
     add_hair_rig(body, rig)
     scene.render.fps = FPS
     make_clips(scene, rig, originals)
