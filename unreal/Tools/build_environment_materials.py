@@ -156,5 +156,17 @@ with TemporaryDirectory() as directory:
     projected_material(dirt, "M_Dirt", 320)
     water_material("M_River", False)
     water_material("M_Waterfall", True)
+    satchel_task = unreal.AssetImportTask()
+    satchel_task.filename = str(Path(__file__).resolve().parents[1] / "Art" / "T_Satchel.png")
+    satchel_task.destination_path = DESTINATION
+    satchel_task.factory = unreal.TextureFactory()
+    satchel_task.automated = True
+    satchel_task.replace_existing = True
+    satchel_task.save = False
+    TOOLS.import_asset_tasks([satchel_task])
+    satchel = ASSETS.load_asset(f"{DESTINATION}/T_Satchel")
+    if not isinstance(satchel, unreal.Texture2D):
+        raise RuntimeError("Could not import the satchel art")
+    satchel.set_editor_property("never_stream", True)
     if not ASSETS.save_directory(DESTINATION, only_if_is_dirty=False, recursive=True):
         raise RuntimeError("Could not save the environment materials")

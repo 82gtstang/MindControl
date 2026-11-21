@@ -559,6 +559,11 @@ void ACryptHero::GetQuestMapMarkers(TArray<FCryptQuestMarker>& Markers) const
    if(It->bRoadRaider && It->GetRemainingHealth()>0.f) Markers.Add({It->GetActorLocation(),0});
 }
 
+int32 ACryptHero::GetPackedObjectiveCount(int32 Index) const
+{
+ return Index>=0 && Index<CryptQuests::Count && QuestState[Index]==1?QuestProgress[Index]:0;
+}
+
 void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
 {
  if(!GEngine || !GEngine->GameViewport) return;
@@ -576,18 +581,45 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
  }
  if(bInventoryOpen)
  {
-  if(Location.Y>=H*.67f && Location.Y<=H*.75f)
+  if(Layout.HitPocket(TouchPoint,Layout.Save,Layout.UtilityRadius))
   {
-   if(Location.X>=W*.25f && Location.X<W*.425f) SaveProgress();
-   else if(Location.X>=W*.445f && Location.X<=W*.62f) RestoreProgress();
+   InspectedItem.Reset();
+   SaveProgress();
    return;
   }
+  if(Layout.HitPocket(TouchPoint,Layout.Restore,Layout.UtilityRadius))
+  {
+   InspectedItem.Reset();
+   RestoreProgress();
+   return;
+  }
+  if(Layout.HitPocket(TouchPoint,Layout.SupplyPocket(0),Layout.ItemRadius))
+  {
+   bSatchelJournal=!bSatchelJournal;
+   return;
+  }
+  if(bSatchelJournal)
+  {
+   bSatchelJournal=false;
+   return;
+  }
+  const TCHAR* Weapons[]={TEXT("Unarmed"),TEXT("Longsword"),TEXT("Battle axe"),TEXT("Spear")};
   for(int32 Index=0;Index<4;++Index)
   {
-   const float Y=H*.30f+Index*H*.10f;
-   if(Location.X>=W*.25f && Location.X<=W*.62f && FMath::Abs(Location.Y-Y)<H*.045f)
-    EquipWeapon(static_cast<ECryptWeapon>(Index));
+   if(!Layout.HitPocket(TouchPoint,Layout.WeaponPocket(Index),Layout.ItemRadius)) continue;
+   const auto Weapon=static_cast<ECryptWeapon>(Index);
+   if(OwnsWeapon(Weapon))
+   {
+    EquipWeapon(Weapon);
+    InspectedItem=Weapons[Index];
+   }
+   return;
   }
+  const TCHAR* Supplies[]={TEXT("Field journal"),TEXT("Coin purse"),TEXT("Valley herbs"),TEXT("Lost crest"),TEXT("Pay chest")};
+  const int32 Counts[]={1,1,GetPackedObjectiveCount(1),GetPackedObjectiveCount(2),GetPackedObjectiveCount(4)};
+  for(int32 Index=1;Index<5;++Index)
+   if(Counts[Index]>0 && Layout.HitPocket(TouchPoint,Layout.SupplyPocket(Index),Layout.ItemRadius))
+    InspectedItem=Supplies[Index];
   return;
  }
  if(Layout.Hit(TouchPoint,Layout.Interact) && !GetInteractionLabel().IsEmpty())

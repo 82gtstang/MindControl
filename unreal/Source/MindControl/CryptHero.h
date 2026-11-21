@@ -32,12 +32,15 @@ public:
  const TArray<FVector>& GetStrikeTrail() const { return StrikeTrail; }
  float GetStrikeStrength() const;
  FString SaveStatus;
+ bool bSatchelJournal=false;
+ int32 GetPackedObjectiveCount(int32 Index) const;
+ FString InspectedItem;
  FString Dialogue;
  ECryptWeapon EquippedWeapon = ECryptWeapon::Unarmed;
  UPROPERTY(BlueprintReadOnly) bool bSwordEquipped = false;
  UPROPERTY(BlueprintReadOnly) int32 TreasureCount = 0;
  UPROPERTY(BlueprintReadOnly) bool bInventoryOpen = false;
- UFUNCTION(BlueprintCallable) void ToggleInventory() { bInventoryOpen = !bInventoryOpen; }
+ UFUNCTION(BlueprintCallable) void ToggleInventory() { bInventoryOpen = !bInventoryOpen; bSatchelJournal=false; InspectedItem.Reset(); }
  UFUNCTION(BlueprintCallable) void AddTreasure(int32 Amount = 1) { TreasureCount += Amount; }
  void TouchPressed(ETouchIndex::Type FingerIndex, FVector Location);
 protected:

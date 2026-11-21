@@ -3,6 +3,8 @@
 #include "CryptHudLayout.h"
 #include "CryptWorldLayout.h"
 #include "Engine/Canvas.h"
+#include "Engine/Texture2D.h"
+#include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include <initializer_list>
 
@@ -134,11 +136,26 @@ void ACryptMobileHUD::DrawHUD()
    Stroke(A,B,Glow.CopyWithNewOpacity(.90f*Opacity),bArmed?2.8f:1.8f);
   }
  }
+ if(!bSatchelTextureChecked)
+ {
+  bSatchelTextureChecked=true;
+  SatchelTexture=LoadObject<UTexture2D>(nullptr,TEXT("/Game/Environment/MindControl/T_Satchel.T_Satchel"));
+ }
+ const auto Sprite=[&](int32 Cell,FVector2D Center,FVector2D Size,float Opacity=1.f)
+ {
+  if(!SatchelTexture || Opacity<=0.f) return;
+  const double U=(Cell%4)*.25;
+  const double V=(Cell/4)/3.0;
+  DrawTexture(SatchelTexture,Center.X-Size.X*.5,Center.Y-Size.Y*.5,Size.X,Size.Y,
+   U,V,.25,1.0/3.0,FLinearColor(1,1,1,Opacity),BLEND_Translucent);
+ };
  const auto Button=[&](const FVector2D& Center,EIcon Shape,const TCHAR* Label,bool bSelected=false)
  {
   const float R=Layout.Radius;
   Frame(Center.X-R,Center.Y-R,2*R,2*R,bSelected?FLinearColor(.24f,.16f,.085f,.96f):Ink,bSelected?Gold:Bronze);
-  Icon(Shape,Center-FVector2D(0,R*.17f),R*.33f,Gold);
+  if(Shape==EIcon::Bag && SatchelTexture)
+   Sprite(bSelected?1:0,Center-FVector2D(0,R*.18f),FVector2D(R*1.08f,R*1.08f));
+  else Icon(Shape,Center-FVector2D(0,R*.17f),R*.33f,Gold);
   float Width=0,Height=0;
   GetTextSize(Label,Width,Height,nullptr,.90f*S);
   DrawText(Label,FLinearColor::White,Center.X-Width*.5,Center.Y+R*.43f-Height*.5,nullptr,.90f*S,false);
@@ -228,33 +245,105 @@ void ACryptMobileHUD::DrawHUD()
  DrawText(WeaponName(Hero->EquippedWeapon),FLinearColor::White,55*S,17*S,nullptr,1.12f*S,false);
  DrawText(FString::Printf(TEXT("%d treasure"),Hero->TreasureCount),Gold,55*S,35*S,nullptr,.83f*S,false);
 
- if(Hero->bInventoryOpen)
+ const float Target=Hero->bInventoryOpen?1.f:0.f;
+ SatchelOpen=FMath::FInterpConstantTo(SatchelOpen,Target,GetWorld()->GetDeltaSeconds(),4.3f);
+ if(SatchelOpen>0.f)
  {
-  Frame(W*.22f,H*.14f,W*.44f,H*.72f,Ink,Bronze);
-  Icon(EIcon::Bag,FVector2D(W*.255f,H*.201f),11*S,Gold);
-  DrawText(TEXT("Adventure Bag"),Gold,W*.285f,H*.172f,nullptr,1.75f*S,false);
-  for(int32 Index=0;Index<4;++Index)
+  const float Open=FMath::SmoothStep(0.f,1.f,SatchelOpen);
+  const FVector2D Center=FMath::Lerp(Layout.Bag,Layout.InSatchel(.5f,.50f),Open);
+  const FVector2D Size=FMath::Lerp(FVector2D(Layout.Radius*1.6f),Layout.SatchelSize,Open);
+  DrawRect(FLinearColor(.01f,.008f,.006f,.61f*Open),Layout.SatchelOrigin.X-10*S,
+   Layout.SatchelOrigin.Y,Layout.SatchelSize.X+20*S,Layout.SatchelSize.Y);
+  if(SatchelTexture)
   {
-   const auto Weapon=static_cast<ECryptWeapon>(Index);
-   const bool bOwned=Hero->OwnsWeapon(Weapon);
-   const bool bEquipped=Weapon==Hero->EquippedWeapon;
-   const float Y=H*.30f+Index*H*.10f;
-   const FLinearColor Text=bOwned?FLinearColor::White:FLinearColor(.51f,.58f,.61f);
-   Frame(W*.25f,Y-H*.045f,W*.37f,H*.09f,bEquipped?FLinearColor(.24f,.17f,.086f):FLinearColor(.105f,.146f,.167f),bEquipped?Gold:Bronze);
-   Icon(WeaponIcon(Weapon),FVector2D(W*.278f,Y),FMath::Min(11.f*S,H*.031f),bOwned?Gold:Text);
-   DrawText(WeaponName(Weapon),Text,W*.302f,Y-8*S,nullptr,1.15f*S,false);
-   DrawText(bEquipped?TEXT("Equipped"):(bOwned?TEXT("Tap to equip"):TEXT("Quest reward")),
-     bEquipped?Gold:Text,W*.50f,Y-7*S,nullptr,.88f*S,false);
+   Sprite(0,Center,Size,1.f-Open);
+   Sprite(1,Center,Size,Open);
   }
-  Frame(W*.25f,H*.67f,W*.175f,H*.08f,Ink,Bronze);
-  Frame(W*.445f,H*.67f,W*.175f,H*.08f,Ink,Bronze);
-  Icon(EIcon::Save,FVector2D(W*.275f,H*.71f),8*S,Gold);
-  Icon(EIcon::Restore,FVector2D(W*.47f,H*.71f),8*S,Gold);
-  DrawText(TEXT("Save"),Gold,W*.297f,H*.689f,nullptr,1.05f*S,false);
-  DrawText(TEXT("Restore"),Gold,W*.492f,H*.689f,nullptr,1.05f*S,false);
-  if(!Hero->SaveStatus.IsEmpty())
-   DrawText(Hero->SaveStatus,FLinearColor::White,W*.25f,H*.78f,nullptr,.95f*S,false);
-  return;
+  else
+  {
+   Frame(Center.X-Size.X*.5f,Center.Y-Size.Y*.5f,Size.X,Size.Y,Ink,Bronze);
+   Icon(EIcon::Bag,Center,Size.Y*.18f,Gold);
+  }
+
+  if(SatchelOpen>.88f && Hero->bInventoryOpen)
+  {
+   const auto Pocket=[&](FVector2D Point,bool bSelected)
+   {
+    const float R=Layout.ItemRadius;
+    const FLinearColor Color=bSelected?Gold:FLinearColor(.59f,.40f,.23f,.64f);
+    const FVector2D A=Point-FVector2D(R,R),B=Point+FVector2D(R,-R);
+    const FVector2D C=Point+FVector2D(R,R),D=Point+FVector2D(-R,R);
+    DrawRect(FLinearColor(.027f,.014f,.009f,.77f),A.X,A.Y,2*R,2*R);
+    Stroke(A,B,Color); Stroke(B,C,Color); Stroke(C,D,Color); Stroke(D,A,Color);
+   };
+   const auto CountBadge=[&](FVector2D Point,int32 Count)
+   {
+    const float R=Layout.ItemRadius;
+    const FString Digits=FString::FromInt(Count);
+    float Width=0,Height=0;
+    GetTextSize(Digits,Width,Height,nullptr,.91f*S);
+    DrawRect(Ink,Point.X+R-Width-6*S,Point.Y+R-Height-4*S,Width+6*S,Height+4*S);
+    DrawText(Digits,Gold,Point.X+R-Width-3*S,Point.Y+R-Height-2*S,nullptr,.91f*S,false);
+   };
+
+   if(Hero->bSatchelJournal)
+   {
+    const FVector2D Top=Layout.InSatchel(.12f,.29f);
+    const FVector2D Bottom=Layout.InSatchel(.88f,.78f);
+    Frame(Top.X,Top.Y,Bottom.X-Top.X,Bottom.Y-Top.Y,FLinearColor(.24f,.15f,.085f),Gold);
+    DrawText(TEXT("Field journal"),Gold,Top.X+13*S,Top.Y+9*S,nullptr,1.35f*S,false);
+    TArray<FString> Entries;
+    Hero->GetQuestJournal().ParseIntoArrayLines(Entries);
+    const float JournalScale=FMath::Min(.95f*S,float(Bottom.X-Top.X)/400.f);
+    for(int32 Index=0;Index<Entries.Num();++Index)
+     DrawText(Entries[Index],FLinearColor::White,Top.X+13*S,Top.Y+(40+19*Index)*S,nullptr,JournalScale,false);
+    Sprite(2,Layout.SupplyPocket(0),FVector2D(1.9f*Layout.ItemRadius));
+   }
+   else
+   {
+    const float R=Layout.ItemRadius;
+    const int32 WeaponSprites[]={INDEX_NONE,5,6,7};
+    for(int32 Index=0;Index<4;++Index)
+    {
+     const FVector2D Point=Layout.WeaponPocket(Index);
+     const auto Weapon=static_cast<ECryptWeapon>(Index);
+     Pocket(Point,Hero->EquippedWeapon==Weapon);
+     if(!Hero->OwnsWeapon(Weapon)) continue;
+     if(WeaponSprites[Index]!=INDEX_NONE && SatchelTexture)
+      Sprite(WeaponSprites[Index],Point,FVector2D(1.96f*R));
+     else Icon(WeaponIcon(Weapon),Point,.59f*R,Gold);
+    }
+    const int32 SupplySprites[]={2,9,8,10,11};
+    const int32 Counts[]={1,1,Hero->GetPackedObjectiveCount(1),Hero->GetPackedObjectiveCount(2),Hero->GetPackedObjectiveCount(4)};
+    for(int32 Index=0;Index<5;++Index)
+    {
+     if(Counts[Index]<=0) continue;
+     const FVector2D Point=Layout.SupplyPocket(Index);
+     Pocket(Point,false);
+     Sprite(SupplySprites[Index],Point,FVector2D(1.96f*R));
+     if(Index==1) CountBadge(Point,Hero->TreasureCount);
+     if(Index==2) CountBadge(Point,Counts[Index]);
+    }
+   }
+
+   const auto Utility=[&](FVector2D Point,EIcon Shape)
+   {
+    const float R=Layout.UtilityRadius;
+    Frame(Point.X-R,Point.Y-R,2*R,2*R,Ink,Bronze);
+    Icon(Shape,Point,.52f*R,Gold);
+   };
+   Utility(Layout.Save,EIcon::Save);
+   Utility(Layout.Restore,EIcon::Restore);
+   const FString& Message=Hero->InspectedItem.IsEmpty()?Hero->SaveStatus:Hero->InspectedItem;
+   if(!Message.IsEmpty())
+   {
+    float Width=0,Height=0;
+    GetTextSize(Message,Width,Height,nullptr,.98f*S);
+    const FVector2D Point=Layout.InSatchel(.5f,.95f);
+    DrawText(Message,Gold,Point.X-.5f*Width,Point.Y-.5f*Height,nullptr,.98f*S,false);
+   }
+  }
+  if(Hero->bInventoryOpen) return;
  }
 
  const FString Nearby=Hero->GetInteractionLabel();

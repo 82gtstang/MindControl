@@ -19,6 +19,12 @@ struct FCryptHudLayout
   Bag=FVector2D(Left,Lower);
   Spin=FVector2D(Right,Lower);
   Interact=FVector2D(110*Scale,FMath::Min(210*Scale,H*.47f));
+  SatchelSize=FVector2D(FMath::Min(W*.58f,H*1.03f),H*.88f);
+  SatchelOrigin=FVector2D(W*.433f-SatchelSize.X*.5f,H*.025f);
+  ItemRadius=FMath::Min(SatchelSize.X*.101f,SatchelSize.Y*.077f);
+  UtilityRadius=FMath::Min(ItemRadius*.76f,32.f*Scale);
+  Save=InSatchel(.18f,.95f);
+  Restore=InSatchel(.82f,.95f);
  }
 
  bool Hit(const FVector2D& Point,const FVector2D& Center) const
@@ -26,6 +32,28 @@ struct FCryptHudLayout
   return FMath::Abs(Point.X-Center.X)<=Radius && FMath::Abs(Point.Y-Center.Y)<=Radius;
  }
 
+ FVector2D InSatchel(float X,float Y) const
+ {
+  return SatchelOrigin+FVector2D(X*SatchelSize.X,Y*SatchelSize.Y);
+ }
+
+ FVector2D WeaponPocket(int32 Index) const
+ {
+  return InSatchel(.245f+.17f*Index,.44f);
+ }
+
+ FVector2D SupplyPocket(int32 Index) const
+ {
+  return InSatchel(.215f+.1425f*Index,.61f);
+ }
+
+ bool HitPocket(const FVector2D& Point,const FVector2D& Center,float HalfSize) const
+ {
+  return FMath::Abs(Point.X-Center.X)<=HalfSize && FMath::Abs(Point.Y-Center.Y)<=HalfSize;
+ }
+
+ FVector2D SatchelOrigin,SatchelSize,Save,Restore;
+ float ItemRadius,UtilityRadius;
  float Scale;
  float Radius;
  FVector2D MapOrigin,MapSize,Attack,Jump,Bag,Spin,Interact;
