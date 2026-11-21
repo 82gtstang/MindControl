@@ -1,7 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 
-enum class ECryptDamage : uint8 { Physical, Fire, Storm };
+enum class ECryptDamage : uint8 { Physical, Fire, Storm, Poison };
 
 namespace CryptCombat
 {

@@ -34,6 +34,10 @@ public:
  void ReceiveCombatHit(float Rating,float Dexterity,ECryptDamage Element);
  void CheckDungeonClear(int32 Dungeon);
  void ShowSpell(FVector From,FVector To,ECryptDamage Element,FLinearColor Color);
+ int32 GetLevel() const { return Level; }
+ int32 GetExperience() const { return Experience; }
+ int32 ExperienceNeeded() const { return 100+(Level-1)*40; }
+ FString GetArrowLabel() const;
  float GetHealth() const { return Health; }
  float GetStamina() const { return Stamina; }
  float GetMana() const { return Mana; }
@@ -96,7 +100,7 @@ protected:
  UPROPERTY() class UStaticMeshComponent* WeaponHead;
  UPROPERTY() class UStaticMeshComponent* WeaponGrip;
  class ACryptTownActor* GetInteractionTarget() const;
- int32 ActiveWeaponMask = 1;
+ int32 ActiveWeaponMask = 17;
  int32 QuestProgress[CryptQuests::Count] = {};
  uint8 QuestState[CryptQuests::Count] = {};
  void AppendEvent(const FString& Message);
@@ -108,6 +112,17 @@ protected:
  TArray<FString> EventLog;
  TArray<int32> Relics;
  int32 GearIndex=0, StockIndex=0;
+ int32 Level=1, Experience=0;
+ int32 ArrowType=0;
+ int32 Arrows[3]={30,10,10};
+ UPROPERTY() class UStaticMeshComponent* BowVisual=nullptr;
+ UPROPERTY() class UStaticMeshComponent* ArmorVisual=nullptr;
+ UPROPERTY() class UStaticMeshComponent* QuiverVisual=nullptr;
+ void AddExperience(int32 Points);
+ void UpdateGearVisuals();
+ void FireBow();
+ void IgniteBuilding(FVector Position);
+ void BuyArrows();
  int32 LootWeapon=INDEX_NONE, LootArmor=INDEX_NONE;
  int32 FindMerchant() const;
  int32 StockItem() const;

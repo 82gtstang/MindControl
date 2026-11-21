@@ -98,6 +98,9 @@ namespace CryptSettlements
   auto* Wall = Batch(Cube, Stone, true);
   auto* Tile = Batch(Cube, Dirt, true);
   auto* Timber = Batch(Cube, Oak, true);
+  Wall->ComponentTags.Add(TEXT("FlammableBuilding"));
+  Tile->ComponentTags.Add(TEXT("FlammableBuilding"));
+  Timber->ComponentTags.Add(TEXT("FlammableBuilding"));
   auto* Fabric = Batch(Cube, Cloth, false);
   auto* Windows = Batch(Cube, Glass, false);
   auto* Fence = Batch(Cube, nullptr, true);

@@ -96,6 +96,7 @@ with tempfile.TemporaryDirectory(prefix="mindcontrol-dungeon-assets-") as folder
                     str(Path(__file__).with_name("bake_dungeon_assets.py")),
                     "--", folder], check=True, timeout=240)
     names = [f"Enemy{i:02}" for i in range(12)] + [f"Loot{i:02}" for i in range(16)]
+    names += ["HeroBow", "HeroArmor", "HeroQuiver"]
     tasks = []
     for name in names:
         task = unreal.AssetImportTask()

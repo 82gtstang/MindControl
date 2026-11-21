@@ -10,6 +10,7 @@ class MINDCONTROL_API ACryptMonster : public AActor
 public:
  ACryptMonster();
  virtual void Tick(float DeltaSeconds) override;
+ void ApplyArrowEffect(bool bFire);
  bool TakeHit(float Rating,float Dexterity,ECryptDamage Element);
  void ConfigureCreature(int32 Index,int32 InDungeon=INDEX_NONE,bool bInBoss=false);
  const CryptCombat::FCreature& Stats() const { return Profile; }
@@ -27,5 +28,7 @@ protected:
  CryptCombat::FCreature Profile=CryptCombat::Creatures[0];
  int32 Dungeon=INDEX_NONE;
  float Health=30.f, Stamina=45.f, Mana=0.f, AttackTimer=0.f;
+ float EffectTimer=0.f;
+ int32 PoisonTicks=0, BurnTicks=0;
  FVector Home=FVector::ZeroVector;
 };

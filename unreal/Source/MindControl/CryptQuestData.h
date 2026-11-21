@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 
-enum class ECryptWeapon : uint8 { Unarmed, Sword, Axe, Spear };
+enum class ECryptWeapon : uint8 { Unarmed, Sword, Axe, Spear, Bow };
 
 namespace CryptQuests
 {

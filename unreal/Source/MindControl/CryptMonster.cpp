@@ -54,6 +54,27 @@ void ACryptMonster::ConfigureCreature(int32 Index,int32 InDungeon,bool bInBoss)
 void ACryptMonster::Tick(float Dt)
 {
  Super::Tick(Dt);
+ if(PoisonTicks || BurnTicks)
+ {
+  EffectTimer-=Dt;
+  if(EffectTimer<=0.f)
+  {
+   EffectTimer+=1.f;
+   if(PoisonTicks>0)
+   {
+    --PoisonTicks;
+    TakeHit(5.f,0.f,ECryptDamage::Poison);
+   }
+   if(BurnTicks>0 && Health>0.f)
+   {
+    --BurnTicks;
+    if(auto* Hero=Cast<ACryptHero>(UGameplayStatics::GetPlayerPawn(this,0)))
+     Hero->ShowSpell(GetActorLocation(),GetActorLocation()+FVector(0,0,65),ECryptDamage::Fire,FLinearColor(1.f,.28f,.035f));
+    TakeHit(7.f,0.f,ECryptDamage::Fire);
+   }
+   if(Health<=0.f) return;
+  }
+ }
  auto* Player=Cast<ACryptHero>(UGameplayStatics::GetPlayerPawn(this,0));
  if(!Player || Health<=0.f) return;
  const auto& CombatProfile=Stats();
@@ -105,8 +126,18 @@ bool ACryptMonster::TakeHit(float Rating,float Dexterity,ECryptDamage Element)
  return true;
 }
 
+void ACryptMonster::ApplyArrowEffect(bool bFire)
+{
+ if(Health<=0.f) return;
+ if(!PoisonTicks && !BurnTicks) EffectTimer=1.f;
+ if(bFire) BurnTicks=3;
+ else PoisonTicks=4;
+}
+
 void ACryptMonster::RestoreState(float SavedHealth,const FVector& Location)
 {
+ PoisonTicks=0;
+ BurnTicks=0;
  Health=FMath::Clamp(SavedHealth,0.f,Stats().Health);
  SetActorLocation(Location,false,nullptr,ETeleportType::TeleportPhysics);
  const bool bAlive=Health>0.f;

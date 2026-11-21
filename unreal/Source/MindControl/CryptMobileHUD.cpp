@@ -21,7 +21,7 @@ void ACryptMobileHUD::DrawHUD()
  const FLinearColor Gold(.96f,.79f,.44f);
  const FLinearColor Bronze(.53f,.37f,.21f,.95f);
  const FLinearColor Ink(.061f,.083f,.099f,.97f);
- enum class EIcon { Fist, Sword, Axe, Spear, Jump, Spin, Bag, Talk, Save, Restore, Castle, Town, Fire, Storm };
+ enum class EIcon { Fist, Sword, Axe, Spear, Jump, Spin, Bag, Talk, Save, Restore, Castle, Town, Fire, Storm, Bow };
  const auto Stroke=[&](FVector2D A,FVector2D B,FLinearColor Color,float Width=1.6f)
  {
   DrawLine(A.X,A.Y,B.X,B.Y,Color,Width*S);
@@ -49,6 +49,10 @@ void ACryptMobileHUD::DrawHUD()
   };
   switch(Shape)
   {
+   case EIcon::Bow:
+    Path({{-.38,-.83},{.14,-.66},{.45,-.25},{.52,0},{.45,.25},{.14,.66},{-.38,.83},{-.38,-.83}});
+    Path({{-.75,0},{.80,0},{.54,-.24},{.80,0},{.54,.24}});
+    break;
    case EIcon::Fire:
     Path({{-.32,.87},{-.76,.38},{-.62,-.18},{-.19,.12},{.11,-.91},{.67,-.19},{.78,.49},{.38,.87},{-.32,.87}});
     break;
@@ -113,6 +117,7 @@ void ACryptMobileHUD::DrawHUD()
    case ECryptWeapon::Sword:return EIcon::Sword;
    case ECryptWeapon::Axe:return EIcon::Axe;
    case ECryptWeapon::Spear:return EIcon::Spear;
+   case ECryptWeapon::Bow:return EIcon::Bow;
    default:return EIcon::Fist;
   }
  };
@@ -123,6 +128,7 @@ void ACryptMobileHUD::DrawHUD()
    case ECryptWeapon::Sword:return TEXT("Longsword");
    case ECryptWeapon::Axe:return TEXT("Battle axe");
    case ECryptWeapon::Spear:return TEXT("Spear");
+   case ECryptWeapon::Bow:return TEXT("Bow");
    default:return TEXT("Unarmed");
   }
  };
@@ -169,7 +175,7 @@ void ACryptMobileHUD::DrawHUD()
   DrawText(Label,FLinearColor::White,Center.X-Width*.5,Center.Y+R*.43f-Height*.5,nullptr,.90f*S,false);
  };
  Button(Layout.Jump,EIcon::Jump,TEXT("JUMP"));
- Button(Layout.Attack,WeaponIcon(Hero->EquippedWeapon),bArmed?TEXT("ATTACK"):TEXT("PUNCH"),Strength>.1f);
+ Button(Layout.Attack,WeaponIcon(Hero->EquippedWeapon),Hero->EquippedWeapon==ECryptWeapon::Bow?TEXT("SHOOT"):bArmed?TEXT("ATTACK"):TEXT("PUNCH"),Strength>.1f);
  Button(Layout.Spin,EIcon::Spin,TEXT("SPIN"));
  if(!Hero->bInventoryOpen)
  {
@@ -325,6 +331,15 @@ void ACryptMobileHUD::DrawHUD()
  Icon(WeaponIcon(Hero->EquippedWeapon),FVector2D(38*S,33*S),10*S,Gold);
  DrawText(WeaponName(Hero->EquippedWeapon),FLinearColor::White,55*S,17*S,nullptr,1.12f*S,false);
  DrawText(FString::Printf(TEXT("%d treasure"),Hero->TreasureCount),Gold,55*S,35*S,nullptr,.83f*S,false);
+ const float XpFraction=Hero->GetLevel()==100?1.f:
+    float(Hero->GetExperience())/Hero->ExperienceNeeded();
+ DrawRect(Ink,20*S,56*S,210*S,18*S);
+ DrawRect(FLinearColor(.24f,.44f,.66f),21*S,57*S,208*S*XpFraction,16*S);
+ DrawText(Hero->GetLevel()==100?FString(TEXT("Level 100")):
+    FString::Printf(TEXT("Level %d  |  %d / %d XP"),Hero->GetLevel(),Hero->GetExperience(),Hero->ExperienceNeeded()),
+    FLinearColor::White,28*S,58*S,nullptr,.77f*S,false);
+ if(Hero->EquippedWeapon==ECryptWeapon::Bow)
+  DrawText(Hero->GetArrowLabel(),Gold,28*S,76*S,nullptr,.79f*S,false);
 
  const float Target=Hero->bInventoryOpen?1.f:0.f;
  SatchelOpen=FMath::FInterpConstantTo(SatchelOpen,Target,GetWorld()->GetDeltaSeconds(),4.3f);
@@ -399,6 +414,9 @@ void ACryptMobileHUD::DrawHUD()
     GearControl(Layout.GearButton(1),TEXT("Next"));
     GearControl(Layout.GearButton(2),Hero->GetGearAction(),true);
     if(Hero->MerchantId!=INDEX_NONE) GearControl(Layout.GearButton(3),TEXT("Sell"));
+    GearControl(Layout.InSatchel(.19f,.79f),TEXT("Equip bow"),Hero->EquippedWeapon==ECryptWeapon::Bow);
+    GearControl(Layout.InSatchel(.39f,.79f),Hero->GetArrowLabel());
+    if(Hero->MerchantId!=INDEX_NONE) GearControl(Layout.InSatchel(.79f,.79f),TEXT("Buy arrows"));
    }
    else if(Hero->bSatchelJournal)
    {
@@ -538,7 +556,7 @@ void ACryptMobileHUD::DrawHUD()
  TArray<FString> Entries;
  Hero->GetQuestJournal().ParseIntoArrayLines(Entries);
  for(int32 Index=0;Index<Entries.Num();++Index)
-  DrawText(Entries[Index],FLinearColor::White,30*S,(63+20*Index)*S,nullptr,1.0f*S,false);
+  DrawText(Entries[Index],FLinearColor::White,30*S,(Hero->EquippedWeapon==ECryptWeapon::Bow?95+20*Index:78+20*Index)*S,nullptr,1.0f*S,false);
 
  if(!Hero->Dialogue.IsEmpty())
  {

@@ -23,6 +23,10 @@ public:
  UPROPERTY(SaveGame) TSet<int32> OpenSecrets;
  UPROPERTY(SaveGame) TArray<FString> EventLog;
  UPROPERTY(SaveGame) TArray<int32> Relics;
+ UPROPERTY(SaveGame) int32 HeroLevel=1;
+ UPROPERTY(SaveGame) int32 HeroExperience=0;
+ UPROPERTY(SaveGame) int32 ArrowType=0;
+ UPROPERTY(SaveGame) TArray<int32> Arrows;
  UPROPERTY(SaveGame) int32 LootWeapon=INDEX_NONE;
  UPROPERTY(SaveGame) int32 LootArmor=INDEX_NONE;
  UPROPERTY(SaveGame) int32 Weapons=1;

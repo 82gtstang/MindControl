@@ -208,3 +208,48 @@ for index in range(16):
             tube((x,y,.028),(x*.8,y*.8,.25+(i%3)*.07),.067,.003,stone,5)
         ellipsoid((0,0,.046),(.19,.19,.031),metal)
     export(f"Loot{index:02}")
+
+# Equipment is exported around its in-game attachment origin.
+bpy.ops.wm.read_factory_settings(use_empty=True)
+wood=material("BowWalnut",(.24,.096,.035),.74)
+leather=material("BowGrip",(.072,.045,.027),.86)
+cord=material("BowString",(.61,.52,.36),.83)
+curve=[(0,.04,-.67),(0,-.11,-.51),(0,-.21,-.28),(0,-.235,0),
+       (0,-.21,.28),(0,-.11,.51),(0,.04,.67)]
+for index,(start,stop) in enumerate(zip(curve,curve[1:])):
+    tube(start,stop,(.022,.028,.039,.040,.039,.028)[index],
+         (.028,.039,.040,.039,.028,.022)[index],wood)
+tube(curve[0],curve[-1],.006,.006,cord)
+tube((0,-.232,-.085),(0,-.232,.085),.046,.046,leather)
+for obj in bpy.context.scene.objects:
+    obj.location.y+=.232
+export("HeroBow")
+
+bpy.ops.wm.read_factory_settings(use_empty=True)
+steel=material("ValkyrieSteel",(.18,.31,.44),.34,.78)
+trim=material("ValkyrieBrass",(.50,.36,.093),.36,.69)
+breast=[(-.229,-.085,.15),(-.17,-.134,.176),(0,-.169,.162),(.17,-.134,.176),
+        (.229,-.085,.15),(.168,-.162,-.105),(0,-.199,-.160),(-.168,-.162,-.105)]
+panel(breast,steel,.037)
+for start,stop in zip(breast,breast[1:]+breast[:1]):
+    tube(start,stop,.013,.013,trim)
+for side in (-1,1):
+    ellipsoid((side*.23,.008,.139),(.108,.135,.051),steel)
+    tube((side*.20,-.09,.15),(side*.20,.091,.15),.012,.012,trim)
+box((0,-.192,-.020),(.047,.024,.082),trim)
+export("HeroArmor")
+
+bpy.ops.wm.read_factory_settings(use_empty=True)
+leather=material("QuiverHide",(.20,.082,.029),.72)
+metal=material("QuiverRim",(.51,.35,.095),.36,.66)
+shaft=material("ArrowWood",(.42,.255,.12))
+fletch=material("Fletching",(.13,.28,.38),.63)
+tube((0,0,-.29),(0,0,.26),.083,.105,leather)
+tube((0,0,.238),(0,0,.271),.108,.108,metal)
+for index in range(5):
+    angle=index*math.tau/5
+    x,y=.055*math.cos(angle),.055*math.sin(angle)
+    high=.43+index*.028
+    tube((x,y,-.15),(x,y,high),.009,.009,shaft)
+    panel([(x,y,high),(x+.037,y,high-.022),(x+.031,y,high-.105),(x,y,high-.105)],fletch)
+export("HeroQuiver")

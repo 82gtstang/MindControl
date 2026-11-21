@@ -203,6 +203,7 @@ void ACryptHero::Tick(float DeltaSeconds)
 {
  Super::Tick(DeltaSeconds);
  UpdateChart();
+ UpdateGearVisuals();
  AttackCooldown=FMath::Max(0.f,AttackCooldown-DeltaSeconds);
  HurtCooldown=FMath::Max(0.f,HurtCooldown-DeltaSeconds);
  SpellCooldown=FMath::Max(0.f,SpellCooldown-DeltaSeconds);
@@ -326,6 +327,11 @@ void ACryptHero::SpinAttack()
 void ACryptHero::StartStrike(bool bSpin)
 {
  if(AttackCooldown>0.f || bInventoryOpen) return;
+ if(EquippedWeapon==ECryptWeapon::Bow && !bSpin)
+ {
+  FireBow();
+  return;
+ }
  const float Cost=bSpin?25.f:(EquippedWeapon==ECryptWeapon::Axe?16.f:10.f);
  if(Stamina<Cost) return;
  Stamina-=Cost;
@@ -486,6 +492,7 @@ void ACryptHero::Interact()
  else if(QuestState[Index]==1 && QuestProgress[Index]>=Quest.Target)
  {
   QuestState[Index]=2;
+  AddExperience(75);
   AddTreasure(Quest.Treasure);
   ActiveWeaponMask|=1<<static_cast<int32>(Quest.Reward);
   Dialogue=FString::Printf(TEXT("%s: %s"),Quest.Giver,Quest.Thanks);
@@ -512,7 +519,7 @@ void ACryptHero::EquipWeapon(ECryptWeapon Weapon)
  LootWeapon=INDEX_NONE;
  EquippedWeapon=Weapon;
  bSwordEquipped=Weapon==ECryptWeapon::Sword;
- const bool bArmed=Weapon!=ECryptWeapon::Unarmed;
+ const bool bArmed=Weapon!=ECryptWeapon::Unarmed && Weapon!=ECryptWeapon::Bow;
  for(UStaticMeshComponent* Part : {SwordVisual,WeaponHead,WeaponGrip})
   Part->SetVisibility(bArmed);
  if(!bArmed) return;
@@ -540,9 +547,9 @@ void ACryptHero::EquipSword(bool bEquip)
 
 void ACryptHero::CycleWeapon()
 {
- for(int32 Offset=1;Offset<=4;++Offset)
+ for(int32 Offset=1;Offset<=5;++Offset)
  {
-  const auto Weapon=static_cast<ECryptWeapon>((static_cast<int32>(EquippedWeapon)+Offset)%4);
+  const auto Weapon=static_cast<ECryptWeapon>((static_cast<int32>(EquippedWeapon)+Offset)%5);
   if(OwnsWeapon(Weapon))
   {
    EquipWeapon(Weapon);
@@ -555,7 +562,7 @@ float ACryptHero::WeaponDamage() const
 {
  const float Base=EquippedWeapon==ECryptWeapon::Axe?29.f:EquippedWeapon==ECryptWeapon::Spear?21.f:
   EquippedWeapon==ECryptWeapon::Unarmed?13.f:24.f;
- return Base+GearGrade(LootWeapon)*1.4f;
+ return (EquippedWeapon==ECryptWeapon::Bow?22.f:Base)+GearGrade(LootWeapon)*1.4f+(Level-1)*.6f;
 }
 
 float ACryptHero::WeaponReach() const
@@ -590,6 +597,10 @@ void ACryptHero::SaveProgress()
  Save->OpenSecrets=OpenSecrets;
  Save->EventLog=EventLog;
  Save->Relics=Relics;
+ Save->HeroLevel=Level;
+ Save->HeroExperience=Experience;
+ Save->ArrowType=ArrowType;
+ Save->Arrows.Append(Arrows,3);
  Save->LootWeapon=LootWeapon;
  Save->LootArmor=LootArmor;
  Save->HeroHealth=Health;
@@ -658,9 +669,20 @@ void ACryptHero::RestoreProgress()
  SpellCooldown=0.f;
  HurtCooldown=1.f;
  RecoveryDelay=0.f;
- ActiveWeaponMask=(Save->Weapons&15)|1;
+ Level=FMath::Clamp(Save->HeroLevel,1,100);
+ Experience=FMath::Clamp(Save->HeroExperience,0,ExperienceNeeded()-1);
+ ArrowType=FMath::Clamp(Save->ArrowType,0,2);
+ if(Save->Arrows.Num()==3)
+  for(int32 Index=0;Index<3;++Index) Arrows[Index]=FMath::Clamp(Save->Arrows[Index],0,999);
+ else
+ {
+  Arrows[0]=30;
+  Arrows[1]=10;
+  Arrows[2]=10;
+ }
+ ActiveWeaponMask=(Save->Weapons&31)|17;
  EquipWeapon(ECryptWeapon::Unarmed);
- if(Save->Equipped<=static_cast<uint8>(ECryptWeapon::Spear))
+ if(Save->Equipped<=static_cast<uint8>(ECryptWeapon::Bow))
   EquipWeapon(static_cast<ECryptWeapon>(Save->Equipped));
  LootWeapon=Relics.Contains(Save->LootWeapon)?Save->LootWeapon:INDEX_NONE;
  LootArmor=Relics.Contains(Save->LootArmor)?Save->LootArmor:INDEX_NONE;
@@ -723,6 +745,22 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
   {
    bGearPage=!bGearPage;
    bSatchelJournal=false;
+   return;
+  }
+  if(bGearPage && Layout.HitGear(TouchPoint,Layout.InSatchel(.19f,.79f)))
+  {
+   EquipWeapon(ECryptWeapon::Bow);
+   InspectedItem=TEXT("Bow equipped.");
+   return;
+  }
+  if(bGearPage && Layout.HitGear(TouchPoint,Layout.InSatchel(.39f,.79f)))
+  {
+   ArrowType=(ArrowType+1)%3;
+   return;
+  }
+  if(bGearPage && MerchantId!=INDEX_NONE && Layout.HitGear(TouchPoint,Layout.InSatchel(.79f,.79f)))
+  {
+   BuyArrows();
    return;
   }
   if(bGearPage && !Layout.HitPocket(TouchPoint,Layout.Save,Layout.UtilityRadius) &&
@@ -865,12 +903,12 @@ void ACryptHero::TouchReleased(ETouchIndex::Type FingerIndex,FVector Location)
 
 float ACryptHero::GetArmorRating() const
 {
- return 4.f+CompletedDungeonCount(ClearedDungeons)*1.5f+GearGrade(LootArmor)*1.25f;
+ return 4.f+CompletedDungeonCount(ClearedDungeons)*1.5f+(Level-1)*.55f+GearGrade(LootArmor)*1.25f;
 }
 
 float ACryptHero::GetDexterity() const
 {
- return 18.f+CompletedDungeonCount(ClearedDungeons)*.8f;
+ return 18.f+CompletedDungeonCount(ClearedDungeons)*.8f+(Level-1)*.5f;
 }
 
 FString ACryptHero::GetCombatTarget() const
@@ -938,6 +976,7 @@ void ACryptHero::CheckDungeonClear(int32 Dungeon)
  for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
   if(It->GetDungeon()==Dungeon && It->GetRemainingHealth()>0.f) return;
  ClearedDungeons|=1u<<Dungeon;
+ AddExperience(220);
  AddTreasure(10+Dungeon*2);
  Health=100.f;
  Stamina=100.f;
@@ -1143,6 +1182,7 @@ void ACryptHero::ReportEnemyHit(ACryptMonster* Enemy,float Damage)
   AppendEvent(FString::Printf(TEXT("Hit %s for %d."),Enemy->Stats().Name,FMath::CeilToInt(Damage)));
   return;
  }
+ AddExperience(Enemy->IsBoss()?150:35);
  const int32 Item=FMath::RandRange(0,RelicCount-1);
  Relics.Add(Item);
  AppendEvent(FString::Printf(TEXT("%s defeated. Looted %s."),Enemy->Stats().Name,*RelicName(Item)));
@@ -1323,4 +1363,160 @@ void ACryptHero::SellGear()
  GearIndex=FMath::Clamp(GearIndex,0,FMath::Max(0,Relics.Num()-1));
  InspectedItem=FString::Printf(TEXT("Sold %s for %d."),*RelicName(Item),Price);
  AppendEvent(InspectedItem);
+}
+
+void ACryptHero::AddExperience(int32 Points)
+{
+ if(Level>=100) return;
+ Experience+=Points;
+ while(Level<100 && Experience>=ExperienceNeeded())
+ {
+  Experience-=ExperienceNeeded();
+  ++Level;
+  AppendEvent(FString::Printf(TEXT("Reached level %d."),Level));
+ }
+ if(Level==100) Experience=0;
+}
+
+FString ACryptHero::GetArrowLabel() const
+{
+ const TCHAR* Names[]={TEXT("Standard"),TEXT("Poison"),TEXT("Fire")};
+ return FString::Printf(TEXT("%s: %d"),Names[ArrowType],Arrows[ArrowType]);
+}
+
+void ACryptHero::BuyArrows()
+{
+ constexpr int32 Bundle=12;
+ const int32 Price=ArrowType==0?4:9;
+ if(MerchantId==INDEX_NONE || FindMerchant()!=MerchantId) return;
+ if(TreasureCount<Price || Arrows[ArrowType]>999-Bundle)
+ {
+  InspectedItem=TreasureCount<Price?TEXT("Not enough treasure."):TEXT("Quiver is full.");
+  return;
+ }
+ TreasureCount-=Price;
+ Arrows[ArrowType]+=Bundle;
+ InspectedItem=FString::Printf(TEXT("Bought %d arrows. %s"),Bundle,*GetArrowLabel());
+ AppendEvent(InspectedItem);
+}
+
+void ACryptHero::UpdateGearVisuals()
+{
+ const auto Update=[&](UStaticMeshComponent*& Part,const TCHAR* Name,bool bShown,FVector At,FRotator Rotation)
+ {
+  if(!bShown)
+  {
+   if(Part) Part->SetVisibility(false);
+   return;
+  }
+  if(!Part)
+  {
+   const FString Path=FString::Printf(TEXT("/Game/Characters/Town/DungeonAssets/%s.%s"),Name,Name);
+   auto* Asset=LoadObject<UStaticMesh>(nullptr,*Path);
+   if(!Asset) return;
+   Part=NewObject<UStaticMeshComponent>(this);
+   AddInstanceComponent(Part);
+   Part->SetupAttachment(GetRootComponent());
+   Part->SetMobility(EComponentMobility::Movable);
+   Part->SetStaticMesh(Asset);
+   Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+   Part->RegisterComponent();
+  }
+  Part->SetVisibility(true);
+  Part->SetWorldLocationAndRotation(At,Rotation);
+ };
+ const FVector Forward=GetActorForwardVector();
+ const FRotator Facing(0,GetActorRotation().Yaw-90,0);
+ const FVector Chest=GetMesh()->DoesSocketExist(TEXT("chest"))?GetMesh()->GetSocketLocation(TEXT("chest")):
+  GetActorLocation()+FVector(0,0,38);
+ const FVector Grip=GetMesh()->DoesSocketExist(TEXT("hand_L"))?GetMesh()->GetSocketLocation(TEXT("hand_L")):
+  GetActorLocation()+Forward*36-GetActorRightVector()*28;
+ const bool bBow=EquippedWeapon==ECryptWeapon::Bow;
+ Update(BowVisual,TEXT("HeroBow"),bBow,Grip,FRotator(-20,Facing.Yaw,0));
+ Update(ArmorVisual,TEXT("HeroArmor"),LootArmor!=INDEX_NONE,Chest+Forward*8,Facing);
+ Update(QuiverVisual,TEXT("HeroQuiver"),bBow,Chest-Forward*21+GetActorRightVector()*13,FRotator(0,Facing.Yaw,23));
+}
+
+void ACryptHero::FireBow()
+{
+ if(Arrows[ArrowType]<=0)
+ {
+  AppendEvent(TEXT("No arrows of this type."));
+  AttackCooldown=.5f;
+  return;
+ }
+ if(Stamina<8.f) return;
+ constexpr double Range=2150.;
+ const FVector Start=GetActorLocation()+FVector(0,0,26);
+ const FVector Aim=GetActorForwardVector();
+ ACryptMonster* Target=nullptr;
+ double Nearest=FMath::Square(Range);
+ for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
+ {
+  if(It->GetRemainingHealth()<=0.f) continue;
+  const FVector Offset=It->GetActorLocation()-Start;
+  const double Distance=Offset.SizeSquared();
+  if(Distance<Nearest && FVector::DotProduct(Aim,Offset.GetSafeNormal())>.89 && CombatVisible(this,*It))
+  {
+   Target=*It;
+   Nearest=Distance;
+  }
+ }
+ const FVector Desired=Target?Target->GetActorLocation():Start+Aim*Range;
+ FCollisionQueryParams Query;
+ Query.AddIgnoredActor(this);
+ FHitResult Hit;
+ const bool bHit=GetWorld()->LineTraceSingleByChannel(Hit,Start,Desired,ECC_Visibility,Query);
+ const FVector Impact=bHit?Hit.ImpactPoint:Desired;
+ const int32 FiredType=ArrowType;
+ --Arrows[FiredType];
+ Stamina-=8.f;
+ AttackCooldown=.62f;
+ PlayOceanAction(OceanAttack,.50f);
+
+ if(auto* Streak=GetWorld()->SpawnActor<AStaticMeshActor>((Start+Impact)*.5,(Impact-Start).Rotation()))
+ {
+  auto* Mesh=Streak->GetStaticMeshComponent();
+  Mesh->SetMobility(EComponentMobility::Movable);
+  Mesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube")));
+  Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+  Streak->SetActorScale3D(FVector(FMath::Max(.02,FVector::Dist(Start,Impact)/100.),.018,.018));
+  Streak->SetLifeSpan(.095f);
+ }
+ ACryptMonster* Victim=bHit?Cast<ACryptMonster>(Hit.GetActor()):Target;
+ if(Victim && Victim->TakeHit(WeaponDamage(),GetDexterity(),ECryptDamage::Physical) && FiredType!=0)
+ {
+  Victim->ApplyArrowEffect(FiredType==2);
+  if(FiredType==2) ShowSpell(Impact-FVector(0,0,18),Impact+FVector(0,0,42),
+      ECryptDamage::Fire,FLinearColor(1.f,.24f,.035f));
+  AppendEvent(FiredType==2?TEXT("Fire arrow ignited the enemy."):TEXT("Poison arrow struck the enemy."));
+ }
+ if(FiredType==2 && bHit && Hit.GetComponent() && Hit.GetComponent()->ComponentHasTag(TEXT("FlammableBuilding")))
+  IgniteBuilding(Impact+Hit.ImpactNormal*8.);
+}
+
+void ACryptHero::IgniteBuilding(FVector Position)
+{
+ auto* Egg=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+ auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+ for(int32 Layer=0;Layer<5;++Layer)
+ {
+  const FVector Point=Position+FVector((Layer%2?1:-1)*8,Layer*7-14,Layer*15);
+  auto* Flame=GetWorld()->SpawnActor<AStaticMeshActor>(Point,FRotator(0,Layer*36,Layer*5));
+  if(!Flame) continue;
+  auto* Visual=Flame->GetStaticMeshComponent();
+  Visual->SetMobility(EComponentMobility::Movable);
+  Visual->SetStaticMesh(Egg);
+  Visual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+  Visual->SetCastShadow(false);
+  Flame->SetActorScale3D(FVector(.19,.22,.42));
+  if(Base)
+  {
+   auto* Glow=UMaterialInstanceDynamic::Create(Base,Flame);
+   Glow->SetVectorParameterValue(TEXT("Color"),FLinearColor(1.f,.20f+.09f*Layer,.028f));
+   Visual->SetMaterial(0,Glow);
+  }
+  Flame->SetLifeSpan(7.f+Layer*.25f);
+ }
+ AppendEvent(TEXT("Fire arrow set the building alight."));
 }
