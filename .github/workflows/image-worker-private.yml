@@ -55,13 +55,9 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $cli = 'C:\Program Files\Tailscale\tailscale.exe'
-          $connected = $false
-          for ($i=0; $i -lt 100; $i++) {
-            $state = & $cli status --json | ConvertFrom-Json
-            if ($state.BackendState -eq 'Running') { $connected = $true; break }
-            Start-Sleep 6
-          }
-          if (!$connected) { throw 'Device sign-in is still pending.' }
+          $state = & $cli status --json | ConvertFrom-Json
+          Write-Host "Tailscale backend state in the runner session: $($state.BackendState)"
+          if ($state.BackendState -ne 'Running') { throw 'The runner session does not have an active Tailscale connection.' }
           $serveStatus = (& $cli serve status --json | Out-String) | ConvertFrom-Json
           $hostName = $state.Self.DNSName.TrimEnd('.')
           $target = "http://127.0.0.1:8787"
@@ -72,8 +68,18 @@ jobs:
           if ($serveStatus.AllowFunnel -and ($serveStatus.AllowFunnel.PSObject.Properties | Where-Object Value -eq $true)) {
             throw 'Existing public Funnel configuration detected. Review it before adding the private worker.'
           }
-          & $cli serve --bg --https=443 $target
-          if ($LASTEXITCODE -ne 0) { throw 'Could not enable Tailscale Serve. Confirm HTTPS certificates are enabled in the tailnet.' }
+          $output = Join-Path $env:RUNNER_TEMP 'private-serve.out'
+          $errors = Join-Path $env:RUNNER_TEMP 'private-serve.err'
+          $serve = Start-Process $cli -ArgumentList @('serve','--bg','--https=443',$target) -NoNewWindow -RedirectStandardOutput $output -RedirectStandardError $errors -PassThru
+          if (!$serve.WaitForExit(20000)) {
+            Stop-Process -Id $serve.Id -Force
+            throw 'Tailscale Serve did not finish within 20 seconds.'
+          }
+          if ($serve.ExitCode -ne 0) {
+            $details = (Get-Content $output,$errors -Raw -ErrorAction SilentlyContinue) -join ' '
+            $details = $details -replace 'https?://[^\s]+','[URL redacted]'
+            throw "Tailscale Serve setup failed: $details"
+          }
           $verified = $false
           try {
             Invoke-WebRequest -Uri "https://$hostName/generate-unreal" -Method Post -UseBasicParsing -TimeoutSec 25 | Out-Null
