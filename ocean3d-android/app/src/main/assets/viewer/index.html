@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' blob: data:">
+<title>FBX preview</title>
+<style>
+  html,body { margin:0; height:100%; overflow:hidden; background:#151a23; color:#f0f3fb; font:15px system-ui,sans-serif }
+  canvas { display:block; width:100%; height:100%; touch-action:none }
+  aside { position:absolute; right:12px; bottom:14px; left:12px; display:flex; align-items:center; justify-content:space-between; gap:12px; pointer-events:none }
+  #status { padding:9px 12px; border-radius:12px; background:#222a38 }
+  button { pointer-events:auto; color:#f0f3fb; background:#2f415c; border:0; border-radius:12px; min-height:44px; padding:0 14px; font:inherit }
+</style>
+<aside><span id="status" role="status">Opening FBX…</span><button id="reset" hidden>Reset view</button></aside>
+<script defer src="viewer.js"></script>
+</html>

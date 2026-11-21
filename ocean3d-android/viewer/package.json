@@ -1,0 +1,13 @@
+{
+  "name": "image-to-unreal-viewer",
+  "private": true,
+  "scripts": {
+    "build": "esbuild viewer.js --bundle --minify --legal-comments=inline --outfile=../app/src/main/assets/viewer/viewer.js"
+  },
+  "dependencies": {
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}

@@ -31,3 +31,12 @@ select **Generate Unreal FBX**. Save the ZIP. Extract it on the Unreal PC and
 import `Character.fbx` as a Static Mesh. The ZIP also contains the color
 texture and import instructions. Rig the mesh separately for character
 animation.
+
+## Preview and local builds
+
+After generation, tap **Preview 3D model** to open the FBX on the device. Drag
+to rotate, pinch to zoom, or select **Reset view** to frame the model again.
+The preview uses files already present in the cached ZIP.
+
+Before a local Gradle build, run `npm --prefix viewer ci` and
+`npm --prefix viewer run build` from the `ocean3d-android` directory.

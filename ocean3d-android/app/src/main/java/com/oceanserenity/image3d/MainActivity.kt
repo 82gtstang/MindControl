@@ -24,6 +24,7 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var generate: Button
     private lateinit var save: Button
+    private lateinit var preview: Button
     private val bundle by lazy { File(cacheDir, "UnrealCharacter.zip") }
 
     override fun onCreate(state: Bundle?) {
@@ -64,6 +65,12 @@ class MainActivity : Activity() {
         page.addView(generate)
         save = Button(this).apply { text = "Save Unreal ZIP"; isEnabled = bundle.isFile; setOnClickListener { chooseSaveLocation() } }
         page.addView(save)
+        preview = Button(this).apply {
+            text = "Preview 3D model"
+            isEnabled = bundle.isFile
+            setOnClickListener { showFbxPreview(bundle) }
+        }
+        page.addView(preview)
         status = TextView(this).apply {
             text = if (image == null) "Choose a character photo to start." else "Photo selected."
             textSize = 16f
@@ -128,11 +135,12 @@ class MainActivity : Activity() {
         getPreferences(MODE_PRIVATE).edit().putString("server", base).apply()
         generate.isEnabled = false
         save.isEnabled = false
+        preview.isEnabled = false
         status.text = "Generating the mesh and texture…"
         thread {
             val message = try {
                 download(url, key, uri)
-                "FBX and texture ready. Tap Save Unreal ZIP."
+                "FBX and texture ready. Preview the model or save the Unreal ZIP."
             } catch (e: Exception) {
                 "Generation failed: ${e.message}"
             }
@@ -140,6 +148,7 @@ class MainActivity : Activity() {
                 status.text = message
                 generate.isEnabled = true
                 save.isEnabled = bundle.isFile
+                preview.isEnabled = bundle.isFile
             }
         }
     }
