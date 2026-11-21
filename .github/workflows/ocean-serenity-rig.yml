@@ -27,7 +27,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $source = Join-Path $env:GITHUB_WORKSPACE 'assets\ocean3d\OceanSerenity.fbx'
-          $expected = '17961213cb95ed4ccd211c643065d986f2339b28a462ecf850b1a54293fe592f'
+          $expected = 'c016fc05ee9572e19ce2e119c7ea91aab235d1e4c79705011cdeae974c9730da'
           if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ine $expected) {
             throw 'Ocean Serenity FBX checksum mismatch'
           }

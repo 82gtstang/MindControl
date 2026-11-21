@@ -9,6 +9,7 @@ on:
   push:
     branches: [unreal5-prototype, diagnostic/android-landscape-startup]
     paths:
+      - 'assets/ocean3d/OceanSerenity.fbx'
       - 'unreal/**'
       - 'tools/import_ocean_serenity.py'
       - 'tools/rig_ocean_serenity.py'
