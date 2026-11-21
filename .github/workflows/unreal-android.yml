@@ -11,6 +11,7 @@ on:
     paths:
       - 'assets/ocean3d/OceanSerenity.fbx'
       - 'unreal/**'
+      - 'tools/animate_valkyrie.py'
       - 'tools/import_ocean_serenity.py'
       - 'tools/rig_ocean_serenity.py'
       - 'tools/preview_ocean_serenity.py'
