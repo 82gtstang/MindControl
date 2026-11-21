@@ -183,10 +183,16 @@ jobs:
           )
           $process = Start-Process -FilePath $editor -ArgumentList $arguments -Wait -PassThru
           $mesh = Join-Path $env:GITHUB_WORKSPACE 'unreal\Content\Characters\Town\Townsperson.uasset'
-          if ($process.ExitCode -ne 0 -or !(Test-Path $mesh) -or !(Select-String -Path $log -SimpleMatch 'TOWNSPERSON_IMPORT_SUCCESS' -Quiet)) {
+          $raw = if (Test-Path $log) { Get-Content $log -Raw } else { '' }
+          $imported = $process.ExitCode -eq 0 -and $raw.Contains('TOWNSPERSON_IMPORT_SUCCESS')
+          $saved = $raw.Contains('Moving output files for package: /Game/Characters/Town/Townsperson') -and $raw.Contains('Townsperson.uasset')
+          $knownCrash = $raw.Contains('Assertion failed: CurrentApplication.IsValid()') -and $raw.Contains('UnrealEditor-ContentBrowser.dll')
+          $savedBeforeKnownCrash = $process.ExitCode -eq 3 -and $saved -and $knownCrash
+          if (!(Test-Path $mesh) -or (Get-Item $mesh).Length -lt 4096 -or !($imported -or $savedBeforeKnownCrash)) {
             if (Test-Path $log) { Get-Content $log -Tail 120 }
             throw "Townsperson import failed with exit code $($process.ExitCode)"
           }
+          Write-Host "Verified townsperson mesh saved: $mesh"
       - name: Import environment materials
         shell: powershell
         run: |

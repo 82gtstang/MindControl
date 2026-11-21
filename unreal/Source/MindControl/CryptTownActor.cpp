@@ -12,9 +12,6 @@ ACryptTownActor::ACryptTownActor()
  Person = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Person"));
  Person->SetupAttachment(VisualRoot);
  Person->SetCollisionEnabled(ECollisionEnabled::NoCollision);
- static ConstructorHelpers::FObjectFinder<UStaticMesh> TownspersonMesh(
-  TEXT("/Game/Characters/Town/Townsperson.Townsperson"));
- Person->SetStaticMesh(TownspersonMesh.Object);
  Person->SetVisibility(false);
  Marker = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Objective"));
  Marker->SetupAttachment(VisualRoot);
@@ -28,7 +25,10 @@ void ACryptTownActor::Configure(int32 InQuestIndex, bool bInQuestGiver)
 {
  QuestIndex = InQuestIndex;
  bQuestGiver = bInQuestGiver;
- UStaticMesh* Mesh = bQuestGiver ? Person->GetStaticMesh() : nullptr;
+ UStaticMesh* Mesh = bQuestGiver
+  ? LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Characters/Town/Townsperson.Townsperson"))
+  : nullptr;
+ Person->SetStaticMesh(Mesh);
  Person->SetVisibility(Mesh != nullptr);
  Marker->SetVisibility(Mesh == nullptr);
  if(Mesh)
