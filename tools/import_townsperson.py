@@ -71,4 +71,24 @@ with tempfile.TemporaryDirectory(prefix="mindcontrol-settlers-") as folder:
     if missing:
         raise RuntimeError(f"NPC frames failed to import: {missing}")
 unreal.EditorAssetLibrary.save_directory(destination, only_if_is_dirty=False)
+with tempfile.TemporaryDirectory(prefix="mindcontrol-entrances-") as folder:
+    subprocess.run([str(blender), "-b", "-t", "2", "--python-exit-code", "1", "--python",
+                    str(Path(__file__).with_name("bake_dungeon_entrances.py")),
+                    "--", folder], check=True, timeout=120)
+    tasks = []
+    for name in ("CaveMouth", "CliffTomb", "ForestBasin", "RuneGate"):
+        task = unreal.AssetImportTask()
+        task.filename = str(Path(folder) / f"{name}.fbx")
+        task.destination_path = destination + "/Entrances"
+        task.destination_name = name
+        task.automated = True
+        task.replace_existing = True
+        task.save = True
+        task.options = options
+        tasks.append(task)
+    unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(tasks)
+    missing = [item.destination_name for item in tasks if not item.imported_object_paths]
+    if missing:
+        raise RuntimeError(f"Entrance models failed to import: {missing}")
+unreal.EditorAssetLibrary.save_directory(destination + "/Entrances", only_if_is_dirty=False)
 print("SETTLEMENT_PEOPLE_IMPORT_SUCCESS")

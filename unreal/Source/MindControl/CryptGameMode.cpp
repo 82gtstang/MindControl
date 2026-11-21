@@ -301,6 +301,22 @@ void ACryptGameMode::BeginPlay()
    const bool bCutStone=Index==0 || Index==2 || Index==5 || Index==9;
    const bool bRunes=Index==4 || Index==9;
    const bool bSinkhole=Index==8;
+   const TCHAR* MeshName=bSinkhole?TEXT("ForestBasin"):bRunes?TEXT("RuneGate"):
+    bCutStone?TEXT("CliffTomb"):TEXT("CaveMouth");
+   const FString MeshPath=FString::Printf(TEXT("/Game/Characters/Town/Entrances/%s.%s"),MeshName,MeshName);
+   auto* Sculpt=LoadObject<UStaticMesh>(nullptr,*MeshPath);
+   if(Sculpt)
+   {
+    if(auto* RockFace=GetWorld()->SpawnActor<AStaticMeshActor>(Origin,FRotator(0,90,0)))
+    {
+     auto* Visual=RockFace->GetStaticMeshComponent();
+     Visual->SetMobility(EComponentMobility::Movable);
+     Visual->SetStaticMesh(Sculpt);
+     Visual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+     if(Stone) Visual->SetMaterial(0,Stone);
+     Visual->SetMobility(EComponentMobility::Static);
+    }
+   }
    FRandomStream Random(317+Index*97);
    const auto Rock=[&](FVector Offset,FVector Size)
    {
@@ -345,7 +361,7 @@ void ACryptGameMode::BeginPlay()
     for(int32 R=0;R<11;++R)
     {
      const double Angle=FMath::DegreesToRadians(-128.+R*25.6);
-     Rock(FVector(30+FMath::Cos(Angle)*167,FMath::Sin(Angle)*188,28),
+     if(!Sculpt) Rock(FVector(30+FMath::Cos(Angle)*167,FMath::Sin(Angle)*188,28),
       FVector(138,128,109));
     }
     Block(Origin+FVector(36,0,-4),FVector(216,216,18),Brush);
@@ -358,7 +374,7 @@ void ACryptGameMode::BeginPlay()
      Rock(FVector(190,Side*307,151),FVector(670,364,439));
      Rock(FVector(230,Side*457,250),FVector(583,285,438));
      Block(Origin+FVector(-3,Side*146,121),FVector(126,61,255),Stone);
-     Block(Origin+FVector(-37,Side*187,109),FVector(104,35,229),Stone);
+     if(!Sculpt) Block(Origin+FVector(-37,Side*187,109),FVector(104,35,229),Stone);
      Block(Origin+FVector(-17,Side*151,18),FVector(151,85,41),Stone);
     }
     Block(Origin+FVector(-3,0,263),FVector(160,354,52),Stone);
