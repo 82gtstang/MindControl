@@ -40,7 +40,11 @@ namespace
   float Height=-20.f+South*(WestHill+EastHill-Valley)+North;
   const float Edge=FMath::Max(FMath::Abs(X)/5600.f,FMath::Abs(Y)/5100.f);
   const float CoreDistance=FMath::Max(FMath::Abs(X),FMath::Abs(Y));
-  Height+=760.f*FMath::SmoothStep(.96f,1.16f,Edge)*(1.f-FMath::SmoothStep(6300.f,12200.f,CoreDistance));
+  // Leave the village and its northern exit open through the old inner rim.
+  const float TownOpening=(1.f-FMath::SmoothStep(1900.f,3500.f,
+    FMath::Abs(X-static_cast<float>(CryptWorld::Town.X))))*FMath::SmoothStep(2500.f,4300.f,Y);
+  Height+=760.f*FMath::SmoothStep(.96f,1.16f,Edge)*
+   (1.f-FMath::SmoothStep(6300.f,12200.f,CoreDistance))*(1.f-TownOpening);
   const float Wilder=FMath::SmoothStep(6600.f,12200.f,CoreDistance);
   const float Ridges=610.f*FMath::Sin((X+.32f*Y)/5900.f)+420.f*FMath::Cos((Y-.24f*X)/4600.f);
   const float Rolling=175.f*FMath::Sin(X/1960.f)*FMath::Cos(Y/2420.f);
@@ -77,9 +81,9 @@ namespace
    *(1.f-FMath::SmoothStep(245.f,3250.f,FMath::Abs(Y)));
   const float CastleGround=(1.f-FMath::SmoothStep(840.f,1450.f,FMath::Abs(X-static_cast<float>(CryptWorld::Castle.X))))
    *(1.f-FMath::SmoothStep(1270.f,2050.f,FMath::Abs(Y)));
-  const float TownGround=(1.f-FMath::SmoothStep(1450.f,2080.f,FMath::Abs(X-2400.f)))
-   *(1.f-FMath::SmoothStep(1430.f,2100.f,FMath::Abs(Y-CryptWorld::TownNorth)));
-  const float TownRoad=(1.f-FMath::SmoothStep(250.f,700.f,FMath::Abs(X-CryptWorld::TownRoadX)))
+  const float TownGround=(1.f-FMath::SmoothStep(1750.f,3200.f,FMath::Abs(X-static_cast<float>(CryptWorld::Town.X))))
+   *(1.f-FMath::SmoothStep(1680.f,3500.f,FMath::Abs(Y-CryptWorld::TownNorth)));
+  const float TownRoad=(1.f-FMath::SmoothStep(325.f,1100.f,FMath::Abs(X-CryptWorld::TownRoadX)))
    *(1.f-FMath::SmoothStep(CryptWorld::TownNorth,CryptWorld::TownNorth+550.f,Y))
    *FMath::SmoothStep(-380.f,0.f,Y);
   const float RuinGround=(1.f-FMath::SmoothStep(1900.f,2400.f,FMath::Abs(X-(1000.f+CryptWorld::RuinOffsetX))))
@@ -173,7 +177,7 @@ namespace
   for(float X=-CryptWorld::HalfWorldX;X<=CryptWorld::HalfWorldX;X+=1500.f) Eastings.Add(X);
   for(float Y=-CryptWorld::HalfWorldY;Y<=CryptWorld::HalfWorldY;Y+=1500.f) Northings.Add(Y);
   for(float X=-6600;X<=CryptWorld::East;X+=100) Eastings.AddUnique(X);
-  for(float Y=-6000;Y<=6000;Y+=100) Northings.AddUnique(Y);
+  for(float Y=-6000;Y<=CryptWorld::TownNorth+3600.f;Y+=100) Northings.AddUnique(Y);
   Eastings.AddUnique(-24900);
   Northings.AddUnique(-5850);
   Northings.AddUnique(5850);
