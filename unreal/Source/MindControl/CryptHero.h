@@ -132,6 +132,19 @@ protected:
  bool bAimWasHidden=false;
  int32 BowAimFinger=INDEX_NONE;
  FRotator PreAimRotation=FRotator::ZeroRotator;
+ struct FFlameVisual
+ {
+  FVector Start=FVector::ZeroVector;
+  FVector End=FVector::ZeroVector;
+  TArray<TWeakObjectPtr<class AStaticMeshActor>> Parts;
+  double Radius=0.;
+  float Age=0.f;
+  float Duration=0.f;
+  bool bRising=false;
+ };
+ TArray<FFlameVisual> Flames;
+ void SpawnFlame(FVector Start,FVector End,double Radius,float Duration,bool bRising=false,float Delay=0.f,bool bArrow=false);
+ void UpdateFlames(float DeltaSeconds);
  void IgniteBuilding(FVector Position);
  void BuyArrows();
  int32 LootWeapon=INDEX_NONE, LootArmor=INDEX_NONE;

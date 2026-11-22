@@ -175,7 +175,8 @@ void ACryptMobileHUD::DrawHUD()
   DrawText(Label,FLinearColor::White,Center.X-Width*.5,Center.Y+R*.43f-Height*.5,nullptr,.90f*S,false);
  };
  Button(Layout.Jump,EIcon::Jump,TEXT("JUMP"));
- Button(Layout.Attack,WeaponIcon(Hero->EquippedWeapon),Hero->EquippedWeapon==ECryptWeapon::Bow?(Hero->IsBowAiming()?TEXT("RELEASE"):TEXT("SHOOT")):bArmed?TEXT("ATTACK"):TEXT("PUNCH"),Strength>.1f);
+ const bool bBow=Hero->EquippedWeapon==ECryptWeapon::Bow;
+ if(!bBow) Button(Layout.Attack,WeaponIcon(Hero->EquippedWeapon),bArmed?TEXT("ATTACK"):TEXT("PUNCH"),Strength>.1f);
  Button(Layout.Spin,EIcon::Spin,TEXT("SPIN"));
  if(!Hero->bInventoryOpen)
  {
@@ -203,7 +204,15 @@ void ACryptMobileHUD::DrawHUD()
  if(!Hero->bInventoryOpen)
  {
   const EIcon ThumbIcons[]={EIcon::Jump,WeaponIcon(Hero->EquippedWeapon),EIcon::Spin,EIcon::Fire,EIcon::Storm};
-  Icon(ThumbIcons[int32(Hero->GetThumbAction())],Layout.RightThumbCenter,17*S,Gold);
+  Icon(bBow?EIcon::Bow:ThumbIcons[int32(Hero->GetThumbAction())],Layout.RightThumbCenter,17*S,Gold);
+  if(bBow)
+  {
+   const TCHAR* BowHint=Hero->IsBowAiming()?TEXT("RELEASE TO SHOOT"):TEXT("HOLD TO AIM");
+   float HintWidth=0,HintHeight=0;
+   GetTextSize(BowHint,HintWidth,HintHeight,nullptr,.76f*S);
+   DrawText(BowHint,Gold,Layout.RightThumbCenter.X-HintWidth*.5f,
+    Layout.RightThumbCenter.Y-Layout.RightThumbRadius-HintHeight-4*S,nullptr,.76f*S,false);
+  }
  }
 
 

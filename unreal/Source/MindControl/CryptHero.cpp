@@ -202,6 +202,7 @@ void ACryptHero::BeginPlay()
 void ACryptHero::Tick(float DeltaSeconds)
 {
  Super::Tick(DeltaSeconds);
+ UpdateFlames(DeltaSeconds);
  UpdateChart();
  UpdateGearVisuals();
  AttackCooldown=FMath::Max(0.f,AttackCooldown-DeltaSeconds);
@@ -937,17 +938,18 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
  }
  if(FVector2D::Distance(TouchPoint,Layout.RightThumbCenter)<=Layout.RightThumbRadius)
  {
+  if(EquippedWeapon==ECryptWeapon::Bow)
+  {
+   BeginBowAim(int32(FingerIndex));
+   return;
+  }
   ThumbFinger=int32(FingerIndex);
   ThumbStart=TouchPoint;
   ThumbStartTime=GetWorld()->GetRealTimeSeconds();
   return;
  }
  if(Layout.Hit(TouchPoint,Layout.Jump)) Jump();
- else if(Layout.Hit(TouchPoint,Layout.Attack))
- {
-  if(EquippedWeapon==ECryptWeapon::Bow) BeginBowAim(int32(FingerIndex));
-  else Attack();
- }
+ else if(EquippedWeapon!=ECryptWeapon::Bow && Layout.Hit(TouchPoint,Layout.Attack)) Attack();
  else if(Layout.Hit(TouchPoint,Layout.Spin)) SpinAttack();
 }
 
@@ -1088,8 +1090,13 @@ void ACryptHero::CheckDungeonClear(int32 Dungeon)
 
 void ACryptHero::ShowSpell(FVector From,FVector To,ECryptDamage Element,FLinearColor Color)
 {
- auto* EffectMesh=LoadObject<UStaticMesh>(nullptr,Element==ECryptDamage::Fire
-  ?TEXT("/Engine/BasicShapes/Sphere.Sphere"):TEXT("/Engine/BasicShapes/Cube.Cube"));
+ if(Element==ECryptDamage::Fire)
+ {
+  SpawnFlame(From,To,28.,.50f);
+  SpawnFlame(To,To+FVector(0,0,36),24.,.68f,true,.50f);
+  return;
+ }
+ auto* EffectMesh=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));
  auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
  const auto Part=[&](FVector Position,FVector Scale,FRotator Rotation,float Duration)
  {
@@ -1109,12 +1116,6 @@ void ACryptHero::ShowSpell(FVector From,FVector To,ECryptDamage Element,FLinearC
   Effect->SetActorScale3D(Scale);
   Effect->SetLifeSpan(Duration);
  };
- if(Element==ECryptDamage::Fire)
- {
-  for(int32 N=1;N<=5;++N)
-   Part(FMath::Lerp(From,To,N*.2),FVector(.22+N*.08),FRotator::ZeroRotator,.12f+N*.045f);
-  return;
- }
  const FVector Side=FVector::CrossProduct((To-From).GetSafeNormal(),FVector::UpVector);
  FVector Start=From;
  for(int32 N=1;N<=6;++N)
@@ -1574,7 +1575,9 @@ void ACryptHero::FireBow(bool bPrecise,FVector ShotStart,FVector ShotDirection)
  AttackCooldown=.62f;
  PlayOceanAction(OceanAttack,.50f);
 
- if(auto* Streak=GetWorld()->SpawnActor<AStaticMeshActor>((Start+Impact)*.5,(Impact-Start).Rotation()))
+ if(FiredType==2)
+  SpawnFlame(Start,Impact,9.,.35f,false,0.f,true);
+ else if(auto* Streak=GetWorld()->SpawnActor<AStaticMeshActor>((Start+Impact)*.5,(Impact-Start).Rotation()))
  {
   auto* ArrowTrail=Streak->GetStaticMeshComponent();
   ArrowTrail->SetMobility(EComponentMobility::Movable);
@@ -1587,8 +1590,7 @@ void ACryptHero::FireBow(bool bPrecise,FVector ShotStart,FVector ShotDirection)
  if(Victim && Victim->TakeHit(WeaponDamage(),GetDexterity(),ECryptDamage::Physical) && FiredType!=0)
  {
   Victim->ApplyArrowEffect(FiredType==2);
-  if(FiredType==2) ShowSpell(Impact-FVector(0,0,18),Impact+FVector(0,0,42),
-      ECryptDamage::Fire,FLinearColor(1.f,.24f,.035f));
+  if(FiredType==2) SpawnFlame(Impact,Impact+FVector(0,0,28),13.,.55f,true,.35f);
   AppendEvent(FiredType==2?TEXT("Fire arrow ignited the enemy."):TEXT("Poison arrow struck the enemy."));
  }
  if(FiredType==2 && bHit && Hit.GetComponent() && Hit.GetComponent()->ComponentHasTag(TEXT("FlammableBuilding")))
@@ -1597,26 +1599,98 @@ void ACryptHero::FireBow(bool bPrecise,FVector ShotStart,FVector ShotDirection)
 
 void ACryptHero::IgniteBuilding(FVector Position)
 {
- auto* Egg=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));
- auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
- for(int32 Layer=0;Layer<5;++Layer)
- {
-  const FVector Point=Position+FVector((Layer%2?1:-1)*8,Layer*7-14,Layer*15);
-  auto* Flame=GetWorld()->SpawnActor<AStaticMeshActor>(Point,FRotator(0,Layer*36,Layer*5));
-  if(!Flame) continue;
-  auto* Visual=Flame->GetStaticMeshComponent();
-  Visual->SetMobility(EComponentMobility::Movable);
-  Visual->SetStaticMesh(Egg);
-  Visual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-  Visual->SetCastShadow(false);
-  Flame->SetActorScale3D(FVector(.19,.22,.42));
-  if(Base)
-  {
-   auto* Glow=UMaterialInstanceDynamic::Create(Base,Flame);
-   Glow->SetVectorParameterValue(TEXT("Color"),FLinearColor(1.f,.20f+.09f*Layer,.028f));
-   Visual->SetMaterial(0,Glow);
-  }
-  Flame->SetLifeSpan(7.f+Layer*.25f);
- }
+ SpawnFlame(Position,Position+FVector(0,0,55),32.,7.f,true,.35f);
  AppendEvent(TEXT("Fire arrow set the building alight."));
+}
+
+void ACryptHero::SpawnFlame(FVector Start,FVector End,double Radius,float Duration,bool bRising,float Delay,bool bArrow)
+{
+ auto* Cone=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cone.Cone"));
+ auto* Cube=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));
+ auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+ if(!Cone || !Cube || !Base) return;
+
+ auto& Flame=Flames.AddDefaulted_GetRef();
+ Flame.Start=Start;
+ Flame.End=End;
+ Flame.Radius=Radius;
+ Flame.Duration=Duration;
+ Flame.Age=-Delay;
+ Flame.bRising=bRising;
+ for(int32 Index=0;Index<12+int32(bArrow);++Index)
+ {
+  const bool bShaft=Index==12;
+  const bool bEmber=Index>=7 && !bShaft;
+  auto* Part=GetWorld()->SpawnActor<AStaticMeshActor>(Start,FRotator::ZeroRotator);
+  Flame.Parts.Add(Part);
+  if(!Part) continue;
+  Part->SetActorHiddenInGame(true);
+  Part->SetLifeSpan(Delay+Duration+.10f);
+  auto* Mesh=Part->GetStaticMeshComponent();
+  Mesh->SetMobility(EComponentMobility::Movable);
+  Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+  Mesh->SetCastShadow(false);
+  Mesh->SetStaticMesh(bEmber || bShaft ? Cube : Cone);
+  auto* Tint=UMaterialInstanceDynamic::Create(Base,Part);
+  const FLinearColor Color=bShaft?FLinearColor(.25f,.12f,.045f)
+   :Index<2?FLinearColor(1.f,.89f,.42f)
+   :Index<5?FLinearColor(1.f,.45f,.065f):FLinearColor(.92f,.14f,.016f);
+  Tint->SetVectorParameterValue(TEXT("Color"),Color);
+  Mesh->SetMaterial(0,Tint);
+ }
+}
+
+void ACryptHero::UpdateFlames(float DeltaSeconds)
+{
+ for(int32 Effect=Flames.Num()-1;Effect>=0;--Effect)
+ {
+  auto& Flame=Flames[Effect];
+  Flame.Age+=DeltaSeconds;
+  if(Flame.Age<0.f) continue;
+  if(Flame.Age>=Flame.Duration)
+  {
+   for(const auto& Part : Flame.Parts)
+    if(Part.IsValid()) Part->Destroy();
+   Flames.RemoveAtSwap(Effect);
+   continue;
+  }
+  const double Progress=Flame.Age/Flame.Duration;
+  const FVector Travel=(Flame.End-Flame.Start).GetSafeNormal();
+  const FVector Axis=Flame.bRising?FVector::UpVector:-Travel;
+  FVector Side,Across;
+  Axis.FindBestAxisVectors(Side,Across);
+  const FVector Head=Flame.bRising?Flame.Start:FMath::Lerp(Flame.Start,Flame.End,Progress);
+  const double Fade=FMath::Min(1.,(1.-Progress)*6.);
+  for(int32 Index=0;Index<Flame.Parts.Num();++Index)
+  {
+   auto* Part=Flame.Parts[Index].Get();
+   if(!Part) continue;
+   Part->SetActorHiddenInGame(false);
+   if(Index==12)
+   {
+    Part->SetActorLocationAndRotation(Head-Travel*17.,Travel.Rotation());
+    Part->SetActorScale3D(FVector(.36,.015,.015));
+    continue;
+   }
+   const double Phase=Index*2.39996;
+   const FVector Radial=FMath::Cos(Phase)*Side+FMath::Sin(Phase)*Across;
+   const double Flutter=.78+.22*FMath::Sin(Flame.Age*(19.+Index*1.7)+Phase);
+   const double Radius=Flame.Radius*Fade;
+   if(Index>=7)
+   {
+    const double Drift=FMath::Frac(Flame.Age*(4.5+Index*.21)+Index*.137);
+    Part->SetActorLocationAndRotation(Head+Axis*(Radius*5.*Drift)+Radial*Radius*(.3+Drift),
+       FRotationMatrix::MakeFromZ(Axis+Radial*.4).Rotator());
+    Part->SetActorScale3D(FVector(.12,.12,.33)*(Radius/100.)*(1.-.7*Drift));
+    continue;
+   }
+   const double Width=Radius*(Index<2?.38:.50)*Flutter;
+   const double Length=Radius*(Index<2?2.2:2.8)*Flutter;
+   const FVector Sway=Across*(.14*FMath::Sin(Flame.Age*14.+Phase));
+   const FVector Direction=(Axis+Radial*(Index<2?.08:.38)+Sway).GetSafeNormal();
+   const FVector TongueBase=Head+Radial*Radius*(Index<2?.12:.28);
+   Part->SetActorLocationAndRotation(TongueBase+Direction*Length*.42,FRotationMatrix::MakeFromZ(Direction).Rotator());
+   Part->SetActorScale3D(FVector(Width,Width,Length)/100.);
+  }
+ }
 }
