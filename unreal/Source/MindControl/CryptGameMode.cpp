@@ -75,7 +75,7 @@ namespace
   const float EastRoad=FMath::SmoothStep(5100.f,5500.f,X)
    *(1.f-FMath::SmoothStep(CryptWorld::MainRoadEnd,CryptWorld::MainRoadEnd+600.f,X))
    *(1.f-FMath::SmoothStep(235.f,730.f,FMath::Abs(Y)));
-  const float CastleGround=(1.f-FMath::SmoothStep(840.f,1450.f,FMath::Abs(X-CryptWorld::Castle.X)))
+  const float CastleGround=(1.f-FMath::SmoothStep(840.f,1450.f,FMath::Abs(X-static_cast<float>(CryptWorld::Castle.X))))
    *(1.f-FMath::SmoothStep(1270.f,2050.f,FMath::Abs(Y)));
   return FMath::Lerp(Height,-20.f,FMath::Max3(WestRoad,EastRoad,CastleGround));
  }
