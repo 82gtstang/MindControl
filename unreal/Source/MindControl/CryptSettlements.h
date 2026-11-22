@@ -14,6 +14,7 @@
 
 namespace CryptSettlements
 {
+ inline constexpr float DistrictNorth=3900.f;
  struct FResident
  {
   TArray<FVector> Route;
@@ -105,7 +106,6 @@ namespace CryptSettlements
   Timber->ComponentTags.Add(TEXT("FlammableBuilding"));
   auto* Fabric = Batch(Cube, Cloth, false);
   auto* Windows = Batch(Cube, Glass, false);
-  auto* Fence = Batch(Cube, nullptr, true);
   auto* Trim = Batch(Cube, Oak, false);
   auto* Sill = Batch(Cube, Stone, false);
   auto* PlanterLeaves = Batch(Sphere, Color(FLinearColor(.17f,.31f,.09f)), false);
@@ -137,13 +137,8 @@ namespace CryptSettlements
   constexpr float StartX = -8850;
   constexpr float MinX = -24900;
   constexpr float HalfY = 5850;
-  Box(GroundBatch, FVector((EntryX + MinX) / 2, 0, Ground - 42), FVector(EntryX - MinX, HalfY * 2, 84));
-  Box(Road, FVector((EntryX + MinX) / 2, 0, Ground + 2), FVector(EntryX - MinX, 410, 12));
-  for (const float Y : {-HalfY, HalfY})
-   Box(Fence, FVector((EntryX + MinX) / 2, Y, Ground + 180), FVector(EntryX - MinX, 24, 360));
-  Box(Fence, FVector(MinX, 0, Ground + 180), FVector(24, HalfY * 2, 360));
-  for (const float Y : {-3070.f,3070.f})
-   Box(Fence, FVector(EntryX - 4, Y, Ground + 180), FVector(20, 5550, 360));
+  Box(GroundBatch, FVector((EntryX + MinX) / 2, DistrictNorth, Ground - 42), FVector(EntryX - MinX, HalfY * 2, 84));
+  Box(Road, FVector((EntryX + MinX) / 2, DistrictNorth, Ground + 2), FVector(EntryX - MinX, 410, 12));
 
   // Buildings face their local street. Door and window bays are actual openings.
   const auto Building = [&](FVector Base, float W, float D, int32 Style, bool bWork, float Yaw = 0.f)
@@ -281,11 +276,11 @@ namespace CryptSettlements
   for (int32 Column = 0; Column < 5; ++Column)
   {
    const float X = StartX - Column * Spacing;
-   Box(Road, FVector(X+1100,0,Ground+4), FVector(340,HalfY*2,16));
+   Box(Road, FVector(X+1100,DistrictNorth,Ground+4), FVector(340,HalfY*2,16));
    for (int32 Row = 0; Row < 4; ++Row)
    {
     const int32 Town = Column * 4 + Row;
-    const float Y = (Row - 1.5f) * 2640;
+    const float Y = DistrictNorth + (Row - 1.5f) * 2640;
     const float Street = Y - 480;
     SpawnMerchant(World,FVector(X+490,Street+118,Ground+16),Town);
     Box(Timber,FVector(X+870,Street+210,Ground+81),FVector(13,13,162));

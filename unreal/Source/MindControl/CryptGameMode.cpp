@@ -54,7 +54,7 @@ namespace
   if(X<-6600.f)
   {
    const float ByTown=(1.f-FMath::SmoothStep(24900.f,27600.f,-X))*
-      (1.f-FMath::SmoothStep(5850.f,8400.f,FMath::Abs(Y)));
+      (1.f-FMath::SmoothStep(5850.f,8400.f,FMath::Abs(Y-CryptSettlements::DistrictNorth)));
    Height=FMath::Lerp(Height,-33.f,ByTown);
   }
   for(const auto& River : CryptWorld::Rivers)
@@ -76,6 +76,9 @@ namespace
   }
   const float WestRoad = FMath::SmoothStep(5500.f, 6520.f, -X)
    * (1.f - FMath::SmoothStep(235.f, 575.f, FMath::Abs(Y)));
+  const float DistrictRoad=(1.f-FMath::SmoothStep(280.f,1350.f,FMath::Abs(X+6400.f)))
+   *FMath::SmoothStep(-500.f,0.f,Y)
+   *(1.f-FMath::SmoothStep(CryptSettlements::DistrictNorth,CryptSettlements::DistrictNorth+900.f,Y));
   const float EastRoad=FMath::SmoothStep(5100.f,5500.f,X)
    *(1.f-FMath::SmoothStep(CryptWorld::MainRoadEnd,CryptWorld::MainRoadEnd+600.f,X))
    *(1.f-FMath::SmoothStep(245.f,3250.f,FMath::Abs(Y)));
@@ -88,7 +91,7 @@ namespace
    *FMath::SmoothStep(-380.f,0.f,Y);
   const float RuinGround=(1.f-FMath::SmoothStep(1900.f,2400.f,FMath::Abs(X-(1000.f+CryptWorld::RuinOffsetX))))
    *(1.f-FMath::SmoothStep(1580.f,2170.f,FMath::Abs(Y-3200.f)));
-  return FMath::Lerp(Height,-20.f,FMath::Max3(FMath::Max3(WestRoad,EastRoad,CastleGround),
+  return FMath::Lerp(Height,-20.f,FMath::Max3(FMath::Max3(FMath::Max(WestRoad,DistrictRoad),EastRoad,CastleGround),
    FMath::Max(TownGround,TownRoad),RuinGround));
  }
 
@@ -179,8 +182,8 @@ namespace
   for(float X=-6600;X<=CryptWorld::East;X+=100) Eastings.AddUnique(X);
   for(float Y=-6000;Y<=CryptWorld::TownNorth+3600.f;Y+=100) Northings.AddUnique(Y);
   Eastings.AddUnique(-24900);
-  Northings.AddUnique(-5850);
-  Northings.AddUnique(5850);
+  Northings.AddUnique(CryptSettlements::DistrictNorth-5850.f);
+  Northings.AddUnique(CryptSettlements::DistrictNorth+5850.f);
   for(const auto& P : CryptDungeons::EntrancePoints)
   {
    for(float X=P.X-300;X<=P.X+300;X+=100) Eastings.AddUnique(X);
@@ -234,7 +237,7 @@ namespace
     {
      const float TileX=(X+Eastings[Column+1])*.5f;
      const float TileY=(Y+Northings[Row+1])*.5f;
-     if((TileX>-24900 && TileX<-6600 && FMath::Abs(TileY)<5850) ||
+     if((TileX>-24900 && TileX<-6600 && FMath::Abs(TileY-CryptSettlements::DistrictNorth)<5850) ||
         CryptDungeons::IsRampCell(TileX,TileY)) continue;
      const int32 A=Row*Stride+Column;
      const int32 B=A+1;
@@ -305,7 +308,7 @@ namespace
   const auto Plant=[&](float X,float Y)
   {
    if((X>-6800.f && X<CryptWorld::MainRoadEnd+400.f && FMath::Abs(Y)<590.f) ||
-      (X>-25200.f && X<-6300.f && FMath::Abs(Y)<6200.f) ||
+      (X>-25200.f && X<-6300.f && FMath::Abs(Y-CryptSettlements::DistrictNorth)<6200.f) ||
       (X>510.f && X<4280.f && Y>CryptWorld::TownNorth-1770.f && Y<CryptWorld::TownNorth+1700.f) ||
       (FMath::Abs(X-CryptWorld::TownRoadX)<550.f && Y>0 && Y<CryptWorld::TownNorth) ||
       (FMath::Abs(X-CryptWorld::Castle.X)<1460. && FMath::Abs(Y)<1750.f) ||
@@ -552,6 +555,9 @@ void ACryptGameMode::BeginPlay()
   PlaceBlock(FVector(X,Y,75),FVector(1.2f,1.2f,2.5f+(i%3)),FRotator::ZeroRotator,Stone);
  }
  PlaceBlock(FVector(-6048,0,-24),FVector(11.04,4,.10),FRotator::ZeroRotator,RoadMaterial);
+ const float DistrictNorth=CryptSettlements::DistrictNorth;
+ PlaceBlock(FVector(-6400,DistrictNorth*.5f,-12),FVector(4.f,DistrictNorth/100.f,.14f),
+  FRotator::ZeroRotator,RoadMaterial);
  const FVector TownOffset(0,CryptWorld::TownNorth,0);
  const FVector RuinOffset(CryptWorld::RuinOffsetX,0,0);
  const float TownRoad=CryptWorld::TownRoadX;
