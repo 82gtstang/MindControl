@@ -13,6 +13,8 @@ on:
       - 'unreal/**'
       - 'tools/animate_valkyrie.py'
       - 'tools/import_ocean_serenity.py'
+      - 'tools/bake_dungeon_assets.py'
+      - 'tools/import_townsperson.py'
       - 'tools/rig_ocean_serenity.py'
       - 'tools/preview_ocean_serenity.py'
       - '.github/workflows/ocean-serenity-rig.yml'
