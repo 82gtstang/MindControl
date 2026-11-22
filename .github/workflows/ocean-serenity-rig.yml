@@ -2,7 +2,7 @@ name: Ocean Serenity experimental auto-rig
 on:
   workflow_dispatch:
   push:
-    branches: [diagnostic/android-landscape-startup]
+    branches: [diagnostic/android-landscape-startup, diagnostic/terrain-android-rebuild]
     paths:
       - 'assets/ocean3d/OceanSerenity.fbx'
       - 'tools/rig_ocean_serenity.py'
