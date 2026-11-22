@@ -325,6 +325,13 @@ jobs:
               Copy-Item $_.FullName $destination -Force -ErrorAction SilentlyContinue
             }
           }
+          # Preserve UnrealEditor-Cmd logs that are outside AutomationTool's log tree.
+          foreach ($fileName in @('Townsperson-UnrealImport.log', 'MindControl-EnvironmentImport.log')) {
+            $source = Join-Path $env:RUNNER_TEMP $fileName
+            if (Test-Path $source) {
+              Copy-Item -LiteralPath $source -Destination (Join-Path $diagnostics $fileName) -Force
+            }
+          }
       - name: Upload Unreal diagnostic logs
         if: failure() && inputs.play_bundle != true
         uses: actions/upload-artifact@v4
