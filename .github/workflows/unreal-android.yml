@@ -1,11 +1,6 @@
 name: Unreal Engine 5.7 Android APK
 on:
   workflow_dispatch:
-    inputs:
-      play_bundle:
-        description: Build a signed Google Play bundle
-        type: boolean
-        default: false
   push:
     branches: [unreal5-prototype, diagnostic/android-landscape-startup, diagnostic/terrain-android-rebuild]
     paths:
@@ -41,7 +36,6 @@ jobs:
           exit 1
   package-android:
     needs: wait-for-rig
-    environment: ${{ inputs.play_bundle && 'MindControl' || '' }}
     runs-on: [self-hosted, Windows, X64, unreal-5-7, android-sdk]
     timeout-minutes: 240
     permissions:
@@ -233,7 +227,6 @@ jobs:
             throw "Environment material import failed with exit code $($process.ExitCode)"
           }
       - name: Build and package Android APK
-        if: inputs.play_bundle != true
         shell: powershell
         run: |
           $uat = Join-Path $env:UE_ROOT 'Engine\Build\BatchFiles\RunUAT.bat'
@@ -242,74 +235,8 @@ jobs:
           if (!(Test-Path $project)) { throw "Unreal project not found: $project" }
           & $uat BuildCookRun -project="$project" -noP4 -platform=Android -clientconfig=Development -nocompileeditor -unattended -build -cook -CookDir="$env:GITHUB_WORKSPACE\unreal\Content\Environment\MindControl" -stage -pak -package -archive -archivedirectory="$output" -utf8output
           if ($LASTEXITCODE -ne 0) { throw "Unreal BuildCookRun failed with exit code $LASTEXITCODE" }
-      - name: Build and verify signed Google Play bundle
-        if: inputs.play_bundle == true
-        shell: powershell
-        env:
-          PLAY_UPLOAD_KEYSTORE: ${{ secrets.PLAY_UPLOAD_KEYSTORE }}
-          PLAY_UPLOAD_STORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_STORE_PASSWORD }}
-          PLAY_UPLOAD_KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
-          PLAY_UPLOAD_KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          foreach ($name in @('PLAY_UPLOAD_KEYSTORE', 'PLAY_UPLOAD_STORE_PASSWORD', 'PLAY_UPLOAD_KEY_ALIAS', 'PLAY_UPLOAD_KEY_PASSWORD')) {
-            if (-not [Environment]::GetEnvironmentVariable($name)) {
-              throw "Configure the $name GitHub Actions secret for the Play build."
-            }
-          }
-          if (!(Test-Path (Join-Path $env:ANDROID_HOME 'platforms\android-36\android.jar'))) {
-            throw 'Install Android SDK Platform 36 on the Windows runner.'
-          }
-          $uat = Join-Path $env:UE_ROOT 'Engine\Build\BatchFiles\RunUAT.bat'
-          $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\MindControl.uproject'
-          $output = Join-Path $env:GITHUB_WORKSPACE 'unreal\PackagedAndroid'
-          $config = Join-Path $env:GITHUB_WORKSPACE 'unreal\Config\DefaultEngine.ini'
-          $key = Join-Path $env:GITHUB_WORKSPACE 'unreal\Build\Android\MindControlPlayUpload.keystore'
-          $original = [IO.File]::ReadAllBytes($config)
-          $utf8 = New-Object System.Text.UTF8Encoding($false)
-          if (Test-Path $key) { throw 'The temporary Play keystore filename is already in use.' }
-          try {
-            New-Item -ItemType Directory -Path (Split-Path $key) -Force | Out-Null
-            [IO.File]::WriteAllBytes($key, [Convert]::FromBase64String($env:PLAY_UPLOAD_KEYSTORE))
-            $ini = $utf8.GetString($original)
-            if ($ini -notmatch '(?m)^TargetSDKVersion=\d+') { throw 'Android target SDK setting is missing.' }
-            $ini = $ini -replace '(?m)^TargetSDKVersion=\d+', 'TargetSDKVersion=36'
-            $ini += @"
-
-          [/Script/AndroidPlatformEditor.AndroidSDKSettings]
-          SDKAPILevel=android-36
-
-          [/Script/AndroidRuntimeSettings.AndroidRuntimeSettings]
-          bEnableBundle=True
-          KeyStore=MindControlPlayUpload.keystore
-          KeyAlias=$env:PLAY_UPLOAD_KEY_ALIAS
-          KeyStorePassword=$env:PLAY_UPLOAD_STORE_PASSWORD
-          KeyPassword=$env:PLAY_UPLOAD_KEY_PASSWORD
-          "@
-            [IO.File]::WriteAllText($config, $ini, $utf8)
-            & $uat BuildCookRun -project="$project" -noP4 -platform=Android -clientconfig=Shipping -distribution -nocompileeditor -unattended -build -cook -CookDir="$env:GITHUB_WORKSPACE\unreal\Content\Environment\MindControl" -stage -pak -package -archive -archivedirectory="$output" -utf8output
-            if ($LASTEXITCODE -ne 0) { throw "Unreal Play bundle build failed with exit code $LASTEXITCODE" }
-            $bundles = @(Get-ChildItem -LiteralPath $output -Filter '*.aab' -Recurse)
-            if ($bundles.Count -ne 1) { throw "Expected one Play bundle, found $($bundles.Count)." }
-            $jarsigner = if ($env:JAVA_HOME) { Join-Path $env:JAVA_HOME 'bin\jarsigner.exe' } else { (Get-Command jarsigner.exe).Source }
-            $verification = & $jarsigner '-J-Duser.language=en' -verify $bundles[0].FullName
-            if ($LASTEXITCODE -ne 0 -or $verification -notcontains 'jar verified.') { throw 'Play bundle signature verification failed.' }
-          } finally {
-            [IO.File]::WriteAllBytes($config, $original)
-            if (Test-Path $key) { Remove-Item -LiteralPath $key -Force }
-            $gradle = Join-Path $env:GITHUB_WORKSPACE 'unreal\Intermediate\Android'
-            if (Test-Path $gradle) { Remove-Item -LiteralPath $gradle -Recurse -Force }
-          }
-      - name: Upload signed Google Play bundle
-        if: inputs.play_bundle == true
-        uses: actions/upload-artifact@v4
-        with:
-          retention-days: 3
-          name: MindControl-Google-Play-AAB
-          path: unreal/PackagedAndroid/**/*.aab
-          if-no-files-found: error
       - name: Preserve Unreal build logs on failure
-        if: failure() && inputs.play_bundle != true
+        if: failure()
         shell: powershell
         run: |
           $diagnostics = Join-Path $env:GITHUB_WORKSPACE 'unreal-build-diagnostics'
@@ -324,7 +251,7 @@ jobs:
             }
           }
       - name: Upload Unreal diagnostic logs
-        if: failure() && inputs.play_bundle != true
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           retention-days: 3
@@ -332,14 +259,12 @@ jobs:
           path: unreal-build-diagnostics/**
           if-no-files-found: warn
       - name: Verify APK exists
-        if: inputs.play_bundle != true
         shell: powershell
         run: |
           $apks = @(Get-ChildItem -Path 'unreal\PackagedAndroid' -Filter '*.apk' -Recurse -ErrorAction SilentlyContinue)
           if ($apks.Count -eq 0) { throw 'No APK was produced.' }
           $apks | ForEach-Object { Write-Host $_.FullName }
       - name: Check GitHub artifact storage DNS
-        if: inputs.play_bundle != true
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -361,7 +286,6 @@ jobs:
             if (-not $resolved) { Write-Warning "DNS still unavailable for $hostName; artifact upload may fail. Check runner DNS, firewall, and proxy." }
           }
       - name: Upload Android APK
-        if: inputs.play_bundle != true
         id: upload_apk
         continue-on-error: true
         uses: actions/upload-artifact@v4
