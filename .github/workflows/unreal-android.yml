@@ -7,7 +7,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [unreal5-prototype, diagnostic/android-landscape-startup]
+    branches: [unreal5-prototype, diagnostic/android-landscape-startup, diagnostic/terrain-android-rebuild]
     paths:
       - 'assets/ocean3d/OceanSerenity.fbx'
       - 'unreal/**'
