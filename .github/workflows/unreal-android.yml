@@ -41,6 +41,7 @@ jobs:
           exit 1
   package-android:
     needs: wait-for-rig
+    environment: ${{ inputs.play_bundle && 'MindControl' || '' }}
     runs-on: [self-hosted, Windows, X64, unreal-5-7, android-sdk]
     timeout-minutes: 240
     permissions:
