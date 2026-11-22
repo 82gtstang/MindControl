@@ -166,8 +166,13 @@ return normalize(float3(u * Detail, v * Detail, 1.0));
     for name in names:
         mesh = assets.load_asset(f"{directory}/{name}")
         for index, slot in enumerate(mesh.get_editor_property("static_materials")):
-            imported_name = str(slot.imported_material_slot_name)
-            slot_name = str(slot.material_slot_name)
+            # UE 5.7 StaticMaterial exposes material_slot_name, but not always
+            # imported_material_slot_name in its Python binding.
+            slot_name = str(slot.get_editor_property("material_slot_name"))
+            try:
+                imported_name = str(slot.get_editor_property("imported_material_slot_name"))
+            except (AttributeError, RuntimeError):
+                imported_name = slot_name
             key = next((key for key in (imported_name, slot_name) if key in profiles), None)
             if key is None:
                 raise RuntimeError(f"Unknown enemy surface {name}/{imported_name}/{slot_name}")
