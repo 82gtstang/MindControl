@@ -1626,17 +1626,17 @@ void ACryptHero::SpawnFlame(FVector Start,FVector End,double Radius,float Durati
   if(!Part) continue;
   Part->SetActorHiddenInGame(true);
   Part->SetLifeSpan(Delay+Duration+.10f);
-  auto* Mesh=Part->GetStaticMeshComponent();
-  Mesh->SetMobility(EComponentMobility::Movable);
-  Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-  Mesh->SetCastShadow(false);
-  Mesh->SetStaticMesh(bEmber || bShaft ? Cube : Cone);
+  auto* FlameMesh=Part->GetStaticMeshComponent();
+  FlameMesh->SetMobility(EComponentMobility::Movable);
+  FlameMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+  FlameMesh->SetCastShadow(false);
+  FlameMesh->SetStaticMesh(bEmber || bShaft ? Cube : Cone);
   auto* Tint=UMaterialInstanceDynamic::Create(Base,Part);
   const FLinearColor Color=bShaft?FLinearColor(.25f,.12f,.045f)
    :Index<2?FLinearColor(1.f,.89f,.42f)
    :Index<5?FLinearColor(1.f,.45f,.065f):FLinearColor(.92f,.14f,.016f);
   Tint->SetVectorParameterValue(TEXT("Color"),Color);
-  Mesh->SetMaterial(0,Tint);
+  FlameMesh->SetMaterial(0,Tint);
  }
 }
 
