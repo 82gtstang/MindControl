@@ -117,30 +117,94 @@ return Texture2DSample(Stone, StoneSampler, coordinates.yz).rgb * weights.x
     MATERIALS.recompile_material(asset)
 
 
+def animated_expression(asset, uv, time, code, with_splash=False):
+    expression = node(asset, unreal.MaterialExpressionCustom)
+    expression.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    sources = [(uv, "", "UV"), (time, "", "Clock")]
+    if with_splash:
+        sources.append((node(asset, unreal.MaterialExpressionVertexColor), "R", "Splash"))
+    inputs = []
+    for _, _, label in sources:
+        item = unreal.CustomInput()
+        item.set_editor_property("input_name", label)
+        inputs.append(item)
+    expression.set_editor_property("inputs", inputs)
+    expression.set_editor_property("code", code)
+    for source, outlet, label in sources:
+        connect(source, outlet, expression, label)
+    return expression
+
+
 def water_material(name, waterfall):
     asset = material(name)
     uv = node(asset, unreal.MaterialExpressionTextureCoordinate)
     time = node(asset, unreal.MaterialExpressionTime)
-    waves = node(asset, unreal.MaterialExpressionCustom)
-    waves.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
-    inputs = []
-    for label in ("UV", "Clock"):
+    speed = "2.45" if waterfall else "0.59"
+    waves = animated_expression(asset, uv, time, """
+float2 p = float2(UV.x, UV.y - Clock * SPEED);
+float bend = sin(p.y * 7.1 + p.x * 8.0) * 0.13;
+float ribbons = sin((p.x + bend) * 31.0 + p.y * 3.3);
+float ripples = sin(p.y * 22.0 + p.x * 16.0 + ribbons * 0.9);
+float grain = sin(p.y * 60.0 - p.x * 56.0) * sin(p.y * 37.0 + p.x * 65.0);
+float edge = smoothstep(0.72, 0.98, abs(p.x * 2.0 - 1.0));
+float strands = smoothstep(0.52, 0.94, ribbons * 0.58 + ripples * 0.28 + grain * 0.14 + WHITEWATER);
+float bankFoam = edge * smoothstep(0.12, 0.86, ripples * 0.55 + grain * 0.30 + 0.25);
+float plunge = Splash * smoothstep(-0.2, 0.82, ribbons * 0.36 + ripples * 0.30 + grain * 0.34 + 0.2);
+float3 body = lerp(float3(0.019,0.083,0.099), float3(0.085,0.25,0.29),
+    saturate(0.43 + ribbons * 0.19 + ripples * 0.12 + edge * 0.2));
+return lerp(body, float3(0.74,0.86,0.84), saturate(strands * FOAM + bankFoam * 0.44 + plunge * 0.82));
+""".replace("SPEED", speed).replace("WHITEWATER", "0.29" if waterfall else "0.0").replace(
+        "FOAM", "0.79" if waterfall else "0.36"), with_splash=True)
+    normal = animated_expression(asset, uv, time, """
+float y = UV.y - Clock * SPEED;
+float crosswave = cos(UV.x * 24.0 + y * 7.5) * 0.16;
+float longitudinal = cos(y * 21.0 + UV.x * 12.0) * 0.13;
+float fine = cos(y * 43.0 - UV.x * 26.0) * 0.052;
+return normalize(float3(crosswave - fine, longitudinal + fine, 1.0));
+""".replace("SPEED", speed))
+    roughness = node(asset, unreal.MaterialExpressionConstant)
+    roughness.set_editor_property("r", 0.35 if waterfall else 0.22)
+    output(waves, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    output(normal, "", unreal.MaterialProperty.MP_NORMAL)
+    output(roughness, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    MATERIALS.recompile_material(asset)
+
+
+def overworld_material(grass, dirt, stone, cobble):
+    asset = material("M_Overworld")
+    position = node(asset, unreal.MaterialExpressionWorldPosition)
+    masks = node(asset, unreal.MaterialExpressionVertexColor)
+    inputs = [(position, "", "P"), (masks, "", "Masks")]
+    for image, label in ((grass, "Grass"), (dirt, "Dirt"), (stone, "Rock"), (cobble, "Gravel")):
+        sampler = node(asset, unreal.MaterialExpressionTextureObject)
+        sampler.set_editor_property("texture", image)
+        inputs.append((sampler, "", label))
+    blend = node(asset, unreal.MaterialExpressionCustom)
+    blend.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    custom_inputs = []
+    for _, _, label in inputs:
         item = unreal.CustomInput()
         item.set_editor_property("input_name", label)
-        inputs.append(item)
-    waves.set_editor_property("inputs", inputs)
-    waves.set_editor_property("code", """
-float t = Clock * SPEED;
-float crossflow = sin(UV.x * 47.0 + UV.y * 6.0 - t);
-float ripples = sin(UV.y * 10.0 - t * 2.0 + crossflow * 0.65);
-float edge = smoothstep(0.72, 0.99, abs(UV.x * 2.0 - 1.0));
-float foam = smoothstep(0.72, 0.98, ripples * 0.58 + crossflow * 0.42 + BIAS);
-float3 body = lerp(float3(0.022, 0.095, 0.12), float3(0.10, 0.33, 0.36), ripples * 0.28 + 0.45);
-return lerp(body, float3(0.72, 0.87, 0.85), saturate(foam * 0.82 + edge * 0.65));
-""".replace("SPEED", "4.8" if waterfall else "1.8").replace("BIAS", "0.42" if waterfall else "0.0"))
-    connect(uv, "", waves, "UV")
-    connect(time, "", waves, "Clock")
-    output(waves, "", unreal.MaterialProperty.MP_BASE_COLOR)
+        custom_inputs.append(item)
+    blend.set_editor_property("inputs", custom_inputs)
+    blend.set_editor_property("code", """
+float2 xy = P.xy;
+float variation = sin(xy.x * 0.0023 + sin(xy.y * 0.003)) * cos(xy.y * 0.0027 - xy.x * 0.0008);
+float3 meadow = Texture2DSample(Grass, GrassSampler, xy / 535.0).rgb * (1.07 + variation * 0.12);
+float3 soil = Texture2DSample(Dirt, DirtSampler, xy / 295.0).rgb;
+float3 rock = Texture2DSample(Rock, RockSampler, xy / 365.0 + P.z * float2(0.0016,0.0011)).rgb;
+float3 gravel = Texture2DSample(Gravel, GravelSampler, xy / 89.0).rgb;
+float3 woodland = soil * float3(0.61,0.47,0.34);
+float3 moss = lerp(rock * 0.66, meadow * float3(0.72,0.93,0.52), 0.68);
+woodland = lerp(woodland, moss, smoothstep(-0.22, 0.54, variation));
+float3 ground = lerp(meadow, woodland, Masks.r);
+ground = lerp(ground, rock * float3(0.77,0.75,0.70), Masks.g);
+ground = lerp(ground, gravel * float3(0.75,0.76,0.73), Masks.b);
+return lerp(ground, soil * float3(0.98,0.81,0.60), Masks.a);
+""")
+    for source, outlet, label in inputs:
+        connect(source, outlet, blend, label)
+    output(blend, "", unreal.MaterialProperty.MP_BASE_COLOR)
     MATERIALS.recompile_material(asset)
 
 
@@ -154,6 +218,7 @@ with TemporaryDirectory() as directory:
     projected_material(stone, "M_CastleStone", 275)
     projected_material(cobble, "M_Cobblestone", 210)
     projected_material(dirt, "M_Dirt", 320)
+    overworld_material(grass, dirt, stone, cobble)
     water_material("M_River", False)
     water_material("M_Waterfall", True)
     satchel_task = unreal.AssetImportTask()

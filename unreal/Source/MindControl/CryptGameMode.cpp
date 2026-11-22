@@ -102,7 +102,7 @@ namespace
   return Surface;
  }
 
- bool IsDirt(float X,float Y)
+ bool IsTrail(float X,float Y)
  {
   for(const auto& Entrance : CryptDungeons::EntrancePoints)
   {
@@ -113,6 +113,12 @@ namespace
   }
   if(X>-3500.f && X<3100.f && FMath::Abs(Y+1650.f+180.f*FMath::Sin(X/860.f))<125.f)
    return true;
+  return false;
+ }
+
+ bool IsDirt(float X,float Y)
+ {
+  if(IsTrail(X,Y)) return true;
   for(const auto& River : CryptWorld::Rivers)
    if(Y>River.Start && Y<River.End && FMath::Abs(X-River.X(Y))<River.BedWidth()+60.f)
     return true;
@@ -159,7 +165,7 @@ namespace
   }
  }
 
- void CreateTerrain(UWorld* World,UMaterialInterface* Grass,UMaterialInterface* Dirt)
+ void CreateTerrain(UWorld* World,UMaterialInterface* Grass,UMaterialInterface* Dirt,UMaterialInterface* Overworld)
  {
   auto* Surface=CreateSurface(World,TEXT("GroundSurface"),true);
   if(!Surface) return;
@@ -184,11 +190,13 @@ namespace
   const int32 Stride=Columns+1;
   TArray<FVector> Vertices,Normals;
   TArray<FVector2D> UVs;
+  TArray<FLinearColor> TerrainMasks;
   TArray<FProcMeshTangent> Tangents;
   TArray<int32> Triangles,DirtTriangles;
   Vertices.Reserve(Stride*(Rows+1));
   Normals.Reserve(Stride*(Rows+1));
   UVs.Reserve(Stride*(Rows+1));
+  TerrainMasks.Reserve(Stride*(Rows+1));
   Tangents.Reserve(Stride*(Rows+1));
   Triangles.Reserve(Columns*Rows*6);
   DirtTriangles.Reserve(Columns*Rows);
@@ -204,6 +212,20 @@ namespace
     Normals.Add(FVector(-Dx,-Dy,1).GetSafeNormal());
     Tangents.Emplace(FVector(1,0,Dx).GetSafeNormal(),false);
     UVs.Emplace(float(Column)/Columns,float(Row)/Rows);
+    const float WoodlandPattern=FMath::Sin(X/2850.f+Y/5200.f)*FMath::Cos(Y/3400.f-X/6900.f);
+    const float Woodland=FMath::SmoothStep(-.42f,.55f,WoodlandPattern);
+    const float Slope=FMath::Sqrt(Dx*Dx+Dy*Dy);
+    const float Rocky=FMath::SmoothStep(.22f,.60f,Slope);
+    float Bank=0.f;
+    for(const auto& River : CryptWorld::Rivers)
+    {
+     if(Y<=River.Start || Y>=River.End) continue;
+     const float Distance=FMath::Abs(X-River.X(Y));
+     const float Edge=River.BedWidth();
+     const float Fade=FMath::SmoothStep(0.f,250.f,FMath::Min(Y-River.Start,River.End-Y));
+     Bank=FMath::Max(Bank,Fade*(1.f-FMath::SmoothStep(Edge+10.f,Edge+260.f,Distance)));
+    }
+    TerrainMasks.Emplace(Woodland,Rocky,Bank,IsTrail(X,Y)?1.f:0.f);
     if(Row<Rows && Column<Columns)
     {
      const float TileX=(X+Eastings[Column+1])*.5f;
@@ -214,13 +236,13 @@ namespace
      const int32 B=A+1;
      const int32 C=A+Stride;
      const int32 D=C+1;
-     auto& Section=(Dirt && IsDirt(TileX,TileY))?DirtTriangles:Triangles;
+     auto& Section=(!Overworld && Dirt && IsDirt(TileX,TileY))?DirtTriangles:Triangles;
      Section.Append({A,C,B,B,C,D});
     }
    }
   }
-  Surface->CreateMeshSection_LinearColor(0,Vertices,Triangles,Normals,UVs,{},Tangents,true);
-  if(Grass) Surface->SetMaterial(0,Grass);
+  Surface->CreateMeshSection_LinearColor(0,Vertices,Triangles,Normals,UVs,TerrainMasks,Tangents,true);
+  if(Overworld || Grass) Surface->SetMaterial(0,Overworld?Overworld:Grass);
   if(!DirtTriangles.IsEmpty())
   {
    Surface->CreateMeshSection_LinearColor(1,Vertices,DirtTriangles,Normals,UVs,{},Tangents,true);
@@ -344,6 +366,7 @@ namespace
    constexpr int32 Samples=120;
    TArray<FVector> Vertices,Normals;
    TArray<FVector2D> UVs;
+   TArray<FLinearColor> WaterMasks;
    TArray<FProcMeshTangent> Tangents;
    TArray<int32> Stream,Falls;
    for(int32 Index=0;Index<=Samples;++Index)
@@ -359,6 +382,9 @@ namespace
      Vertices.Emplace(X+(Side==0?-HalfWidth:HalfWidth),Y,Z);
      Normals.Add(FVector(0,-Slope,1).GetSafeNormal());
      UVs.Emplace(Side,(River.End-Y)/220.f);
+     const float Splash=River.bFalls?
+      FMath::SmoothStep(.33f,.44f,T)*(1.f-FMath::SmoothStep(.46f,.50f,T)):0.f;
+     WaterMasks.Emplace(Splash,0.f,0.f,1.f);
      Tangents.Emplace(FVector::ForwardVector,false);
     }
     if(Index<Samples)
@@ -368,11 +394,11 @@ namespace
      Section.Append({A,A+2,A+1,A+1,A+2,A+3});
     }
    }
-   Surface->CreateMeshSection_LinearColor(0,Vertices,Stream,Normals,UVs,{},Tangents,false);
+   Surface->CreateMeshSection_LinearColor(0,Vertices,Stream,Normals,UVs,WaterMasks,Tangents,false);
    Surface->SetMaterial(0,RiverMaterial);
    if(!Falls.IsEmpty())
    {
-    Surface->CreateMeshSection_LinearColor(1,Vertices,Falls,Normals,UVs,{},Tangents,false);
+    Surface->CreateMeshSection_LinearColor(1,Vertices,Falls,Normals,UVs,WaterMasks,Tangents,false);
     Surface->SetMaterial(1,FallsMaterial);
    }
   }
@@ -488,7 +514,8 @@ void ACryptGameMode::BeginPlay()
  UMaterialInterface* River=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_River.M_River"));
  UMaterialInterface* Falls=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Waterfall.M_Waterfall"));
  DisableTemplateGround(GetWorld());
- CreateTerrain(GetWorld(),Grass,Dirt);
+ auto* Overworld=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Overworld.M_Overworld"));
+ CreateTerrain(GetWorld(),Grass,Dirt,Overworld);
  CreateWater(GetWorld(),River,Falls);
  // Keep movement inside the finished terrain while the surrounding hills continue past the boundary.
  for(const float Side : {-1.f,1.f})
