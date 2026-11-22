@@ -43,7 +43,16 @@ void ACryptMonster::ConfigureCreature(int32 Index,int32 InDungeon,bool bInBoss)
  if(!ensureMsgf(Mesh,TEXT("Missing Blender creature %s"),*Model)) return;
  Body->SetStaticMesh(Mesh);
  const auto Bounds=Mesh->GetBounds();
- const double Height=bBoss?365.:Creature==2||Creature==4?100.:Creature==5?205.:195.;
+ double Height=195.;
+ switch(Creature)
+ {
+  case 2: case 4: case 15: case 17: Height=98.; break;
+  case 12: case 13: case 16: Height=120.; break;
+  case 5: Height=205.; break;
+  case 19: Height=230.; break;
+  default: break;
+ }
+ if(bBoss) Height=365.;
  const double Scale=Height/FMath::Max(1.,Bounds.BoxExtent.Z*2.);
  Body->SetRelativeScale3D(FVector(Scale));
  Body->SetRelativeLocation(FVector(0,0,-95-(Bounds.Origin.Z-Bounds.BoxExtent.Z)*Scale));

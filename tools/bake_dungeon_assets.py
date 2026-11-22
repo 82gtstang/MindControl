@@ -12,6 +12,8 @@ skins = [
     (.26,.16,.09),(.47,.44,.29),(.12,.10,.07),(.54,.16,.07),
     (.19,.28,.15),(.24,.19,.27),(.22,.25,.29),(.29,.40,.48),
     (.35,.15,.06),(.12,.12,.20),(.25,.26,.10),(.43,.27,.09),
+    (.19,.18,.17),(.31,.18,.10),(.23,.28,.34),(.15,.31,.19),
+    (.41,.17,.11),(.23,.30,.39),(.42,.35,.22),(.17,.44,.65),
 ]
 
 def material(name, rgb, rough=.65, metal=0.):
@@ -168,6 +170,94 @@ def humanoid(index, hide, plates, cloth, teeth, eye):
         tube((0,-.267,1.68),(.041,-.36,1.534),.035,.027,cloth)
         tube((.041,-.36,1.534),(.17,-.41,1.54),.027,.006,cloth)
 
+def quadruped(index, hide, plates, teeth, eye):
+    """Build hounds, boars and cave lizards with different profiles."""
+    boar, lizard = index == 13, index == 15
+    height = .42 if lizard else .72 if boar else .88
+    ellipsoid((0,.22,height),(.40 if boar else .28,.66,.39 if boar else .27),hide,.09)
+    ellipsoid((0,-.36,height+.06),(.32,.30,.30),hide,.06)
+    ellipsoid((0,-.69,height+.06),(.21,.33,.19),plates,.06)
+    ellipsoid((0,-.97,height+.04),(.15,.09,.084),plates)
+    for side in (-1,1):
+        ellipsoid((side*.134,-.82,height+.15),(.043,.046,.036),eye)
+        tube((side*.12,-.54,height+.22),(side*.22,-.59,height+(.43 if boar else .50)),.09,.007,hide)
+        if boar:
+            tube((side*.15,-.93,height-.03),(side*.26,-1.04,height+.16),.052,.006,teeth)
+        for y in (-.30,.62):
+            hip=(side*.22,y,height-.15)
+            knee=(side*(.48 if lizard else .24),y+.12,height*.36)
+            foot=(side*(.58 if lizard else .25),y-.05,.09)
+            tube(hip,knee,.126,.067,hide)
+            tube(knee,foot,.065,.045,hide)
+            ellipsoid(foot,(.09,.15,.07),plates)
+    tail=(0,.77,height)
+    tip=(.11,1.57,.15 if lizard else height+.22)
+    tube(tail,(0,1.16,height*.83),.12,.063,hide)
+    tube((0,1.16,height*.83),tip,.066,.006,hide)
+    for spine in range(7):
+        y=-.42+spine*.17
+        tube((0,y,height+.21),(0,y+.11,height+(.38 if lizard else .32)),.09,.005,plates)
+
+
+def shell_creature(index, hide, plates, teeth, eye):
+    scorpion = index == 16
+    ellipsoid((0,.12,.42),(.49,.61,.27),plates,.09)
+    for row in range(5):
+        ellipsoid((0,-.34+row*.19,.59),(.5-abs(row-2)*.045,.15,.13),hide,.06)
+    for side in (-1,1):
+        for leg in range(4 if scorpion else 3):
+            y=-.34+leg*.24
+            bend=(side*.61,y+.06,.31)
+            tube((side*.34,y,.43),bend,.079,.044,hide)
+            tube(bend,(side*(.78+leg*.025),y-.07,.06),.045,.014,plates)
+        ellipsoid((side*.14,-.43,.54),(.059,.074,.056),eye)
+        palm=(side*.60,-.74,.36)
+        tube((side*.27,-.36,.38),palm,.10,.081,hide)
+        ellipsoid(palm,(.15,.22,.13),plates,.06)
+        for direction in (-1,1):
+            claw=(palm[0]+direction*.115,-1.03,.35)
+            tube(palm,claw,.080,.034,plates)
+            tube(claw,(palm[0]+direction*.025,-1.18,.35),.039,.006,teeth)
+    if scorpion:
+        curve=[(0,.60,.48),(0,.88,.65),(0,1.05,.95),(0,.99,1.26),(0,.75,1.48),(0,.44,1.46)]
+        for i,(a,b) in enumerate(zip(curve,curve[1:])):
+            tube(a,b,.13-i*.014,.118-i*.014,plates)
+            ellipsoid(b,(.105-i*.009,.105-i*.009,.105-i*.009),hide)
+        tube(curve[-1],(.02,.29,1.20),.067,.003,teeth)
+
+
+def revenant(index, hide, plates, cloth, teeth, eye):
+    if index == 14:
+        ellipsoid((0,0,1.62),(.23,.23,.27),cloth,.07)
+        ellipsoid((0,-.20,1.60),(.144,.10,.16),plates)
+        for side in (-1,1):
+            ellipsoid((side*.058,-.290,1.64),(.029,.019,.024),eye)
+            tube((side*.18,.03,1.35),(side*.54,-.14,.99),.15,.034,cloth)
+            panel([(side*.17,.1,1.44),(side*.55,-.14,1.02),(side*.53,.13,.68),
+                   (side*.12,.21,.84)],cloth,.04)
+        for strip in range(8):
+            a=strip*math.tau/8
+            x,y=math.cos(a),math.sin(a)
+            panel([(x*.20,y*.20,1.48),(x*.38,y*.38,.88),
+                   (x*.23-y*.14,y*.23+x*.14,.31+strip%3*.17),
+                   (x*.19-y*.16,y*.19+x*.16,1.31)],cloth,.028)
+    else:
+        humanoid(6 if index==19 else 1,hide,plates,cloth,teeth,eye)
+        if index==18:
+            ellipsoid((0,-.06,1.99),(.43,.36,.125),plates,.12)
+            for x,z in ((-.33,1.51),(.35,1.49),(-.20,1.28)):
+                ellipsoid((x,.03,z),(.22,.24,.092),hide,.17)
+            for x in (-.22,0,.22):
+                ellipsoid((x,-.28,1.94),(.047,.025,.035),teeth)
+        else:
+            for i in range(7):
+                x=(i-3)*.09
+                tube((x,0,1.93),(x*1.45,-.06,2.31-abs(i-3)*.06),.095,.012,plates,5)
+            for side in (-1,1):
+                tube((side*.30,-.10,1.40),(side*.59,-.23,1.74),.17,.012,plates,5)
+                ellipsoid((side*.21,-.24,1.24),(.065,.04,.068),eye)
+
+
 for index,rgb in enumerate(skins):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     suffix=str(index)
@@ -176,7 +266,15 @@ for index,rgb in enumerate(skins):
     cloth=material("Wrap"+suffix,(.26,.155,.085))
     teeth=material("Ivory"+suffix,(.63,.54,.36),.48)
     eye=material("Eye"+suffix,(.88,.36,.08) if index!=7 else (.47,.80,.92),.28)
-    if index in (2,4):
+    if index in (12,13,15):
+        quadruped(index,hide,plates,teeth,eye)
+    elif index in (16,17):
+        shell_creature(index,hide,plates,teeth,eye)
+    elif index in (14,18,19):
+        if index==14:
+            cloth=material("WraithCloth",(.055,.077,.106),.91)
+        revenant(index,hide,plates,cloth,teeth,eye)
+    elif index in (2,4):
         arachnid(index,hide,plates,teeth,eye)
     elif index in (5,8):
         flyer(index,hide,plates,teeth,eye)

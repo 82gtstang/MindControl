@@ -95,7 +95,7 @@ with tempfile.TemporaryDirectory(prefix="mindcontrol-dungeon-assets-") as folder
     subprocess.run([str(blender), "-b", "-t", "2", "--python-exit-code", "1", "--python",
                     str(Path(__file__).with_name("bake_dungeon_assets.py")),
                     "--", folder], check=True, timeout=240)
-    names = [f"Enemy{i:02}" for i in range(12)] + [f"Loot{i:02}" for i in range(16)]
+    names = [f"Enemy{i:02}" for i in range(20)] + [f"Loot{i:02}" for i in range(16)]
     names += ["HeroBow", "HeroArmor", "HeroQuiver"]
     tasks = []
     for name in names:

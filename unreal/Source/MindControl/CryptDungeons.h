@@ -13,15 +13,15 @@ namespace CryptDungeons
  };
 
  inline const FChamber Chambers[] = {
-  {TEXT("Gravehollow Crypt"), ELayout::Pillars,{1,1,2,1},{.49f,.61f,.45f}},
-  {TEXT("Widow's Warren"), ELayout::Web,{2,2,2,4},{.50f,.26f,.53f}},
-  {TEXT("Cinder Forge"), ELayout::Forge,{3,3,6,8},{.85f,.24f,.08f}},
-  {TEXT("Drowned Cistern"), ELayout::Marsh,{4,4,2,7},{.20f,.55f,.45f}},
-  {TEXT("Stormglass Sanctum"), ELayout::Spires,{5,5,1,9},{.30f,.59f,.95f}},
-  {TEXT("Iron Labyrinth"), ELayout::Maze,{6,2,6,6},{.53f,.54f,.61f}},
-  {TEXT("Rimecatacombs"), ELayout::Ice,{7,7,5,9},{.50f,.77f,.91f}},
-  {TEXT("Drakefire Caldera"), ELayout::Caldera,{8,3,3,8},{.84f,.37f,.08f}},
-  {TEXT("Blackroot Shrine"), ELayout::Cross,{10,2,10,9},{.35f,.55f,.18f}},
+  {TEXT("Gravehollow Crypt"), ELayout::Pillars,{1,14,2,1},{.49f,.61f,.45f}},
+  {TEXT("Widow's Warren"), ELayout::Web,{2,12,2,4},{.50f,.26f,.53f}},
+  {TEXT("Cinder Forge"), ELayout::Forge,{3,16,6,8},{.85f,.24f,.08f}},
+  {TEXT("Drowned Cistern"), ELayout::Marsh,{4,17,2,7},{.20f,.55f,.45f}},
+  {TEXT("Stormglass Sanctum"), ELayout::Spires,{5,19,1,9},{.30f,.59f,.95f}},
+  {TEXT("Iron Labyrinth"), ELayout::Maze,{6,15,6,6},{.53f,.54f,.61f}},
+  {TEXT("Rimecatacombs"), ELayout::Ice,{7,14,5,9},{.50f,.77f,.91f}},
+  {TEXT("Drakefire Caldera"), ELayout::Caldera,{8,3,16,8},{.84f,.37f,.08f}},
+  {TEXT("Blackroot Shrine"), ELayout::Cross,{10,13,18,9},{.35f,.55f,.18f}},
   {TEXT("The Gilded Vault"), ELayout::Vault,{6,9,8,11},{.82f,.66f,.26f}}
  };
  inline constexpr int32 Count=UE_ARRAY_COUNT(Chambers);
