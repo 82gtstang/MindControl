@@ -1,4 +1,5 @@
 """Generate original dungeon creatures and loot base meshes for Unreal."""
+import json
 import math
 import sys
 from pathlib import Path
@@ -16,8 +17,11 @@ skins = [
     (.41,.17,.11),(.23,.30,.39),(.42,.35,.22),(.17,.44,.65),
 ]
 
+enemy_surfaces = {}
+
 def material(name, rgb, rough=.65, metal=0.):
     mat = bpy.data.materials.new(name)
+    enemy_surfaces[name] = {"color": rgb, "roughness": rough, "metallic": metal}
     mat.diffuse_color = (*rgb, 1)
     mat.use_nodes = True
     shader = mat.node_tree.nodes.get("Principled BSDF")
@@ -94,6 +98,13 @@ def arachnid(index, hide, plates, teeth, eye):
             for a,b,ra,rb in zip(points,points[1:],(.078,.058,.034),(.055,.030,.008)):
                 tube(a,b,ra,rb,hide)
             ellipsoid(points[1],(.074,.075,.067),plates)
+            if index == 2:
+                for joint in (1,2):
+                    a,b=Vector(points[joint-1]),Vector(points[joint])
+                    for bristle in range(4):
+                        root=a.lerp(b,(bristle+1)/5)
+                        tip=root+Vector((side*.055,(-1)**bristle*.047,.036))
+                        tube(root,tip,.008,.001,plates,5)
         for j in range(3):
             ellipsoid((side*(.065+j*.072),-.545+j*.017,.52-j*.028),(.041,.022,.041),eye)
         tube((side*.15,-.49,.35),(side*.20,-.66,.23),.070,.018,teeth)
@@ -117,6 +128,13 @@ def flyer(index, hide, plates, teeth, eye):
                 inset=tuple((prior[k]+tip[k])*.42+wrist[k]*.16 for k in range(3))
                 panel([wrist,prior,inset,tip],plates)
         panel([wrist,tips[-1],(0,.56,z-.22),shoulder],plates)
+        if index == 5:
+            for left,right in zip(tips,tips[1:]):
+                a,b=Vector(left),Vector(right)
+                for vein in (.31,.56):
+                    root=Vector(wrist).lerp(a,vein)
+                    end=Vector(wrist).lerp(a.lerp(b,.50),min(vein+.24,.90))
+                    tube(root,end,.0065,.0018,hide,5)
         ellipsoid((side*.085,-.54,z+.22),(.038,.041,.034),eye)
         tube((side*.085,-.32,z+.26),(side*.15,-.25,z+.73 if not drake else z+.53),.095,.008,hide)
         if drake:
@@ -167,6 +185,12 @@ def humanoid(index, hide, plates, cloth, teeth, eye):
             if index in (1,3,7,10):
                 tube((side*.16*width,.012,.28+j*.065),(side*.16*width,.012,.31+j*.065),.088,.087,cloth)
     if index==7:
+        for side in (-1,1):
+            for rib in range(4):
+                height=1.35-rib*.084
+                tube((side*.035,-.197,height),(side*.211,-.154,height+.025),.022,.013,hide,8)
+            tube((side*.017,-.244,1.854),(side*.103,-.217,1.872),.036,.025,plates,8)
+            ellipsoid((side*.098,-.228,1.766),(.056,.033,.056),hide,.09)
         tube((0,-.267,1.68),(.041,-.36,1.534),.035,.027,cloth)
         tube((.041,-.36,1.534),(.17,-.41,1.54),.027,.006,cloth)
 
@@ -281,6 +305,8 @@ for index,rgb in enumerate(skins):
     else:
         humanoid(index,hide,plates,cloth,teeth,eye)
     export(f"Enemy{index:02}")
+
+(output / "enemy_surfaces.json").write_text(json.dumps(enemy_surfaces), encoding="utf-8")
 
 for index in range(16):
     bpy.ops.wm.read_factory_settings(use_empty=True)
