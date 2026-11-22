@@ -227,13 +227,14 @@ jobs:
             throw "Environment material import failed with exit code $($process.ExitCode)"
           }
       - name: Build and package Android APK
+        timeout-minutes: 35
         shell: powershell
         run: |
           $uat = Join-Path $env:UE_ROOT 'Engine\Build\BatchFiles\RunUAT.bat'
           $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\MindControl.uproject'
           $output = Join-Path $env:GITHUB_WORKSPACE 'unreal\PackagedAndroid'
           if (!(Test-Path $project)) { throw "Unreal project not found: $project" }
-          & $uat BuildCookRun -project="$project" -noP4 -platform=Android -clientconfig=Development -nocompileeditor -unattended -build -cook -CookDir="$env:GITHUB_WORKSPACE\unreal\Content\Environment\MindControl" -stage -pak -package -archive -archivedirectory="$output" -utf8output
+          & $uat BuildCookRun -project="$project" -noP4 -platform=Android -clientconfig=Development -nocompileeditor -unattended -build -NoXGE -cook -AdditionalCookerOptions="-noxgeshadercompile" -CookDir="$env:GITHUB_WORKSPACE\unreal\Content\Environment\MindControl" -stage -pak -package -archive -archivedirectory="$output" -utf8output
           if ($LASTEXITCODE -ne 0) { throw "Unreal BuildCookRun failed with exit code $LASTEXITCODE" }
       - name: Preserve Unreal build logs on failure
         if: failure()
