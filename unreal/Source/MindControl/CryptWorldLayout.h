@@ -13,7 +13,10 @@ namespace CryptWorld
  inline constexpr float South=-5500.f;
  inline constexpr float North=5500.f;
  inline const FVector2D Castle(4540+CastleOffsetX,0);
- inline const FVector2D Town(2420,0);
+ inline constexpr float TownNorth=(North-South)/3.f;
+ inline constexpr float TownRoadX=3650.f;
+ inline constexpr float RuinOffsetX=5500.f;
+ inline const FVector2D Town(2420,TownNorth);
 
  struct FRiver
  {

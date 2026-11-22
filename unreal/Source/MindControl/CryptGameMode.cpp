@@ -74,10 +74,18 @@ namespace
    * (1.f - FMath::SmoothStep(235.f, 575.f, FMath::Abs(Y)));
   const float EastRoad=FMath::SmoothStep(5100.f,5500.f,X)
    *(1.f-FMath::SmoothStep(CryptWorld::MainRoadEnd,CryptWorld::MainRoadEnd+600.f,X))
-   *(1.f-FMath::SmoothStep(235.f,730.f,FMath::Abs(Y)));
+   *(1.f-FMath::SmoothStep(245.f,3250.f,FMath::Abs(Y)));
   const float CastleGround=(1.f-FMath::SmoothStep(840.f,1450.f,FMath::Abs(X-static_cast<float>(CryptWorld::Castle.X))))
    *(1.f-FMath::SmoothStep(1270.f,2050.f,FMath::Abs(Y)));
-  return FMath::Lerp(Height,-20.f,FMath::Max3(WestRoad,EastRoad,CastleGround));
+  const float TownGround=(1.f-FMath::SmoothStep(1450.f,2080.f,FMath::Abs(X-2400.f)))
+   *(1.f-FMath::SmoothStep(1430.f,2100.f,FMath::Abs(Y-CryptWorld::TownNorth)));
+  const float TownRoad=(1.f-FMath::SmoothStep(250.f,700.f,FMath::Abs(X-CryptWorld::TownRoadX)))
+   *(1.f-FMath::SmoothStep(CryptWorld::TownNorth,CryptWorld::TownNorth+550.f,Y))
+   *FMath::SmoothStep(-380.f,0.f,Y);
+  const float RuinGround=(1.f-FMath::SmoothStep(1900.f,2400.f,FMath::Abs(X-(1000.f+CryptWorld::RuinOffsetX))))
+   *(1.f-FMath::SmoothStep(1580.f,2170.f,FMath::Abs(Y-3200.f)));
+  return FMath::Lerp(Height,-20.f,FMath::Max3(FMath::Max3(WestRoad,EastRoad,CastleGround),
+   FMath::Max(TownGround,TownRoad),RuinGround));
  }
 
  UProceduralMeshComponent* CreateSurface(UWorld* World,const TCHAR* Name,bool bCollision)
@@ -128,6 +136,13 @@ namespace
      const FVector Extent=Bounds.BoxExtent;
      const bool bLandscape=Actor->GetClass()->GetName().StartsWith(TEXT("Landscape"));
      if(!bLandscape && (Extent.X<500 || Extent.Y<500 || Extent.Z>220)) continue;
+     const FBox RoadDeck(FVector(-5500,-205,-26),FVector(CryptWorld::MainRoadEnd,205,25));
+     if(!bLandscape && Extent.Z<FMath::Min(Extent.X,Extent.Y)*.18 && RoadDeck.Intersect(Bounds.GetBox()))
+     {
+      Primitive->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+      Primitive->SetVisibility(false,true);
+      continue;
+     }
      for(int32 I=0;I<CryptDungeons::Count;++I)
      {
       const FVector Mouth=CryptDungeons::Entrance(I);
@@ -211,6 +226,112 @@ namespace
    Surface->CreateMeshSection_LinearColor(1,Vertices,DirtTriangles,Normals,UVs,{},Tangents,true);
    Surface->SetMaterial(1,Dirt);
   }
+ }
+
+
+ void PlantOverworld(UWorld* World)
+ {
+  auto* Cylinder=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+  auto* Cone=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cone.Cone"));
+  auto* Crown=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+  auto* Basic=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+  if(!Cylinder || !Cone || !Crown || !Basic) return;
+  auto* Grove=World->SpawnActor<AActor>();
+  if(!Grove) return;
+  auto* Root=NewObject<USceneComponent>(Grove);
+  Grove->SetRootComponent(Root);
+  Grove->AddInstanceComponent(Root);
+  Root->RegisterComponent();
+  const auto Batch=[&](UStaticMesh* Model,FLinearColor Shade,bool bSolid)
+  {
+   auto* Parts=NewObject<UHierarchicalInstancedStaticMeshComponent>(Grove);
+   auto* Tint=UMaterialInstanceDynamic::Create(Basic,Grove);
+   Tint->SetVectorParameterValue(TEXT("Color"),Shade);
+   Grove->AddInstanceComponent(Parts);
+   Parts->SetupAttachment(Root);
+   Parts->SetMobility(EComponentMobility::Static);
+   Parts->SetStaticMesh(Model);
+   Parts->SetMaterial(0,Tint);
+   Parts->SetCollisionProfileName(bSolid?TEXT("BlockAll"):TEXT("NoCollision"));
+   Parts->SetCanEverAffectNavigation(false);
+   Parts->SetCullDistances(9600,12000);
+   Parts->SetCastShadow(bSolid);
+   Parts->RegisterComponent();
+   return Parts;
+  };
+  auto* Trunks=Batch(Cylinder,FLinearColor(.18f,.086f,.042f),true);
+  auto* Boughs=Batch(Cylinder,FLinearColor(.25f,.126f,.057f),false);
+  auto* PineDark=Batch(Cone,FLinearColor(.052f,.15f,.086f),false);
+  auto* PineLight=Batch(Cone,FLinearColor(.087f,.224f,.105f),false);
+  auto* OakDark=Batch(Crown,FLinearColor(.10f,.235f,.069f),false);
+  auto* OakLight=Batch(Crown,FLinearColor(.21f,.343f,.096f),false);
+  auto* Autumn=Batch(Crown,FLinearColor(.40f,.271f,.067f),false);
+  const auto Add=[](auto* Parts,FVector Position,FVector Size,FRotator Rotation=FRotator::ZeroRotator)
+  {
+   Parts->AddInstance(FTransform(Rotation,Position,Size/100.));
+  };
+  const auto Branch=[&](auto* Parts,FVector Bottom,FVector Top,double Width)
+  {
+   const FVector Span=Top-Bottom;
+   Add(Parts,(Bottom+Top)*.5,FVector(Width,Width,Span.Size()),FRotationMatrix::MakeFromZ(Span).Rotator());
+  };
+  FRandomStream Random(142887);
+  const auto Plant=[&](float X,float Y)
+  {
+   if((X>-6800.f && X<CryptWorld::MainRoadEnd+400.f && FMath::Abs(Y)<590.f) ||
+      (X>-25200.f && X<-6300.f && FMath::Abs(Y)<6200.f) ||
+      (X>510.f && X<4280.f && Y>CryptWorld::TownNorth-1770.f && Y<CryptWorld::TownNorth+1700.f) ||
+      (FMath::Abs(X-CryptWorld::TownRoadX)<550.f && Y>0 && Y<CryptWorld::TownNorth) ||
+      (FMath::Abs(X-CryptWorld::Castle.X)<1460. && FMath::Abs(Y)<1750.f) ||
+      (FMath::Abs(X-(1000.f+CryptWorld::RuinOffsetX))<2000.f && FMath::Abs(Y-3200.f)<1660.f) ||
+      IsDirt(X,Y)) return;
+   for(const auto& Mouth : CryptDungeons::EntrancePoints)
+    if(FVector2D::DistSquared(Mouth,FVector2D(X,Y))<FMath::Square(1700.)) return;
+   FHitResult Ground;
+   if(!World->LineTraceSingleByChannel(Ground,FVector(X,Y,3500),FVector(X,Y,-1800),ECC_Visibility) ||
+      Ground.ImpactNormal.Z<.73 || Ground.ImpactPoint.Z<-490.) return;
+   const FVector Foot=Ground.ImpactPoint-FVector(0,0,24);
+   const float Height=Random.FRandRange(385,850);
+   const float Stem=Height*Random.FRandRange(.046f,.070f);
+   const FVector Lean(Random.FRandRange(-35,35),Random.FRandRange(-35,35),0);
+   const bool bPine=Random.FRand()<.53f;
+   Branch(Trunks,Foot,Foot+FVector(0,0,Height*.44),Stem);
+   Branch(Boughs,Foot+FVector(0,0,Height*.37),Foot+Lean+FVector(0,0,Height*.86),Stem*.67);
+   for(int32 Limb=0;Limb<5;++Limb)
+   {
+    const double Angle=Limb*2.399963+Random.FRandRange(-.20f,.20f);
+    const FVector Direction(FMath::Cos(Angle),FMath::Sin(Angle),0);
+    const float Level=Height*(.43f+Limb*.071f);
+    const float Spread=Height*(bPine?.24f-Limb*.031f:.18f);
+    const FVector Fork=Foot+Lean*.6+FVector(0,0,Level);
+    const FVector Tip=Fork+Direction*Spread+FVector(0,0,Height*.15);
+    Branch(Boughs,Fork,Tip,Stem*.30);
+    if(bPine)
+    {
+     const FVector Needles=Fork+Direction*Spread*.44+FVector(0,0,Height*.099);
+     const float Width=Height*(.53f-Limb*.073f);
+     Add(Limb%2?PineLight:PineDark,Needles,FVector(Width,Width*.87,Height*.31),FRotator(0,Limb*37,0));
+    }
+    else
+    {
+     const float Width=Height*Random.FRandRange(.24f,.36f);
+     Add(Limb%2?OakLight:OakDark,Tip,FVector(Width,Width*.91,Width*.73),FRotator(0,Limb*44,0));
+    }
+   }
+   if(bPine)
+    Add(PineLight,Foot+Lean+FVector(0,0,Height*.88),FVector(Height*.22,Height*.19,Height*.30));
+   else
+    Add(Random.FRand()<.16f?Autumn:OakLight,Foot+Lean+FVector(0,0,Height*.87),
+       FVector(Height*.40,Height*.35,Height*.29));
+  };
+  for(float X=-63000.f;X<=63000.f;X+=3100.f)
+   for(float Y=-57000.f;Y<=57000.f;Y+=3100.f)
+    if(Random.FRand()<.78f)
+     Plant(X+Random.FRandRange(-990,990),Y+Random.FRandRange(-990,990));
+  for(float X=-5900.f;X<=12600.f;X+=930.f)
+   for(float Y=-6000.f;Y<=6200.f;Y+=950.f)
+    if(Random.FRand()<.78f)
+     Plant(X+Random.FRandRange(-240,240),Y+Random.FRandRange(-240,240));
  }
 
  void CreateWater(UWorld* World,UMaterialInterface* RiverMaterial,UMaterialInterface* FallsMaterial)
@@ -387,10 +508,11 @@ void ACryptGameMode::BeginPlay()
   }
  }
  UMaterialInterface* Stone=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_CastleStone.M_CastleStone"));
- PlaceBlock(FVector(0,0,-8),FVector(110,4,.12),FRotator::ZeroRotator,Cobble?Cobble:Stone); // main road
+ UMaterialInterface* RoadMaterial=Cobble?Cobble:Stone?Stone:Dirt?Dirt:Grass;
+ PlaceBlock(FVector(0,0,-8),FVector(110,4,.12),FRotator::ZeroRotator,RoadMaterial); // main road
  constexpr float RoadStart=5500.f, RoadEnd=CryptWorld::MainRoadEnd;
  PlaceBlock(FVector((RoadStart+RoadEnd)*.5f,0,-8),FVector((RoadEnd-RoadStart)/100.f,4,.12f),
-   FRotator::ZeroRotator,Cobble?Cobble:Stone);
+   FRotator::ZeroRotator,RoadMaterial);
  // Wilderness stones and ruined pillars beside the approach.
  for(int32 i=0;i<10;++i)
  {
@@ -398,9 +520,16 @@ void ACryptGameMode::BeginPlay()
   const float Y=(i%2==0?1.f:-1.f)*(600.f+(i%3)*220.f);
   PlaceBlock(FVector(X,Y,75),FVector(1.2f,1.2f,2.5f+(i%3)),FRotator::ZeroRotator,Stone);
  }
- PlaceBlock(FVector(-6048,0,-24),FVector(11.04,4,.10),FRotator::ZeroRotator,Cobble?Cobble:Stone);
- CryptSettlements::SpawnMerchant(GetWorld(),FVector(2400,435,25),20);
- CryptSettlements::Build(GetWorld(),Grass,Stone,Cobble?Cobble:Stone,Dirt?Dirt:Stone,-20.f);
+ PlaceBlock(FVector(-6048,0,-24),FVector(11.04,4,.10),FRotator::ZeroRotator,RoadMaterial);
+ const FVector TownOffset(0,CryptWorld::TownNorth,0);
+ const FVector RuinOffset(CryptWorld::RuinOffsetX,0,0);
+ const float TownRoad=CryptWorld::TownRoadX;
+ PlaceBlock(FVector(TownRoad,CryptWorld::TownNorth*.5f+100.f,-10),
+  FVector(3.8,(CryptWorld::TownNorth-200.f)/100.,.16),FRotator::ZeroRotator,RoadMaterial);
+ PlaceBlock(FVector(TownRoad-170.f,CryptWorld::TownNorth,-9),
+  FVector(3.5,3.8,.17),FRotator::ZeroRotator,RoadMaterial);
+ CryptSettlements::SpawnMerchant(GetWorld(),FVector(2400,435,25)+TownOffset,20);
+ CryptSettlements::Build(GetWorld(),Grass,Stone,RoadMaterial,Dirt?Dirt:Stone,-20.f);
  {
   using namespace CryptDungeons;
   auto* Cube=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));
@@ -538,7 +667,7 @@ void ACryptGameMode::BeginPlay()
     {
      const double X=Origin.X-193+Step*69;
      const double Ground=TerrainHeight(X,Origin.Y);
-     Block(FVector(X,Origin.Y,Ground+1),FVector(62,220,20),Cobble?Cobble:Stone);
+     Block(FVector(X,Origin.Y,Ground+1),FVector(62,220,20),RoadMaterial);
     }
    }
 
@@ -898,18 +1027,18 @@ void ACryptGameMode::BeginPlay()
  }
  // Open-air stone dungeon: a walk-in ruin with pillars, treasure marker and guardians.
  // Raise dungeon paving above terrain (terrain top = -20 cm) to avoid coplanar Z-fighting.
- PlaceBlock(FVector(1000,3200,-57),FVector(36,30,1),FRotator::ZeroRotator,Stone);
+ PlaceBlock((FVector(1000,3200,-57)+RuinOffset),FVector(36,30,1),FRotator::ZeroRotator,Stone);
  for(int32 i=0;i<8;++i)
  {
   const float X=-600.f+(i%4)*950.f;
   const float Y=1800.f+(i/4)*2800.f;
-  PlaceBlock(FVector(X,Y,160),FVector(1.5f,1.5f,4.5f));
+  PlaceBlock((FVector(X,Y,160)+RuinOffset),FVector(1.5f,1.5f,4.5f));
  }
- PlaceBlock(FVector(1000,4650,180),FVector(20,1.5f,5));
- PlaceBlock(FVector(-700,3200,180),FVector(1.5f,30,5));
- PlaceBlock(FVector(2700,3200,180),FVector(1.5f,30,5));
+ PlaceBlock((FVector(1000,4650,180)+RuinOffset),FVector(20,1.5f,5));
+ PlaceBlock((FVector(-700,3200,180)+RuinOffset),FVector(1.5f,30,5));
+ PlaceBlock((FVector(2700,3200,180)+RuinOffset),FVector(1.5f,30,5));
  for(int32 i=0;i<5;++i)
-  if(ACryptMonster* Guardian=GetWorld()->SpawnActor<ACryptMonster>(FVector(200+i*380.f,3000.f+(i%2)*300.f,120.f),FRotator::ZeroRotator))
+  if(ACryptMonster* Guardian=GetWorld()->SpawnActor<ACryptMonster>((FVector(200+i*380.f,3000.f+(i%2)*300.f,120.f)+RuinOffset),FRotator::ZeroRotator))
   {
    Guardian->SaveId=100+i;
    Guardian->ConfigureCreature(1);
@@ -918,7 +1047,7 @@ void ACryptGameMode::BeginPlay()
  for(int32 i=0;i<26;++i)
  {
   const float X=-2700.f+i*275.f;
-  if(X>=450.f && X<=3650.f) continue;
+  if(X>=450.f && X<=4025.f) continue;
   for(int32 Side=-1;Side<=1;Side+=2)
   {
    const float Y=Side*420.f;
@@ -935,19 +1064,19 @@ void ACryptGameMode::BeginPlay()
  }
  // A cobbled village square with market stalls and stone benches.
  // Square paving top = +19 cm, above road top = -2 cm; avoid near-coplanar surfaces.
- PlaceBlock(FVector(2400,0,12),FVector(22,18,.14f),FRotator::ZeroRotator,Cobble?Cobble:Stone);
+ PlaceBlock(FVector(2400,0,12)+TownOffset,FVector(22,18,.14f),FRotator::ZeroRotator,RoadMaterial);
  for(int32 i=0;i<9;++i)
  {
   const float X=1600.f+(i%3)*750.f;
   const float Y=-650.f+(i/3)*650.f;
-  PlaceBlock(FVector(X,Y,18),FVector(1.4f,1.4f,.22f),FRotator::ZeroRotator,Cobble?Cobble:Stone);
+  PlaceBlock(FVector(X,Y,18)+TownOffset,FVector(1.4f,1.4f,.22f),FRotator::ZeroRotator,RoadMaterial);
  }
  for(int32 i=0;i<4;++i)
  {
   const float X=1550.f+i*580.f;
-  PlaceBlock(FVector(X,1000,110),FVector(3.1f,1.5f,.25f));
+  PlaceBlock(FVector(X,1000,110)+TownOffset,FVector(3.1f,1.5f,.25f));
   for(int32 j=-1;j<=1;j+=2)
-   PlaceBlock(FVector(X+j*125.f,1000,60),FVector(.22f,.22f,1.25f));
+   PlaceBlock(FVector(X+j*125.f,1000,60)+TownOffset,FVector(.22f,.22f,1.25f));
  }
  // Crenellations, gate piers and voussoirs framing the open road.
  for(int32 i=0;i<12;++i)
@@ -972,14 +1101,14 @@ void ACryptGameMode::BeginPlay()
  for(int32 i=0;i<5;++i)
  {
   const float X=-250.f+i*550.f;
-  PlaceBlock(FVector(X,2600,90),FVector(.8f,9.f,2.7f));
-  PlaceBlock(FVector(X,3750,90),FVector(.8f,9.f,2.7f));
+  PlaceBlock((FVector(X,2600,90)+RuinOffset),FVector(.8f,9.f,2.7f));
+  PlaceBlock((FVector(X,3750,90)+RuinOffset),FVector(.8f,9.f,2.7f));
  }
  for(int32 i=0;i<22;++i)
  {
   const float X=-450.f+(i*317%2750);
   const float Y=1900.f+(i*491%2400);
-  PlaceBlock(FVector(X,Y,12),FVector(.35f+(i%3)*.2f,.5f,.35f));
+  PlaceBlock((FVector(X,Y,12)+RuinOffset),FVector(.35f+(i%3)*.2f,.5f,.35f));
  }
  // Place the townspeople along the square, then put their objectives on accessible terrain.
  const auto SpawnQuestActor=[this](int32 Quest,bool bGiver,FVector Location,int32 ObjectiveId=INDEX_NONE)
@@ -991,7 +1120,7 @@ void ACryptGameMode::BeginPlay()
   }
  };
  for(int32 Index=0;Index<5;++Index)
-  SpawnQuestActor(Index,true,FVector(1450.f+400.f*Index,185.f,19.f));
+  SpawnQuestActor(Index,true,FVector(1450.f+400.f*Index,185.f,19.f)+TownOffset);
 
  const auto SpawnTerrainObjective=[&](int32 Quest,float X,float Y,int32 ObjectiveId)
  {
@@ -1000,7 +1129,8 @@ void ACryptGameMode::BeginPlay()
  SpawnTerrainObjective(1,-430.f,-2000.f,10);
  SpawnTerrainObjective(1,250.f,-2360.f,11);
  SpawnTerrainObjective(1,720.f,-2750.f,12);
- SpawnQuestActor(2,false,FVector(1020,3110,-7),20);
+ SpawnQuestActor(2,false,(FVector(1020,3110,-7)+RuinOffset),20);
  SpawnTerrainObjective(3,-3300.f,-2780.f,30);
  SpawnTerrainObjective(4,2450.f,-2330.f,40);
+ PlantOverworld(GetWorld());
 }

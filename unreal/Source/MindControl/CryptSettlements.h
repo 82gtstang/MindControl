@@ -1,5 +1,7 @@
 #pragma once
 
+#include "CryptWorldLayout.h"
+
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
@@ -261,10 +263,10 @@ namespace CryptSettlements
   {
    const float X=1120.f+Cottage*650.f;
    const float Depth=390.f+34.f*(Cottage%3);
-   const float Y=-1080.f;
+   const float Y=CryptWorld::TownNorth-1080.f;
    const float Front=Y+Depth/2;
    Building(FVector(X,Y,Ground),375.f+43.f*Cottage,Depth,Cottage,false,180.f);
-   const float SquareEdge=-885.f;
+   const float SquareEdge=CryptWorld::TownNorth-885.f;
    Box(Road,FVector(X,(Front+SquareEdge)*.5f,Ground+5),FVector(119,FMath::Abs(SquareEdge-Front)+20,10));
   }
 

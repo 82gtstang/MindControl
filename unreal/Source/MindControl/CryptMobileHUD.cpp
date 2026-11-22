@@ -289,6 +289,11 @@ void ACryptMobileHUD::DrawHUD()
   }
  }
  MapLine(ToMap(FVector(-5500,0,0)),ToMap(FVector(CryptWorld::MainRoadEnd,0,0)),FLinearColor(.58f,.53f,.38f),2.f);
+ const FVector TownJunction(CryptWorld::TownRoadX,0,0);
+ const FVector TownTurn(CryptWorld::TownRoadX,CryptWorld::TownNorth,0);
+ const FLinearColor RoadColor(.58f,.53f,.38f);
+ MapLine(ToMap(TownJunction),ToMap(TownTurn),RoadColor,2.f);
+ MapLine(ToMap(TownTurn),ToMap(FVector(CryptWorld::Town.X,CryptWorld::Town.Y,0)),RoadColor,2.f);
  for(const auto& River : CryptWorld::Rivers)
  {
   FVector2D Previous=ToMap(FVector(River.X(River.Start),River.Start,0));
