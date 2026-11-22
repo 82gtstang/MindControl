@@ -300,7 +300,8 @@ void ACryptHero::SetupPlayerInputComponent(UInputComponent* Input)
  Input->BindAxis("Turn",this,&ACryptHero::Turn);
  Input->BindAxis("LookUp",this,&ACryptHero::LookUp);
  Input->BindAction("Jump",IE_Pressed,this,&ACharacter::Jump);
- Input->BindAction("Attack",IE_Pressed,this,&ACryptHero::Attack);
+ Input->BindAction("Attack",IE_Pressed,this,&ACryptHero::AttackPressed);
+ Input->BindAction("Attack",IE_Released,this,&ACryptHero::AttackReleased);
  Input->BindAction("Spin",IE_Pressed,this,&ACryptHero::SpinAttack);
  Input->BindAction("Interact",IE_Pressed,this,&ACryptHero::Interact);
  Input->BindKey(EKeys::Tab,IE_Pressed,this,&ACryptHero::ToggleInventory);
@@ -310,10 +311,91 @@ void ACryptHero::SetupPlayerInputComponent(UInputComponent* Input)
  Input->BindKey(EKeys::F5,IE_Pressed,this,&ACryptHero::SaveProgress);
  Input->BindKey(EKeys::F9,IE_Pressed,this,&ACryptHero::RestoreProgress);
 }
-void ACryptHero::MoveForward(float V) { if(FMath::Abs(V)>.01f) AddMovementInput(FRotationMatrix(FRotator(0,GetControlRotation().Yaw,0)).GetUnitAxis(EAxis::X),V); }
-void ACryptHero::MoveRight(float V) { if(FMath::Abs(V)>.01f) AddMovementInput(FRotationMatrix(FRotator(0,GetControlRotation().Yaw,0)).GetUnitAxis(EAxis::Y),V); }
-void ACryptHero::Turn(float V) { AddControllerYawInput(V); }
-void ACryptHero::LookUp(float V) { AddControllerPitchInput(V); }
+void ACryptHero::MoveForward(float V)
+{
+ if(bBowAiming)
+ {
+  if(Controller && FMath::Abs(V)>.12f)
+  {
+   FRotator Aim=GetControlRotation();
+   Aim.Pitch=FMath::Clamp(FRotator::NormalizeAxis(Aim.Pitch)+V*68.f*GetWorld()->GetDeltaSeconds(),-62.f,62.f);
+   Controller->SetControlRotation(Aim);
+  }
+  return;
+ }
+ if(FMath::Abs(V)>.01f) AddMovementInput(FRotationMatrix(FRotator(0,GetControlRotation().Yaw,0)).GetUnitAxis(EAxis::X),V);
+}
+
+void ACryptHero::MoveRight(float V)
+{
+ if(bBowAiming)
+ {
+  if(Controller && FMath::Abs(V)>.12f)
+  {
+   FRotator Aim=GetControlRotation();
+   Aim.Yaw+=V*92.f*GetWorld()->GetDeltaSeconds();
+   Controller->SetControlRotation(Aim);
+  }
+  return;
+ }
+ if(FMath::Abs(V)>.01f) AddMovementInput(FRotationMatrix(FRotator(0,GetControlRotation().Yaw,0)).GetUnitAxis(EAxis::Y),V);
+}
+
+void ACryptHero::Turn(float V) { if(!bBowAiming) AddControllerYawInput(V); }
+void ACryptHero::LookUp(float V) { if(!bBowAiming) AddControllerPitchInput(V); }
+
+void ACryptHero::AttackPressed()
+{
+ if(EquippedWeapon==ECryptWeapon::Bow) BeginBowAim(INDEX_NONE);
+ else Attack();
+}
+
+void ACryptHero::AttackReleased()
+{
+ if(bBowAiming && BowAimFinger==INDEX_NONE) EndBowAim(true);
+}
+
+void ACryptHero::BeginBowAim(int32 Finger)
+{
+ if(bBowAiming || bInventoryOpen || AttackCooldown>0.f || !Controller || !CameraBoom || !FollowCamera) return;
+ if(Arrows[ArrowType]<=0)
+ {
+  AppendEvent(TEXT("No arrows of this type."));
+  return;
+ }
+ if(Stamina<8.f) return;
+ PreAimRotation=GetControlRotation();
+ PreAimBoomLength=CameraBoom->TargetArmLength;
+ PreAimBoomOffset=CameraBoom->TargetOffset;
+ PreAimFov=FollowCamera->FieldOfView;
+ bAimWasHidden=IsHidden();
+ bBowAiming=true;
+ BowAimFinger=Finger;
+ ThumbFinger=INDEX_NONE;
+ GetCharacterMovement()->StopMovementImmediately();
+ ConsumeMovementInputVector();
+ CameraBoom->TargetArmLength=0.f;
+ CameraBoom->TargetOffset=FVector(0,0,52);
+ FollowCamera->SetFieldOfView(PreAimFov*.78f);
+ SetActorHiddenInGame(true);
+}
+
+void ACryptHero::EndBowAim(bool bShoot)
+{
+ if(!bBowAiming) return;
+ const FVector ShotStart=GetActorLocation()+CameraBoom->TargetOffset;
+ const FVector ShotDirection=GetControlRotation().Vector();
+ bBowAiming=false;
+ BowAimFinger=INDEX_NONE;
+ CameraBoom->TargetArmLength=PreAimBoomLength;
+ CameraBoom->TargetOffset=PreAimBoomOffset;
+ FollowCamera->SetFieldOfView(PreAimFov);
+ SetActorHiddenInGame(bAimWasHidden);
+ if(Controller) Controller->SetControlRotation(PreAimRotation);
+ if(bShoot && EquippedWeapon==ECryptWeapon::Bow && !bInventoryOpen)
+  FireBow(true,ShotStart,ShotDirection);
+}
+
 void ACryptHero::Attack()
 {
  StartStrike(false);
@@ -326,7 +408,7 @@ void ACryptHero::SpinAttack()
 
 void ACryptHero::StartStrike(bool bSpin)
 {
- if(AttackCooldown>0.f || bInventoryOpen) return;
+ if(AttackCooldown>0.f || bInventoryOpen || bBowAiming) return;
  if(EquippedWeapon==ECryptWeapon::Bow && !bSpin)
  {
   FireBow();
@@ -516,6 +598,7 @@ bool ACryptHero::OwnsWeapon(ECryptWeapon Weapon) const
 void ACryptHero::EquipWeapon(ECryptWeapon Weapon)
 {
  if(!OwnsWeapon(Weapon) || StrikeDuration>0.f) return;
+ EndBowAim(false);
  LootWeapon=INDEX_NONE;
  EquippedWeapon=Weapon;
  bSwordEquipped=Weapon==ECryptWeapon::Sword;
@@ -624,6 +707,7 @@ void ACryptHero::SaveProgress()
 
 void ACryptHero::RestoreProgress()
 {
+ EndBowAim(false);
  const auto* Save=Cast<UCryptSaveGame>(UGameplayStatics::LoadGameFromSlot(SaveSlot,0));
  if(!Save)
  {
@@ -734,6 +818,7 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
  const float W=ViewSize.X,H=ViewSize.Y;
  const FCryptHudLayout Layout(W,H);
  const FVector2D TouchPoint(Location.X,Location.Y);
+ if(bBowAiming && !Layout.Hit(TouchPoint,Layout.Bag)) return;
  if(Layout.Hit(TouchPoint,Layout.Bag))
  {
   ToggleInventory();
@@ -853,7 +938,11 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
   return;
  }
  if(Layout.Hit(TouchPoint,Layout.Jump)) Jump();
- else if(Layout.Hit(TouchPoint,Layout.Attack)) Attack();
+ else if(Layout.Hit(TouchPoint,Layout.Attack))
+ {
+  if(EquippedWeapon==ECryptWeapon::Bow) BeginBowAim(int32(FingerIndex));
+  else Attack();
+ }
  else if(Layout.Hit(TouchPoint,Layout.Spin)) SpinAttack();
 }
 
@@ -882,6 +971,11 @@ void ACryptHero::TouchMoved(ETouchIndex::Type FingerIndex,FVector Location)
 
 void ACryptHero::TouchReleased(ETouchIndex::Type FingerIndex,FVector Location)
 {
+ if(bBowAiming && BowAimFinger==int32(FingerIndex))
+ {
+  EndBowAim(true);
+  return;
+ }
  if(ThumbFinger!=int32(FingerIndex)) return;
  ThumbFinger=INDEX_NONE;
  if(bInventoryOpen || !GEngine || !GEngine->GameViewport ||
@@ -951,6 +1045,7 @@ void ACryptHero::ReceiveCombatHit(float Rating,float Dexterity,ECryptDamage Elem
  RecoveryDelay=5.f;
  AppendEvent(FString::Printf(TEXT("You take %d damage."),FMath::CeilToInt(CryptCombat::Damage(Rating,GetArmorRating(),Element))));
  if(Health>0.f) return;
+ EndBowAim(false);
  const int32 Dungeon=CryptDungeons::Current(GetActorLocation());
  FVector Safe=FVector(-2450,175,110);
  if(Dungeon!=INDEX_NONE) Safe=CryptDungeons::SurfaceArrival(Dungeon);
@@ -1437,7 +1532,7 @@ void ACryptHero::UpdateGearVisuals()
  Update(QuiverVisual,TEXT("HeroQuiver"),bBow,Chest-Forward*21+GetActorRightVector()*13,FRotator(0,Facing.Yaw,23));
 }
 
-void ACryptHero::FireBow()
+void ACryptHero::FireBow(bool bPrecise,FVector ShotStart,FVector ShotDirection)
 {
  if(Arrows[ArrowType]<=0)
  {
@@ -1447,11 +1542,11 @@ void ACryptHero::FireBow()
  }
  if(Stamina<8.f) return;
  constexpr double Range=2150.;
- const FVector Start=GetActorLocation()+FVector(0,0,26);
- const FVector Aim=GetActorForwardVector();
+ const FVector Start=bPrecise?ShotStart:GetActorLocation()+FVector(0,0,26);
+ const FVector Aim=bPrecise?ShotDirection:GetActorForwardVector();
  ACryptMonster* Target=nullptr;
  double Nearest=FMath::Square(Range);
- for(TActorIterator<ACryptMonster> It(GetWorld());It;++It)
+ for(TActorIterator<ACryptMonster> It(GetWorld());!bPrecise && It;++It)
  {
   if(It->GetRemainingHealth()<=0.f) continue;
   const FVector Offset=It->GetActorLocation()-Start;

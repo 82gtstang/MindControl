@@ -38,6 +38,7 @@ public:
  int32 GetExperience() const { return Experience; }
  int32 ExperienceNeeded() const { return 100+(Level-1)*40; }
  FString GetArrowLabel() const;
+ bool IsBowAiming() const { return bBowAiming; }
  float GetHealth() const { return Health; }
  float GetStamina() const { return Stamina; }
  float GetMana() const { return Mana; }
@@ -77,7 +78,7 @@ public:
  UPROPERTY(BlueprintReadOnly) bool bSwordEquipped = false;
  UPROPERTY(BlueprintReadOnly) int32 TreasureCount = 0;
  UPROPERTY(BlueprintReadOnly) bool bInventoryOpen = false;
- UFUNCTION(BlueprintCallable) void ToggleInventory() { bInventoryOpen = !bInventoryOpen; bSatchelJournal=false; bGearPage=false; MerchantId=INDEX_NONE; InspectedItem.Reset(); }
+ UFUNCTION(BlueprintCallable) void ToggleInventory() { EndBowAim(false); bInventoryOpen = !bInventoryOpen; bSatchelJournal=false; bGearPage=false; MerchantId=INDEX_NONE; InspectedItem.Reset(); }
  UFUNCTION(BlueprintCallable) void AddTreasure(int32 Amount = 1) { TreasureCount += Amount; }
  void TouchPressed(ETouchIndex::Type FingerIndex, FVector Location);
  void TouchReleased(ETouchIndex::Type FingerIndex,FVector Location);
@@ -120,7 +121,17 @@ protected:
  UPROPERTY() class UStaticMeshComponent* QuiverVisual=nullptr;
  void AddExperience(int32 Points);
  void UpdateGearVisuals();
- void FireBow();
+ void FireBow(bool bPrecise=false,FVector ShotStart=FVector::ZeroVector,FVector ShotDirection=FVector::ForwardVector);
+ void AttackPressed();
+ void AttackReleased();
+ void BeginBowAim(int32 Finger);
+ void EndBowAim(bool bShoot);
+ bool bBowAiming=false;
+ bool bAimWasHidden=false;
+ int32 BowAimFinger=INDEX_NONE;
+ float PreAimBoomLength=0.f, PreAimFov=0.f;
+ FVector PreAimBoomOffset=FVector::ZeroVector;
+ FRotator PreAimRotation=FRotator::ZeroRotator;
  void IgniteBuilding(FVector Position);
  void BuyArrows();
  int32 LootWeapon=INDEX_NONE, LootArmor=INDEX_NONE;

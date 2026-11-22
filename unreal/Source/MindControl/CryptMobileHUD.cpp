@@ -175,7 +175,7 @@ void ACryptMobileHUD::DrawHUD()
   DrawText(Label,FLinearColor::White,Center.X-Width*.5,Center.Y+R*.43f-Height*.5,nullptr,.90f*S,false);
  };
  Button(Layout.Jump,EIcon::Jump,TEXT("JUMP"));
- Button(Layout.Attack,WeaponIcon(Hero->EquippedWeapon),Hero->EquippedWeapon==ECryptWeapon::Bow?TEXT("SHOOT"):bArmed?TEXT("ATTACK"):TEXT("PUNCH"),Strength>.1f);
+ Button(Layout.Attack,WeaponIcon(Hero->EquippedWeapon),Hero->EquippedWeapon==ECryptWeapon::Bow?(Hero->IsBowAiming()?TEXT("RELEASE"):TEXT("SHOOT")):bArmed?TEXT("ATTACK"):TEXT("PUNCH"),Strength>.1f);
  Button(Layout.Spin,EIcon::Spin,TEXT("SPIN"));
  if(!Hero->bInventoryOpen)
  {
@@ -206,6 +206,16 @@ void ACryptMobileHUD::DrawHUD()
   Icon(ThumbIcons[int32(Hero->GetThumbAction())],Layout.RightThumbCenter,17*S,Gold);
  }
 
+
+ if(Hero->IsBowAiming())
+ {
+  const FVector2D Center(W*.5f,H*.5f);
+  const FLinearColor Reticle(.96f,.95f,.87f);
+  for(const FVector2D Offset : {FVector2D(1,0),FVector2D(-1,0),FVector2D(0,1),FVector2D(0,-1)})
+   Stroke(Center+Offset*5*S,Center+Offset*15*S,Reticle,1.6f);
+  DrawRect(Reticle,Center.X-S,Center.Y-S,2*S,2*S);
+  return;
+ }
 
  const FVector2D Origin=Layout.MapOrigin,Size=Layout.MapSize;
  const int32 Chart=Hero->GetChartIndex();

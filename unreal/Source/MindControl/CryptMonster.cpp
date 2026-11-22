@@ -15,6 +15,7 @@ ACryptMonster::ACryptMonster()
  RootComponent=Collision;
  Collision->InitSphereRadius(44.f);
  Collision->SetCollisionProfileName(TEXT("Pawn"));
+ Collision->SetCollisionResponseToChannel(ECC_Visibility,ECR_Block);
  Body=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MonsterBody"));
  Body->SetupAttachment(RootComponent);
  Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
