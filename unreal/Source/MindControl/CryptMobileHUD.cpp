@@ -260,7 +260,7 @@ void ACryptMobileHUD::DrawHUD()
  const FLinearColor RiverColor(.31f,.72f,.88f);
  Frame(Origin.X,Origin.Y,Size.X,Size.Y,FLinearColor(.068f,.115f,.080f,.97f),Bronze);
  const FVector HeroPosition=Hero->GetActorLocation();
- const bool bOverview=FMath::Abs(HeroPosition.X)>CryptWorld::East ||
+ const bool bOverview=HeroPosition.X<CryptWorld::West || HeroPosition.X>CryptWorld::East ||
   FMath::Abs(HeroPosition.Y)>CryptWorld::North;
  if(bOverview)
   DrawText(TEXT("WORLD"),Gold,Origin.X+17*S,Origin.Y+4*S,nullptr,.83f*S,false);
@@ -288,7 +288,7 @@ void ACryptMobileHUD::DrawHUD()
    }
   }
  }
- MapLine(ToMap(FVector(-5500,0,0)),ToMap(FVector(5500,0,0)),FLinearColor(.58f,.53f,.38f),2.f);
+ MapLine(ToMap(FVector(-5500,0,0)),ToMap(FVector(CryptWorld::MainRoadEnd,0,0)),FLinearColor(.58f,.53f,.38f),2.f);
  for(const auto& River : CryptWorld::Rivers)
  {
   FVector2D Previous=ToMap(FVector(River.X(River.Start),River.Start,0));
@@ -311,7 +311,7 @@ void ACryptMobileHUD::DrawHUD()
  for(int32 I=0;I<CryptDungeons::Count;++I)
  {
   const FVector Location=CryptDungeons::Entrance(I);
-  if(!bOverview && (FMath::Abs(Location.X)>CryptWorld::East ||
+  if(!bOverview && (Location.X<CryptWorld::West || Location.X>CryptWorld::East ||
                     FMath::Abs(Location.Y)>CryptWorld::North)) continue;
   const FVector2D Point=ToMap(Location);
   Icon(EIcon::Storm,Point,4.4f*S,FLinearColor(.78f,.54f,1.f));

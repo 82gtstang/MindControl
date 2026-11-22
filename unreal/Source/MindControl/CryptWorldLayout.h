@@ -7,10 +7,12 @@ namespace CryptWorld
  inline constexpr float HalfWorldX=66000.f;
  inline constexpr float HalfWorldY=60000.f;
  inline constexpr float West=-6000.f;
- inline constexpr float East=6000.f;
+ inline constexpr float CastleOffsetX=7000.f;
+ inline constexpr float MainRoadEnd=12300.f;
+ inline constexpr float East=13200.f;
  inline constexpr float South=-5500.f;
  inline constexpr float North=5500.f;
- inline const FVector2D Castle(4540,0);
+ inline const FVector2D Castle(4540+CastleOffsetX,0);
  inline const FVector2D Town(2420,0);
 
  struct FRiver

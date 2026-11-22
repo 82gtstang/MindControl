@@ -104,6 +104,26 @@ namespace CryptSettlements
   auto* Fabric = Batch(Cube, Cloth, false);
   auto* Windows = Batch(Cube, Glass, false);
   auto* Fence = Batch(Cube, nullptr, true);
+  auto* Trim = Batch(Cube, Oak, false);
+  auto* Sill = Batch(Cube, Stone, false);
+  auto* PlanterLeaves = Batch(Sphere, Color(FLinearColor(.17f,.31f,.09f)), false);
+  auto* Metal = Batch(Cube, Color(FLinearColor(.10f,.085f,.07f)), false);
+  auto* LanternGlass = Batch(Cube, Color(FLinearColor(.95f,.64f,.24f)), false);
+  UInstancedStaticMeshComponent* Shutters[] = {
+   Batch(Cube, Color(FLinearColor(.21f,.34f,.24f)), false),
+   Batch(Cube, Color(FLinearColor(.35f,.14f,.10f)), false),
+   Batch(Cube, Color(FLinearColor(.19f,.28f,.40f)), false)
+  };
+  UInstancedStaticMeshComponent* RoofPanels[] = {
+   Batch(Cube, Color(FLinearColor(.30f,.14f,.092f)), true),
+   Batch(Cube, Color(FLinearColor(.18f,.22f,.255f)), true),
+   Batch(Cube, Color(FLinearColor(.29f,.22f,.15f)), true)
+  };
+  for (auto* Details : {Trim,Sill,PlanterLeaves,Metal,LanternGlass,Shutters[0],Shutters[1],Shutters[2]})
+  {
+   Details->SetCullDistances(5000,7200);
+   Details->SetCastShadow(false);
+  }
   const auto Box = [](UInstancedStaticMeshComponent* Batch, FVector At, FVector Size,
                       FRotator Rotation = FRotator::ZeroRotator)
   {
@@ -124,33 +144,87 @@ namespace CryptSettlements
    Box(Fence, FVector(EntryX - 4, Y, Ground + 180), FVector(20, 5550, 360));
 
   // Buildings face their local street. Door and window bays are actual openings.
-  const auto Building = [&](FVector Base, float W, float D, int32 Style, bool bWork)
+  const auto Building = [&](FVector Base, float W, float D, int32 Style, bool bWork, float Yaw = 0.f)
   {
    const float H = 270.f + 16.f * (Style % 4);
-   const auto Part = [&](auto* Mesh, float X, float Y, float Z, float SX, float SY, float SZ)
+   const FRotator Facing(0,Yaw,0);
+   const auto Part = [&](auto* Batch, float X, float Y, float Z, float SX, float SY, float SZ,
+                         FRotator Rotation = FRotator::ZeroRotator)
    {
-    Box(Mesh, Base + FVector(X,Y,Z), FVector(SX,SY,SZ));
+    Box(Batch,Base+Facing.RotateVector(FVector(X,Y,Z)),FVector(SX,SY,SZ),
+        (Facing.Quaternion()*Rotation.Quaternion()).Rotator());
    };
+   auto* Shutter=Shutters[Style%UE_ARRAY_COUNT(Shutters)];
+   auto* Roof=RoofPanels[Style%UE_ARRAY_COUNT(RoofPanels)];
+   const float Rise = 75.f + 15.f * (Style % 4);
+   const float RoofSlope=FMath::Sqrt(FMath::Square(D/2)+FMath::Square(Rise));
+   const float Angle=FMath::RadiansToDegrees(FMath::Atan2(Rise,D/2));
+   const float Front=-D/2;
+   Part(Wall,0,D/2,-4,W+8,22,29);
+   Part(Sill,0,Front-17,4,118,36,12);
+   Part(Trim,0,Front-10,H-12,W+10,13,14);
+   Part(Trim,0,D/2+9,H-12,W+10,13,14);
+   Part(Trim,0,0,H+Rise+6,W+56,18,13);
+   for (const float Edge : {-1.f,1.f})
+   {
+    for (int32 Tier=0;Tier<5;++Tier)
+     Part(Wall,Edge*W/2,0,H+(Tier+.5f)*Rise/6,18,D*(1.f-(Tier+1)/6.f),Rise/6);
+    Part(Trim,Edge*(W/2+9),0,H+Rise*.45f,12,12,Rise*.9f);
+    Part(Sill,Edge*(W/2+4),0,19,18,D+10,35);
+    Part(Windows,Edge*(W/2+10),D*.10f,152,5,80,94);
+    Part(Trim,Edge*(W/2+14),D*.10f,152,9,90,7);
+    Part(Trim,Edge*(W/2+14),D*.10f,152,9,7,100);
+    Part(Sill,Edge*(W/2+13),D*.10f,103,19,99,11);
+   }
    Part(Timber,0,0,5,W,D,10);
    Part(Wall,0,D/2,H/2,W,18,H);
    for (const float Side : {-1.f,1.f})
    {
     Part(Wall,Side*W/2,0,H/2,18,D,H);
-    Part(Wall,Side*(W/4+32),-D/2,47,W/2-64,18,94);
-    Part(Wall,Side*(W/4+32),-D/2,H-35,W/2-64,18,70);
-    Part(Wall,Side*(W/2-31),-D/2,150,62,18,112);
-    Part(Windows,Side*(W/4+23),-D/2+3,150,FMath::Max(40.f,W/2-142),5,82);
-    Part(Timber,Side*(W/4+23),-D/2-3,150,7,10,92);
-    const float Rise = 75.f + 15.f * (Style % 4);
-    const float Angle = FMath::RadiansToDegrees(FMath::Atan2(Rise,D/2));
-    Box(Tile, Base + FVector(0,Side*D/4,H+Rise/2),
-        FVector(W+48,FMath::Sqrt(FMath::Square(D/2)+FMath::Square(Rise))+35,14),
-        FRotator(0,0,Side*Angle));
+    const float WindowX=Side*(W/4+32);
+    const float BayWidth=W/2-64;
+    const float WindowWidth=FMath::Clamp(BayWidth-42.f,44.f,105.f);
+    const float JambWidth=(BayWidth-WindowWidth)*.5f;
+    Part(Wall,WindowX,Front,54,BayWidth,18,108);
+    Part(Wall,WindowX,Front,(H+192)*.5f,BayWidth,18,H-192);
+    for(float Jamb : {-1.f,1.f})
+     Part(Wall,WindowX+Jamb*(WindowWidth+JambWidth)*.5f,Front,150,JambWidth,18,84);
+    Part(Windows,WindowX,Front+5,150,WindowWidth,5,84);
+    Part(Trim,WindowX,Front-7,150,7,10,84);
+    const FRotator RoofTilt(0,0,Side*Angle);
+    Part(Roof,0,Side*D/4,H+Rise/2,W+48,RoofSlope+35,14,RoofTilt);
+    for (int32 Seam=1;Seam<=5;++Seam)
+    {
+     const float Row=Seam/6.f;
+     Part(Trim,0,Side*D*.5f*Row,H+Rise*(1.f-Row)+9,W+46,5,5,RoofTilt);
+    }
+    Part(Trim,0,Side*(D/2+12),H-4,W+56,13,17);
+    Part(Trim,WindowX,Front-9,150,WindowWidth+10,12,6);
+    Part(Trim,WindowX,Front-8,194,WindowWidth+13,13,9);
+    Part(Sill,WindowX,Front-13,102,WindowWidth+26,25,10);
+    Part(Shutter,WindowX+Side*(WindowWidth*.5f+11),Front-12,149,19,8,87);
+    Part(Trim,Side*(W/2-10),Front-8,H*.5f,13,13,H);
+    Part(Trim,Side*63,Front-10,106,13,16,208);
+    Part(Trim,Side*(W*.38f),Front-9,228,W*.20f,10,9,FRotator(Side*27,0,0));
+    if(!bWork && Style%3!=0)
+    {
+     Part(Shutter,WindowX,Front-28,88,WindowWidth+14,24,21);
+     for(float Offset : {-15.f,0.f,15.f})
+      Part(PlanterLeaves,WindowX+Offset,Front-29,105+FMath::Abs(Offset)*.12f,21,20,18);
+    }
     Part(Timber,Side*W*.30f,D*.16f,47,65,70,12);
     Part(Timber,Side*W*.30f,D*.16f,24,7,7,45);
    }
    Part(Wall,0,-D/2,H-19,128,18,38);
-   Part(Tile,W*.32f,D*.19f,H+60,62,60,170);
+   Part(Wall,W*.32f,D*.19f,H+60,62,60,170);
+   Part(Sill,W*.32f,D*.19f,H+145,76,73,12);
+   Part(Metal,W*.32f,D*.19f,H+152,46,42,5);
+   Part(Trim,0,Front-10,211,139,16,17);
+   Part(Metal,82,Front-19,181,12,19,42);
+   Part(LanternGlass,82,Front-23,179,9,21,24);
+   Part(Trim,-W*.33f,D*.40f,124,83,31,9);
+   Part(Trim,-W*.33f,D*.40f,163,83,31,9);
+   Part(Shutter,-W*.33f,D*.39f,136,21,19,23);
    Part(Timber,0,D*.10f,77,105,73,10);
    for (float X : {-43.f,43.f})
     for (float Y : {D*.10f-28.f,D*.10f+28.f})
@@ -168,6 +242,11 @@ namespace CryptSettlements
     Part(Timber,W*.28f,D*.23f,31,103,155,42);
     Part(Fabric,W*.28f,D*.23f,55,98,148,16);
     Part(Fabric,W*.28f,D*.36f,65,80,33,15);
+    Part(Trim,W*.28f,D*.41f,74,109,11,84);
+    Part(Fabric,W*.28f,D*.19f,66,100,82,7);
+    Part(Fabric,0,-D*.21f,11,95,99,2);
+    Part(Sill,0,D*.43f,32,93,36,31);
+    Part(Metal,0,D*.41f,53,47,27,12);
     Part(Fabric,-W*.26f,-D*.20f,13,76,64,8);
     Part(Tile,-W*.29f,D*.12f,29,62,48,40);
     Part(Timber,-W*.28f,-D*.34f,42,70,48,77);
@@ -176,6 +255,18 @@ namespace CryptSettlements
     Part(Fabric,W*.27f,-D*.31f,56,58,39,9);
    }
   };
+
+  // Main hub cottages use the same furnished house kits and face the square.
+  for(int32 Cottage=0;Cottage<4;++Cottage)
+  {
+   const float X=1120.f+Cottage*650.f;
+   const float Depth=390.f+34.f*(Cottage%3);
+   const float Y=-1080.f;
+   const float Front=Y+Depth/2;
+   Building(FVector(X,Y,Ground),375.f+43.f*Cottage,Depth,Cottage,false,180.f);
+   const float SquareEdge=-885.f;
+   Box(Road,FVector(X,(Front+SquareEdge)*.5f,Ground+5),FVector(119,FMath::Abs(SquareEdge-Front)+20,10));
+  }
 
   const TCHAR* TownNames[] = {
    TEXT("Alderbrook"), TEXT("Briar Glen"), TEXT("Copper Hollow"), TEXT("Dunmere"),

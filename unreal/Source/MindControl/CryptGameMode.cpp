@@ -72,7 +72,12 @@ namespace
   }
   const float WestRoad = FMath::SmoothStep(5500.f, 6520.f, -X)
    * (1.f - FMath::SmoothStep(235.f, 575.f, FMath::Abs(Y)));
-  return FMath::Lerp(Height, -20.f, WestRoad);
+  const float EastRoad=FMath::SmoothStep(5100.f,5500.f,X)
+   *(1.f-FMath::SmoothStep(CryptWorld::MainRoadEnd,CryptWorld::MainRoadEnd+600.f,X))
+   *(1.f-FMath::SmoothStep(235.f,730.f,FMath::Abs(Y)));
+  const float CastleGround=(1.f-FMath::SmoothStep(840.f,1450.f,FMath::Abs(X-CryptWorld::Castle.X)))
+   *(1.f-FMath::SmoothStep(1270.f,2050.f,FMath::Abs(Y)));
+  return FMath::Lerp(Height,-20.f,FMath::Max3(WestRoad,EastRoad,CastleGround));
  }
 
  UProceduralMeshComponent* CreateSurface(UWorld* World,const TCHAR* Name,bool bCollision)
@@ -146,7 +151,7 @@ namespace
   TArray<float> Eastings,Northings;
   for(float X=-CryptWorld::HalfWorldX;X<=CryptWorld::HalfWorldX;X+=1500.f) Eastings.Add(X);
   for(float Y=-CryptWorld::HalfWorldY;Y<=CryptWorld::HalfWorldY;Y+=1500.f) Northings.Add(Y);
-  for(float X=-6600;X<=6600;X+=100) Eastings.AddUnique(X);
+  for(float X=-6600;X<=CryptWorld::East;X+=100) Eastings.AddUnique(X);
   for(float Y=-6000;Y<=6000;Y+=100) Northings.AddUnique(Y);
   Eastings.AddUnique(-24900);
   Northings.AddUnique(-5850);
@@ -383,6 +388,9 @@ void ACryptGameMode::BeginPlay()
  }
  UMaterialInterface* Stone=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_CastleStone.M_CastleStone"));
  PlaceBlock(FVector(0,0,-8),FVector(110,4,.12),FRotator::ZeroRotator,Cobble?Cobble:Stone); // main road
+ constexpr float RoadStart=5500.f, RoadEnd=CryptWorld::MainRoadEnd;
+ PlaceBlock(FVector((RoadStart+RoadEnd)*.5f,0,-8),FVector((RoadEnd-RoadStart)/100.f,4,.12f),
+   FRotator::ZeroRotator,Cobble?Cobble:Stone);
  // Wilderness stones and ruined pillars beside the approach.
  for(int32 i=0;i<10;++i)
  {
@@ -839,8 +847,9 @@ void ACryptGameMode::BeginPlay()
  UStaticMesh* Cylinder=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
  const auto Masonry=[this,Stone](const FVector& Location,const FVector& Scale,const FRotator& Rotation=FRotator::ZeroRotator,UStaticMesh* Mesh=nullptr)
  {
-  PlaceBlock(Location,Scale,Rotation,Stone,Mesh);
+  PlaceBlock(Location+FVector(CryptWorld::CastleOffsetX,0,0),Scale,Rotation,Stone,Mesh);
  };
+ Masonry(FVector(4450,0,-10),FVector(16.5,24.5,.2));
  for(const float X : {3800.f,5100.f})
  {
   for(const float Y : {-1050.f,1050.f})
@@ -909,6 +918,7 @@ void ACryptGameMode::BeginPlay()
  for(int32 i=0;i<26;++i)
  {
   const float X=-2700.f+i*275.f;
+  if(X>=450.f && X<=3650.f) continue;
   for(int32 Side=-1;Side<=1;Side+=2)
   {
    const float Y=Side*420.f;
@@ -922,20 +932,6 @@ void ACryptGameMode::BeginPlay()
   const float Y=(i%2==0?1.f:-1.f)*490.f;
   PlaceBlock(FVector(X,Y,135),FVector(.18f,.18f,3.f));
   PlaceBlock(FVector(X,Y,290),FVector(.55f,.55f,.45f));
- }
- // House doorways, chimneys, shutters, and roof beams.
- for(int32 i=0;i<6;++i)
- {
-  const float X=750.f+(i/2)*650.f;
-  const float Y=(i%2==0?850.f:-850.f);
-  const float Front=Y+(i%2==0?-220.f:220.f);
-  PlaceBlock(FVector(X,Front,95),FVector(1.15f,.18f,2.0f));
-  PlaceBlock(FVector(X+155.f,Y,540),FVector(.65f,.65f,3.2f));
-  for(int32 j=-1;j<=1;j+=2)
-  {
-   PlaceBlock(FVector(X+j*145.f,Front,240),FVector(.7f,.22f,.85f));
-   PlaceBlock(FVector(X+j*145.f,Front+(i%2==0?-16.f:16.f),240),FVector(.08f,.28f,.85f));
-  }
  }
  // A cobbled village square with market stalls and stone benches.
  // Square paving top = +19 cm, above road top = -2 cm; avoid near-coplanar surfaces.
