@@ -355,9 +355,23 @@ void ACryptHero::AttackReleased()
  if(bBowAiming && BowAimFinger==INDEX_NONE) EndBowAim(true);
 }
 
+FVector ACryptHero::GetBowAimOrigin() const
+{
+ return GetActorLocation()+FVector(0,0,52);
+}
+
+void ACryptHero::CalcCamera(float DeltaTime,FMinimalViewInfo& OutResult)
+{
+ Super::CalcCamera(DeltaTime,OutResult);
+ if(!bBowAiming) return;
+ OutResult.Location=GetBowAimOrigin();
+ OutResult.Rotation=GetControlRotation();
+ OutResult.FOV*=.78f;
+}
+
 void ACryptHero::BeginBowAim(int32 Finger)
 {
- if(bBowAiming || bInventoryOpen || AttackCooldown>0.f || !Controller || !CameraBoom || !FollowCamera) return;
+ if(bBowAiming || bInventoryOpen || AttackCooldown>0.f || !Controller) return;
  if(Arrows[ArrowType]<=0)
  {
   AppendEvent(TEXT("No arrows of this type."));
@@ -365,31 +379,22 @@ void ACryptHero::BeginBowAim(int32 Finger)
  }
  if(Stamina<8.f) return;
  PreAimRotation=GetControlRotation();
- PreAimBoomLength=CameraBoom->TargetArmLength;
- PreAimBoomOffset=CameraBoom->TargetOffset;
- PreAimFov=FollowCamera->FieldOfView;
  bAimWasHidden=IsHidden();
  bBowAiming=true;
  BowAimFinger=Finger;
  ThumbFinger=INDEX_NONE;
  GetCharacterMovement()->StopMovementImmediately();
  ConsumeMovementInputVector();
- CameraBoom->TargetArmLength=0.f;
- CameraBoom->TargetOffset=FVector(0,0,52);
- FollowCamera->SetFieldOfView(PreAimFov*.78f);
  SetActorHiddenInGame(true);
 }
 
 void ACryptHero::EndBowAim(bool bShoot)
 {
  if(!bBowAiming) return;
- const FVector ShotStart=GetActorLocation()+CameraBoom->TargetOffset;
+ const FVector ShotStart=GetBowAimOrigin();
  const FVector ShotDirection=GetControlRotation().Vector();
  bBowAiming=false;
  BowAimFinger=INDEX_NONE;
- CameraBoom->TargetArmLength=PreAimBoomLength;
- CameraBoom->TargetOffset=PreAimBoomOffset;
- FollowCamera->SetFieldOfView(PreAimFov);
  SetActorHiddenInGame(bAimWasHidden);
  if(Controller) Controller->SetControlRotation(PreAimRotation);
  if(bShoot && EquippedWeapon==ECryptWeapon::Bow && !bInventoryOpen)

@@ -25,6 +25,7 @@ class MINDCONTROL_API ACryptHero : public ACharacter
 public:
  ACryptHero();
  virtual void SetupPlayerInputComponent(UInputComponent* Input) override;
+ virtual void CalcCamera(float DeltaTime,struct FMinimalViewInfo& OutResult) override;
  virtual void Tick(float DeltaSeconds) override;
  UFUNCTION(BlueprintCallable) void Attack();
  UFUNCTION(BlueprintCallable) void SpinAttack();
@@ -124,13 +125,12 @@ protected:
  void FireBow(bool bPrecise=false,FVector ShotStart=FVector::ZeroVector,FVector ShotDirection=FVector::ForwardVector);
  void AttackPressed();
  void AttackReleased();
+ FVector GetBowAimOrigin() const;
  void BeginBowAim(int32 Finger);
  void EndBowAim(bool bShoot);
  bool bBowAiming=false;
  bool bAimWasHidden=false;
  int32 BowAimFinger=INDEX_NONE;
- float PreAimBoomLength=0.f, PreAimFov=0.f;
- FVector PreAimBoomOffset=FVector::ZeroVector;
  FRotator PreAimRotation=FRotator::ZeroRotator;
  void IgniteBuilding(FVector Position);
  void BuyArrows();
