@@ -62,6 +62,9 @@ namespace
   if(MapEdge>.86f)
   {
    Height=FMath::Lerp(Height,CryptWorld::SeaLevel-1350.f,FMath::SmoothStep(.86f,1.01f,MapEdge));
+   // Keep the coastal approach shallow, then fall to a 20-hero-height ocean floor.
+   constexpr float DeepOceanDepth=20.f*192.f;
+   Height-= (DeepOceanDepth-1350.f)*FMath::SmoothStep(1.01f,1.15f,MapEdge);
    for(const auto& Island : CryptWorld::Islands)
    {
     const double Distance=FVector2D::Distance(FVector2D(X,Y),Island.Center)/Island.Radius;
@@ -69,7 +72,9 @@ namespace
     if(Profile>0.f)
     {
      const float Hills=210.f*FMath::Sin(X/1170.f)*FMath::Cos(Y/1600.f);
-     Height=FMath::Max(Height,CryptWorld::SeaLevel-450.f+Profile*(1260.f+Hills));
+     const float IslandHeight=CryptWorld::SeaLevel-450.f+Profile*(1260.f+Hills);
+     const float Shelf=static_cast<float>(1.-FMath::SmoothStep(.79,1.03,Distance));
+     Height=FMath::Max(Height,FMath::Lerp(Height,IslandHeight,Shelf));
     }
    }
   }

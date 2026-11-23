@@ -93,6 +93,9 @@ ACryptHero::ACryptHero()
   static ConstructorHelpers::FObjectFinder<UAnimSequence> SpinAnim(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Spin.OceanSerenityOcean_Spin"));
   static ConstructorHelpers::FObjectFinder<UAnimSequence> WalkDiagonal(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_WalkDiagonal.OceanSerenityOcean_WalkDiagonal"));
   static ConstructorHelpers::FObjectFinder<UAnimSequence> RunDiagonal(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_RunDiagonal.OceanSerenityOcean_RunDiagonal"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> Swim(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Swim.OceanSerenityOcean_Swim"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> TreadWater(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_TreadWater.OceanSerenityOcean_TreadWater"));
+  OceanSwim=Swim.Object; OceanTreadWater=TreadWater.Object;
   OceanIdle=Idle.Object; OceanWalk=Walk.Object; OceanRun=Run.Object;
   OceanWalkDiagonal=WalkDiagonal.Object; OceanRunDiagonal=RunDiagonal.Object;
   OceanJump=JumpAnim.Object; OceanAttack=AttackAnim.Object; OceanSpin=SpinAnim.Object;
@@ -232,7 +235,11 @@ void ACryptHero::Tick(float DeltaSeconds)
  const FVector Velocity=GetVelocity();
  const float Speed=Velocity.Size2D();
  bool bLoop=true;
- if (OceanActionTime > 0.f && ActiveOceanAnimation)
+ if (bSwimmingPool && OceanSwim && OceanTreadWater)
+ {
+  Desired=Speed>(ActiveOceanAnimation==OceanSwim?22.f:42.f)?OceanSwim:OceanTreadWater;
+ }
+ else if (OceanActionTime > 0.f && ActiveOceanAnimation)
  {
   Desired=ActiveOceanAnimation;
   bLoop=false;
@@ -280,7 +287,7 @@ void ACryptHero::Tick(float DeltaSeconds)
  {
   const bool bRunning=Desired && (Desired==OceanRun || Desired==OceanRunDiagonal);
   const float ReferenceSpeed=bRunning?290.f:105.f;
-  const float Rate=IsGait(Desired)?FMath::Clamp(Speed/ReferenceSpeed,.50f,1.85f):1.f;
+  const float Rate=Desired==OceanSwim?FMath::Clamp(Speed/230.f,.72f,1.8f):IsGait(Desired)?FMath::Clamp(Speed/ReferenceSpeed,.50f,1.85f):1.f;
   if (auto* Player=GetMesh()->GetSingleNodeInstance()) Player->SetPlayRate(Rate);
  }
 }

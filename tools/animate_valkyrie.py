@@ -12,7 +12,8 @@ from mathutils import Quaternion, Vector
 FPS = 60
 X = Vector((1, 0, 0))
 Z = Vector((0, 0, 1))
-CLIPS = ("Idle", "Walk", "Run", "WalkDiagonal", "RunDiagonal", "Jump", "Attack", "Spin")
+CLIPS = ("Idle", "Walk", "Run", "WalkDiagonal", "RunDiagonal", "Jump", "Attack", "Spin", "Swim", "TreadWater")
+SWIM_LENGTHS = {"Swim": 76, "TreadWater": 92}
 
 
 def smooth(a, b, value):
@@ -170,12 +171,43 @@ def side_punch(rig, phase):
     rotate(rig.pose.bones["spine"], X, -.07 * math.sin(math.pi * phase))
 
 
+def swim_pose(rig, phase, treading):
+    """Cycle a breaststroke or an upright scull without moving the root."""
+    k = math.tau * phase
+    spread = math.sin(math.pi * phase) ** 2
+    pull = smooth(.12, .46, phase) * (1 - smooth(.52, .94, phase))
+    kick = smooth(.28, .63, phase) * (1 - smooth(.67, .96, phase))
+    pelvis = rig.pose.bones["pelvis"]
+    rotate(pelvis, X, (.14 if treading else 1.27) + .045 * math.sin(k))
+    pelvis.location = pelvis.bone.matrix_local.to_3x3().inverted() @ Vector(
+        (0, 0, (-.35 if treading else -.46) + .025 * math.sin(k)))
+    rotate(rig.pose.bones["spine"], X, -.05 if treading else -.12 * pull)
+    rotate(rig.pose.bones["head"], X, -.12 if treading else -.30 - .12 * pull)
+    for side in ("L", "R"):
+        upper, fore, thigh, shin, foot = (
+            rig.pose.bones[f"{part}_{side}"]
+            for part in ("upperarm", "forearm", "thigh", "shin", "foot")
+        )
+        side_sign = math.copysign(1, upper.bone.head_local.x)
+        local = upper.bone.matrix_local.to_quaternion().inverted()
+        outward = -side_sign * (.95 + .32 * math.cos(k) if treading else .18 + 1.12 * spread)
+        pitch = -.74 + .30 * math.sin(k) if treading else -2.77 + 1.65 * pull
+        upper.rotation_quaternion = (
+            Quaternion(local @ Vector((0, 1, 0)), outward) @ Quaternion(local @ X, pitch)
+        )
+        rotate(fore, X, -.70 - .23 * math.cos(k) if treading else -.11 - .95 * pull)
+        leg_wave = math.sin(k + (0 if side == "L" else math.pi))
+        rotate(thigh, X, -.23 - .21 * leg_wave if treading else -.55 * kick)
+        rotate(shin, X, .50 + .25 * leg_wave if treading else 1.20 * kick)
+        rotate(foot, X, -.24 if treading else -.22 + .31 * kick)
+
+
 def hair_pose(rig, name, phase):
     strength = {
         "Idle": .017, "Walk": .076, "Run": .129, "WalkDiagonal": .084,
-        "RunDiagonal": .143, "Jump": .15, "Attack": .16, "Spin": .22,
+        "RunDiagonal": .143, "Jump": .15, "Attack": .16, "Spin": .22, "Swim": .045, "TreadWater": .032,
     }[name]
-    loop = name == "Idle" or name.startswith(("Walk", "Run"))
+    loop = name in ("Idle", "Swim", "TreadWater") or name.startswith(("Walk", "Run"))
     envelope = 1.0 if loop else math.sin(math.pi * phase)**2
     wave = math.tau * phase
     for index, bone_name in enumerate(("hair_upper", "hair_lower")):
@@ -195,9 +227,15 @@ def make_clips(scene, rig, source):
     for name in CLIPS:
         original = source.get(name)
         walking = name.startswith(("Walk", "Run"))
-        length = gait_lengths[name] if walking else round(2 * (original.frame_range[1] - original.frame_range[0]))
+        swimming = name in SWIM_LENGTHS
+        if swimming:
+            length = SWIM_LENGTHS[name]
+        elif walking:
+            length = gait_lengths[name]
+        else:
+            length = round(2 * (original.frame_range[1] - original.frame_range[0]))
         poses = []
-        if not walking:
+        if not walking and not swimming:
             # Preserve the established action choreography, now evaluated at 60 Hz.
             action_data.action = original
             start = float(original.frame_range[0])
@@ -218,6 +256,8 @@ def make_clips(scene, rig, source):
                     bone.matrix_basis = poses[sample][bone.name]
             if walking:
                 gait(rig, phase, name.startswith("Run"), name.endswith("Diagonal"))
+            if swimming:
+                swim_pose(rig, phase, name == "TreadWater")
             if name == "Attack":
                 side_punch(rig, phase)
             if name == "Jump":
@@ -259,7 +299,7 @@ def main():
     missing = sorted(required - set(rig.data.bones.keys()))
     if missing:
         raise RuntimeError("Incompatible Ocean Serenity skeleton; missing bones: " + ", ".join(missing))
-    missing_clips = sorted(set(CLIPS) - set(originals))
+    missing_clips = sorted(set(CLIPS) - SWIM_LENGTHS.keys() - set(originals))
     if missing_clips:
         raise RuntimeError("Input FBX missing required source clips: " + ", ".join(missing_clips))
     separate_hand_hip_geometry(body)
