@@ -184,7 +184,8 @@ namespace
      const FVector Extent=Bounds.BoxExtent;
      if(Extent.X<500 || Extent.Y<500 || Extent.Z>220) continue;
      const auto* MeshComponent=Cast<UStaticMeshComponent>(Primitive);
-     const auto* Mesh=MeshComponent?MeshComponent->GetStaticMesh():nullptr;
+     const UStaticMesh* Mesh=nullptr;
+     if(MeshComponent) Mesh=MeshComponent->GetStaticMesh();
      const FString MeshName=Mesh?Mesh->GetName():FString();
      const auto* Material=Primitive->GetMaterial(0);
      const bool bTemplateFloor=MeshName.Contains(TEXT("Floor")) ||
