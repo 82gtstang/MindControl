@@ -207,8 +207,6 @@ namespace
  void CreateTerrain(UWorld* World,UMaterialInterface* Grass,UMaterialInterface* Dirt,UMaterialInterface* Overworld,
                     UMaterialInterface* Paving)
  {
-  auto* Surface=CreateSurface(World,TEXT("GroundSurface"),true);
-  if(!Surface) return;
   TArray<float> Eastings,Northings;
   for(float X=-CryptWorld::OceanLimit;X<=CryptWorld::OceanLimit;X+=1500.f) Eastings.Add(X);
   for(float Y=-CryptWorld::OceanLimit;Y<=CryptWorld::OceanLimit;Y+=1500.f) Northings.Add(Y);
@@ -236,73 +234,81 @@ namespace
   const int32 Columns=Eastings.Num()-1;
   const int32 Rows=Northings.Num()-1;
   const int32 Stride=Columns+1;
-  TArray<FVector> Vertices,Normals;
-  TArray<FVector2D> UVs;
-  TArray<FLinearColor> TerrainMasks;
-  TArray<FProcMeshTangent> Tangents;
-  TArray<int32> Triangles,DirtTriangles,PavingTriangles;
-  Vertices.Reserve(Stride*(Rows+1));
-  Normals.Reserve(Stride*(Rows+1));
-  UVs.Reserve(Stride*(Rows+1));
-  TerrainMasks.Reserve(Stride*(Rows+1));
-  Tangents.Reserve(Stride*(Rows+1));
-  Triangles.Reserve(Columns*Rows*6);
-  DirtTriangles.Reserve(Columns*Rows);
-  for(int32 Row=0;Row<=Rows;++Row)
+  // Use local indices for each strip so mobile rendering never needs a large index range.
+  constexpr int32 RowsPerStrip=32;
+  for(int32 FirstRow=0;FirstRow<Rows;FirstRow+=RowsPerStrip)
   {
-   const float Y=Northings[Row];
-   for(int32 Column=0;Column<=Columns;++Column)
+   const int32 LastRow=FMath::Min(FirstRow+RowsPerStrip,Rows);
+   auto* Surface=CreateSurface(World,TEXT("GroundSurface"),true);
+   if(!Surface) continue;
+   TArray<FVector> Vertices,Normals;
+   TArray<FVector2D> UVs;
+   TArray<FLinearColor> TerrainMasks;
+   TArray<FProcMeshTangent> Tangents;
+   TArray<int32> Triangles,DirtTriangles,PavingTriangles;
+   Vertices.Reserve(Stride*(LastRow-FirstRow+1));
+   Normals.Reserve(Stride*(LastRow-FirstRow+1));
+   UVs.Reserve(Stride*(LastRow-FirstRow+1));
+   TerrainMasks.Reserve(Stride*(LastRow-FirstRow+1));
+   Tangents.Reserve(Stride*(LastRow-FirstRow+1));
+   Triangles.Reserve(Columns*(LastRow-FirstRow)*6);
+   DirtTriangles.Reserve(Columns*(LastRow-FirstRow));
+   for(int32 Row=FirstRow;Row<=LastRow;++Row)
    {
-    const float X=Eastings[Column];
-    const float Dx=(TerrainHeight(X+5,Y)-TerrainHeight(X-5,Y))*.1f;
-    const float Dy=(TerrainHeight(X,Y+5)-TerrainHeight(X,Y-5))*.1f;
-    Vertices.Emplace(X,Y,TerrainHeight(X,Y));
-    Normals.Add(FVector(-Dx,-Dy,1).GetSafeNormal());
-    Tangents.Emplace(FVector(1,0,Dx).GetSafeNormal(),false);
-    UVs.Emplace(float(Column)/Columns,float(Row)/Rows);
-    const float WoodlandPattern=FMath::Sin(X/2850.f+Y/5200.f)*FMath::Cos(Y/3400.f-X/6900.f);
-    const float Woodland=FMath::SmoothStep(-.42f,.55f,WoodlandPattern);
-    const float Slope=FMath::Sqrt(Dx*Dx+Dy*Dy);
-    const float Rocky=FMath::SmoothStep(.22f,.60f,Slope);
-    float Bank=0.f;
-    for(const auto& River : CryptWorld::Rivers)
+    const float Y=Northings[Row];
+    for(int32 Column=0;Column<=Columns;++Column)
     {
-     if(Y<=River.Start || Y>=River.End) continue;
-     const float Distance=FMath::Abs(X-River.X(Y));
-     const float Edge=River.BedWidth();
-     const float Fade=FMath::SmoothStep(0.f,250.f,FMath::Min(Y-River.Start,River.End-Y));
-     Bank=FMath::Max(Bank,Fade*(1.f-FMath::SmoothStep(Edge+10.f,Edge+260.f,Distance)));
-    }
-    TerrainMasks.Emplace(Woodland,Rocky,Bank,IsTrail(X,Y)?1.f:0.f);
-    if(Row<Rows && Column<Columns)
-    {
-     const float TileX=(X+Eastings[Column+1])*.5f;
-     const float TileY=(Y+Northings[Row+1])*.5f;
-     if((TileX>-24900 && TileX<-6600 && FMath::Abs(TileY-CryptSettlements::DistrictNorth)<5850) ||
-        CryptDungeons::IsRampCell(TileX,TileY)) continue;
-     const int32 A=Row*Stride+Column;
-     const int32 B=A+1;
-     const int32 C=A+Stride;
-     const int32 D=C+1;
-     const bool bRoad=TileX>=MainRoadStart && TileX<CastleApronStart && FMath::Abs(TileY)<MainRoadHalfWidth;
-     const bool bApron=TileX>=CastleApronStart && TileX<CastleApronEnd && FMath::Abs(TileY)<CastleApronHalfWidth;
-     auto& Section=Paving && (bRoad || bApron)?PavingTriangles:
-       (!Overworld && Dirt && IsDirt(TileX,TileY))?DirtTriangles:Triangles;
-     Section.Append({A,C,B,B,C,D});
+     const float X=Eastings[Column];
+     const float Dx=(TerrainHeight(X+5,Y)-TerrainHeight(X-5,Y))*.1f;
+     const float Dy=(TerrainHeight(X,Y+5)-TerrainHeight(X,Y-5))*.1f;
+     Vertices.Emplace(X,Y,TerrainHeight(X,Y));
+     Normals.Add(FVector(-Dx,-Dy,1).GetSafeNormal());
+     Tangents.Emplace(FVector(1,0,Dx).GetSafeNormal(),false);
+     UVs.Emplace(float(Column)/Columns,float(Row)/Rows);
+     const float WoodlandPattern=FMath::Sin(X/2850.f+Y/5200.f)*FMath::Cos(Y/3400.f-X/6900.f);
+     const float Woodland=FMath::SmoothStep(-.42f,.55f,WoodlandPattern);
+     const float Slope=FMath::Sqrt(Dx*Dx+Dy*Dy);
+     const float Rocky=FMath::SmoothStep(.22f,.60f,Slope);
+     float Bank=0.f;
+     for(const auto& River : CryptWorld::Rivers)
+     {
+      if(Y<=River.Start || Y>=River.End) continue;
+      const float Distance=FMath::Abs(X-River.X(Y));
+      const float Edge=River.BedWidth();
+      const float Fade=FMath::SmoothStep(0.f,250.f,FMath::Min(Y-River.Start,River.End-Y));
+      Bank=FMath::Max(Bank,Fade*(1.f-FMath::SmoothStep(Edge+10.f,Edge+260.f,Distance)));
+     }
+     TerrainMasks.Emplace(Woodland,Rocky,Bank,IsTrail(X,Y)?1.f:0.f);
+     if(Row<LastRow && Column<Columns)
+     {
+      const float TileX=(X+Eastings[Column+1])*.5f;
+      const float TileY=(Y+Northings[Row+1])*.5f;
+      if((TileX>-24900 && TileX<-6600 && FMath::Abs(TileY-CryptSettlements::DistrictNorth)<5850) ||
+         CryptDungeons::IsRampCell(TileX,TileY)) continue;
+      const int32 A=(Row-FirstRow)*Stride+Column;
+      const int32 B=A+1;
+      const int32 C=A+Stride;
+      const int32 D=C+1;
+      const bool bRoad=TileX>=MainRoadStart && TileX<CastleApronStart && FMath::Abs(TileY)<MainRoadHalfWidth;
+      const bool bApron=TileX>=CastleApronStart && TileX<CastleApronEnd && FMath::Abs(TileY)<CastleApronHalfWidth;
+      auto& Section=Paving && (bRoad || bApron)?PavingTriangles:
+        (!Overworld && Dirt && IsDirt(TileX,TileY))?DirtTriangles:Triangles;
+      Section.Append({A,C,B,B,C,D});
+     }
     }
    }
-  }
-  Surface->CreateMeshSection_LinearColor(0,Vertices,Triangles,Normals,UVs,TerrainMasks,Tangents,true);
-  if(Overworld || Grass) Surface->SetMaterial(0,Overworld?Overworld:Grass);
-  if(!DirtTriangles.IsEmpty())
-  {
-   Surface->CreateMeshSection_LinearColor(1,Vertices,DirtTriangles,Normals,UVs,{},Tangents,true);
-   Surface->SetMaterial(1,Dirt);
-  }
-  if(!PavingTriangles.IsEmpty())
-  {
-   Surface->CreateMeshSection_LinearColor(2,Vertices,PavingTriangles,Normals,UVs,{},Tangents,true);
-   Surface->SetMaterial(2,Paving);
+   Surface->CreateMeshSection_LinearColor(0,Vertices,Triangles,Normals,UVs,TerrainMasks,Tangents,true);
+   if(Overworld || Grass) Surface->SetMaterial(0,Overworld?Overworld:Grass);
+   if(!DirtTriangles.IsEmpty())
+   {
+    Surface->CreateMeshSection_LinearColor(1,Vertices,DirtTriangles,Normals,UVs,{},Tangents,true);
+    Surface->SetMaterial(1,Dirt);
+   }
+   if(!PavingTriangles.IsEmpty())
+   {
+    Surface->CreateMeshSection_LinearColor(2,Vertices,PavingTriangles,Normals,UVs,{},Tangents,true);
+    Surface->SetMaterial(2,Paving);
+   }
   }
  }
 

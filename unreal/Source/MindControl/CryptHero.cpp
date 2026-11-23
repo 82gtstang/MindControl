@@ -237,7 +237,8 @@ void ACryptHero::Tick(float DeltaSeconds)
  bool bLoop=true;
  if (bSwimmingPool && OceanSwim && OceanTreadWater)
  {
-  Desired=Speed>(ActiveOceanAnimation==OceanSwim?22.f:42.f)?OceanSwim:OceanTreadWater;
+  Desired=(FMath::Abs(SwimDepthInput)>.12f || Speed>(ActiveOceanAnimation==OceanSwim?22.f:42.f))
+   ?OceanSwim:OceanTreadWater;
  }
  else if (OceanActionTime > 0.f && ActiveOceanAnimation)
  {
@@ -331,7 +332,7 @@ void ACryptHero::UpdateSwimming(float DeltaSeconds)
   ? CryptDungeons::GetGroundHeight(Position.X,Position.Y) : CryptWorld::SeaLevel;
  const bool bAtSea=SeaFloor<CryptWorld::SeaLevel-55.f &&
   Position.Z<CryptWorld::SeaLevel+(bSwimmingPool?140.f:80.f) &&
-  Position.Z>CryptWorld::SeaLevel-400.f;
+  Position.Z>=SeaFloor-220. && GetChartIndex()==INDEX_NONE;
  const bool bAtPool=Radius<(bSwimmingPool?.84:.80) &&
   Position.Z<CryptWorld::PoolSurface+65.f && Position.Z>CryptWorld::PoolSurface-300.f;
  const bool bInside=!SailingShip.IsValid() && (bAtSea || bAtPool);
@@ -340,6 +341,7 @@ void ACryptHero::UpdateSwimming(float DeltaSeconds)
   if(bSwimmingPool && Movement->MovementMode==MOVE_Flying)
    Movement->SetMovementMode(MOVE_Falling);
   bSwimmingPool=false;
+  SwimDepthInput=0.f;
   SwimBurstTime=0.f;
   SwimBurstCooldown=0.f;
   return;
@@ -347,6 +349,7 @@ void ACryptHero::UpdateSwimming(float DeltaSeconds)
  if(!bSwimmingPool || Movement->MovementMode!=MOVE_Flying)
  {
   bSwimmingPool=true;
+  SwimTargetZ=Position.Z;
   StopJumping();
   Movement->MaxFlySpeed=290.f;
   Movement->SetMovementMode(MOVE_Flying);
@@ -359,11 +362,17 @@ void ACryptHero::UpdateSwimming(float DeltaSeconds)
   Movement->Velocity=SwimBurstDirection*850.f;
  }
  else Movement->MaxFlySpeed=290.f;
- // Lift the capsule toward the surface so it can clear the sloped shore.
- const double TargetZ=bAtSea
-  ? FMath::Max(CryptWorld::SeaLevel+38.,SeaFloor+128.)
-  : CryptWorld::PoolSurface+(Radius>.68?85.:28.);
- Movement->Velocity.Z=FMath::Clamp((TargetZ-Position.Z)*8.,-240.,360.);
+ // Keep the capsule in swimming movement even when it contacts the bed.
+ const double SurfaceZ=bAtSea?CryptWorld::SeaLevel:CryptWorld::PoolSurface;
+ const double SurfaceLimit=SurfaceZ+38.;
+ const double Floor=bAtSea?SeaFloor:CryptDungeons::GetGroundHeight(Position.X,Position.Y);
+ const double BottomLimit=FMath::Min(SurfaceLimit,Floor+GetCapsuleComponent()->GetScaledCapsuleHalfHeight()+12.);
+ SwimTargetZ=FMath::Clamp(SwimTargetZ+SwimDepthInput*215.*DeltaSeconds,BottomLimit,SurfaceLimit);
+ const double VerticalSpeed=(SwimTargetZ-Position.Z)*8.;
+ Movement->Velocity.Z=FMath::Clamp(VerticalSpeed,-235.,290.);
+ // Push toward shore once the player reaches the surface and keeps pressing up.
+ if(SwimDepthInput>.12f && Position.Z>SurfaceLimit-14. && SwimBurstTime<=0.f)
+  AddMovementInput(FRotationMatrix(FRotator(0,GetControlRotation().Yaw,0)).GetUnitAxis(EAxis::X),SwimDepthInput);
 }
 
 void ACryptHero::JumpOrSwim()
@@ -384,6 +393,11 @@ void ACryptHero::JumpOrSwim()
 
 void ACryptHero::MoveForward(float V)
 {
+ if(bSwimmingPool)
+ {
+  SwimDepthInput=FMath::Abs(V)>.12f?FMath::Clamp(V,-1.f,1.f):0.f;
+  return;
+ }
  if(SailingShip.IsValid())
  {
   SailThrottle=V;

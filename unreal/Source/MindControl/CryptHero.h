@@ -103,6 +103,8 @@ protected:
  void JumpOrSwim();
  void UpdateSwimming(float DeltaSeconds);
  bool bSwimmingPool=false;
+ float SwimDepthInput=0.f;
+ double SwimTargetZ=0.;
  float SwimBurstTime=0.f;
  float SwimBurstCooldown=0.f;
  FVector SwimBurstDirection=FVector::ZeroVector;
