@@ -31,15 +31,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 120); do
             response=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/ocean-serenity-rig.yml/runs?head_sha=$GITHUB_SHA&per_page=60")
             result=$(echo "$response" | jq -r --arg sha "$GITHUB_SHA" '[.workflow_runs[] | select(.name=="Ocean Serenity experimental auto-rig" and .head_sha==$sha)] | first | if . == null then "missing" else (.status + ":" + (.conclusion // "pending")) end')
-            echo "Rig on $GITHUB_SHA: $result ($attempt/30)"
+            echo "Rig on $GITHUB_SHA: $result ($attempt/120)"
             if [ "$result" = "completed:success" ]; then exit 0; fi
             if [[ "$result" == completed:* ]]; then echo "Rig failed: $result"; exit 1; fi
             sleep 30
           done
-          echo "::error::No successful rig for this exact commit after 15 minutes. Check rig workflow triggers and failures; do not treat this as a successful Android build."
+          echo "::error::No successful rig for this exact commit after 60 minutes. Check rig workflow triggers and failures; do not treat this as a successful Android build."
           exit 1
   package-android:
     needs: wait-for-rig
@@ -235,6 +235,7 @@ jobs:
             throw "Environment material import failed with exit code $($process.ExitCode)"
           }
       - name: Build and package Android APK
+        timeout-minutes: 35
         if: inputs.play_bundle != true
         shell: powershell
         run: |
@@ -242,7 +243,7 @@ jobs:
           $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\MindControl.uproject'
           $output = Join-Path $env:GITHUB_WORKSPACE 'unreal\PackagedAndroid'
           if (!(Test-Path $project)) { throw "Unreal project not found: $project" }
-          & $uat BuildCookRun -project="$project" -noP4 -platform=Android -clientconfig=Development -nocompileeditor -unattended -build -cook -CookDir="$env:GITHUB_WORKSPACE\unreal\Content\Environment\MindControl" -stage -pak -package -archive -archivedirectory="$output" -utf8output
+          & $uat BuildCookRun -project="$project" -noP4 -platform=Android -clientconfig=Development -nocompileeditor -unattended -build -NoXGE -cook -AdditionalCookerOptions="-noxgeshadercompile" -CookDir="$env:GITHUB_WORKSPACE\unreal\Content\Environment\MindControl" -stage -pak -package -archive -archivedirectory="$output" -utf8output
           if ($LASTEXITCODE -ne 0) { throw "Unreal BuildCookRun failed with exit code $LASTEXITCODE" }
       - name: Build and verify signed Google Play bundle
         if: inputs.play_bundle == true
