@@ -93,6 +93,13 @@ protected:
  int32 ThumbFinger=INDEX_NONE;
  FVector2D ThumbStart=FVector2D::ZeroVector;
  float ThumbStartTime=0.f;
+ bool InteractWithShip();
+ AActor* FindBoardableShip() const;
+ void UpdateSailing(float DeltaSeconds);
+ TWeakObjectPtr<AActor> SailingShip;
+ float SailThrottle=0.f;
+ float HelmInput=0.f;
+ float ShipSpeed=0.f;
  void JumpOrSwim();
  void UpdateSwimming(float DeltaSeconds);
  bool bSwimmingPool=false;

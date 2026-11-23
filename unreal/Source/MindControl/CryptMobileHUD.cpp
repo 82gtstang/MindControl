@@ -280,6 +280,18 @@ void ACryptMobileHUD::DrawHUD()
  {
   DrawLine(A.X,A.Y,B.X,B.Y,Color,Thickness*S);
  };
+ if(bOverview)
+ {
+  const auto MainlandDock=ToMap(CryptWorld::DockEnd(0));
+  Icon(EIcon::Castle,MainlandDock,4.5f*S,Gold);
+  for(int32 Index=0;Index<UE_ARRAY_COUNT(CryptWorld::Islands);++Index)
+  {
+   const auto& Island=CryptWorld::Islands[Index];
+   const auto Point=ToMap(FVector(Island.Center.X,Island.Center.Y,0));
+   DrawRect(FLinearColor(.28f,.54f,.32f),Point.X-4*S,Point.Y-4*S,8*S,8*S);
+   DrawText(FString::FromInt(Index+1),FLinearColor::White,Point.X+5*S,Point.Y-6*S,nullptr,.78f*S,false);
+  }
+ }
  for(const FVector2D Hill : {FVector2D(-3250,-2800),FVector2D(3400,-2950),FVector2D(-3300,3200),FVector2D(4330,3200)})
  {
   for(int32 Ring=1;Ring<=3;++Ring)

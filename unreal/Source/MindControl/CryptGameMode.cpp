@@ -59,7 +59,20 @@ namespace
   const float Rolling=175.f*FMath::Sin(X/1960.f)*FMath::Cos(Y/2420.f);
   Height+=Wilder*(Ridges+Rolling+750.f);
   const float MapEdge=FMath::Max(FMath::Abs(X)/CryptWorld::HalfWorldX,FMath::Abs(Y)/CryptWorld::HalfWorldY);
-  Height+=1800.f*FMath::SmoothStep(.94f,1.f,MapEdge);
+  if(MapEdge>.86f)
+  {
+   Height=FMath::Lerp(Height,CryptWorld::SeaLevel-1350.f,FMath::SmoothStep(.86f,1.01f,MapEdge));
+   for(const auto& Island : CryptWorld::Islands)
+   {
+    const double Distance=FVector2D::Distance(FVector2D(X,Y),Island.Center)/Island.Radius;
+    const float Profile=static_cast<float>(1.-FMath::SmoothStep(.32,1.03,Distance));
+    if(Profile>0.f)
+    {
+     const float Hills=210.f*FMath::Sin(X/1170.f)*FMath::Cos(Y/1600.f);
+     Height=FMath::Max(Height,CryptWorld::SeaLevel-450.f+Profile*(1260.f+Hills));
+    }
+   }
+  }
   if(X<-6600.f)
   {
    const float ByTown=(1.f-FMath::SmoothStep(24900.f,27600.f,-X))*
@@ -192,8 +205,8 @@ namespace
   auto* Surface=CreateSurface(World,TEXT("GroundSurface"),true);
   if(!Surface) return;
   TArray<float> Eastings,Northings;
-  for(float X=-CryptWorld::HalfWorldX;X<=CryptWorld::HalfWorldX;X+=1500.f) Eastings.Add(X);
-  for(float Y=-CryptWorld::HalfWorldY;Y<=CryptWorld::HalfWorldY;Y+=1500.f) Northings.Add(Y);
+  for(float X=-CryptWorld::OceanLimit;X<=CryptWorld::OceanLimit;X+=1500.f) Eastings.Add(X);
+  for(float Y=-CryptWorld::OceanLimit;Y<=CryptWorld::OceanLimit;Y+=1500.f) Northings.Add(Y);
   for(float X=-6600;X<=CryptWorld::East;X+=100) Eastings.AddUnique(X);
   for(float Y=-6000;Y<=CryptWorld::TownNorth+3600.f;Y+=100) Northings.AddUnique(Y);
   Eastings.AddUnique(-24900);
@@ -388,6 +401,15 @@ namespace
    for(float Y=-57000.f;Y<=57000.f;Y+=3100.f)
     if(Random.FRand()<.78f)
      Plant(X+Random.FRandRange(-990,990),Y+Random.FRandRange(-990,990));
+  for(const auto& Island : CryptWorld::Islands)
+   for(int32 Tree=0;Tree<19;++Tree)
+   {
+    const double Angle=Tree*2.39996;
+    const double Radius=Island.Radius*(.14+.45*FMath::Sqrt(Tree/19.));
+    const float X=Island.Center.X+Radius*FMath::Cos(Angle);
+    const float Y=Island.Center.Y+Radius*FMath::Sin(Angle);
+    if(TerrainHeight(X,Y)>CryptWorld::SeaLevel+100.f) Plant(X,Y);
+   }
   for(float X=-5900.f;X<=12600.f;X+=930.f)
    for(float Y=-6000.f;Y<=6200.f;Y+=950.f)
     if(Random.FRand()<.78f)
@@ -488,6 +510,99 @@ namespace
      Actor->SetActorLocationAndRotation(Center+Offset,Forward.Rotation(),false);
     }
    }),.05f,true);
+ }
+
+ void CreateOceanFleet(UWorld* World,UMaterialInterface* Water)
+ {
+  using namespace CryptWorld;
+  if(Water)
+  {
+   if(auto* Surface=CreateSurface(World,TEXT("OceanSurface"),false))
+   {
+    const double L=OceanLimit;
+    Surface->CreateMeshSection_LinearColor(0,
+     {FVector(-L,-L,SeaLevel),FVector(L,-L,SeaLevel),FVector(-L,L,SeaLevel),FVector(L,L,SeaLevel)},
+     {0,2,1,1,2,3},{FVector::UpVector,FVector::UpVector,FVector::UpVector,FVector::UpVector},
+     {FVector2D(0,0),FVector2D(85,0),FVector2D(0,85),FVector2D(85,85)},{},{},false);
+    Surface->SetMaterial(0,Water);
+    Surface->SetCastShadow(false);
+   }
+  }
+  auto* Cube=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));
+  auto* Sphere=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+  auto* Cylinder=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+  auto* Basic=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+  if(!Cube || !Sphere || !Cylinder || !Basic) return;
+  const auto Part=[&](AActor* Owner,UStaticMesh* Mesh,FVector At,FVector Size,FLinearColor Color,
+                       FRotator Rotation=FRotator::ZeroRotator,bool bCollision=false)
+  {
+   auto* Component=NewObject<UStaticMeshComponent>(Owner);
+   Owner->AddInstanceComponent(Component);
+   Component->SetupAttachment(Owner->GetRootComponent());
+   Component->SetStaticMesh(Mesh);
+   auto* Tint=UMaterialInstanceDynamic::Create(Basic,Component);
+   if(Tint)
+   {
+    Tint->SetVectorParameterValue(TEXT("Color"),Color);
+    Component->SetMaterial(0,Tint);
+   }
+   Component->SetCollisionProfileName(bCollision?TEXT("BlockAll"):TEXT("NoCollision"));
+   Component->SetRelativeTransform(FTransform(Rotation,At,Size/100.));
+   Component->RegisterComponent();
+  };
+  const FLinearColor Wood(.21f,.10f,.045f), Planks(.42f,.24f,.12f), Canvas(.83f,.76f,.57f);
+  for(int32 Index=0;Index<=UE_ARRAY_COUNT(Islands);++Index)
+  {
+   const FVector Out=DockDirection(Index);
+   const double Length=Index==0?9000.:2800.;
+   const FVector End=DockEnd(Index);
+   const FVector Center=End-Out*Length*.5;
+   auto* Dock=World->SpawnActor<AStaticMeshActor>(Center,Out.Rotation());
+   if(!Dock) continue;
+   Part(Dock,Cube,FVector::ZeroVector,FVector(Length,460,36),Planks,FRotator::ZeroRotator,true);
+   for(double X=-Length*.5+200.;X<Length*.5;X+=480.)
+    for(const double Y : {-195.,195.})
+     Part(Dock,Cylinder,FVector(X,Y,-130),FVector(42,42,480),Wood);
+  }
+  TArray<TWeakObjectPtr<AStaticMeshActor>> Patrols;
+  for(int32 Index=0;Index<4;++Index)
+  {
+   // Two ships start moored; the other two sail offshore until boarded.
+   const bool bPatrol=Index>=2;
+   const FVector Start=bPatrol?FVector(78000.-(Index-2)*155000.,-32000,SeaLevel):ShipBerth(Index);
+   auto* Ship=World->SpawnActor<AStaticMeshActor>(Start,bPatrol?FRotator::ZeroRotator:DockDirection(Index).Rotation());
+   if(!Ship) continue;
+   Ship->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
+   Ship->Tags.Add(TEXT("OceanShip"));
+   Part(Ship,Sphere,FVector(0,0,-20),FVector(1900,610,430),Wood);
+   Part(Ship,Cube,FVector(0,0,120),FVector(1530,480,38),Planks,FRotator::ZeroRotator,true);
+   for(const double Side : {-1.,1.})
+    Part(Ship,Cube,FVector(0,Side*244,167),FVector(1500,24,75),Wood);
+   for(const double X : {-460.,0.,450.})
+   {
+    Part(Ship,Cylinder,FVector(X,0,575),FVector(52,52,930),Wood);
+    Part(Ship,Cylinder,FVector(X,0,790),FVector(29,29,680),Wood,FRotator(0,0,90));
+    Part(Ship,Sphere,FVector(X+36,0,620),FVector(135,620,345),Canvas);
+   }
+   Part(Ship,Cube,FVector(-460,98,979),FVector(12,195,90),FLinearColor(.05f,.05f,.06f));
+   if(bPatrol) Patrols.Add(Ship);
+  }
+  FTimerHandle PatrolTimer;
+  World->GetTimerManager().SetTimer(PatrolTimer,FTimerDelegate::CreateWeakLambda(World,
+   [Patrols=MoveTemp(Patrols),Time=0.]() mutable
+   {
+    Time+=.08;
+    for(int32 Index=0;Index<Patrols.Num();++Index)
+    {
+     auto* Ship=Patrols[Index].Get();
+     if(!Ship || Ship->ActorHasTag(TEXT("ClaimedShip"))) continue;
+     const double Angle=Time*.052+Index*PI;
+     const FVector Position((Index==0?81000.:-81000.)+FMath::Cos(Angle)*5200.,
+      -36000.+FMath::Sin(Angle)*13000.,SeaLevel+FMath::Sin(Time*1.6)*12.);
+     const FVector Heading(-FMath::Sin(Angle)*5200.,FMath::Cos(Angle)*13000.,0.);
+     Ship->SetActorLocationAndRotation(Position,Heading.Rotation());
+    }
+   }),.08f,true);
  }
 
  void CreateWater(UWorld* World,UMaterialInterface* RiverMaterial,UMaterialInterface* FallsMaterial)
@@ -653,19 +768,22 @@ void ACryptGameMode::BeginPlay()
  CreateWater(GetWorld(),River,Falls);
  CreateGravehollowPool(GetWorld(),LoadObject<UMaterialInterface>(nullptr,
   TEXT("/Game/Environment/MindControl/M_GravehollowPool.M_GravehollowPool")));
+ auto* SeaMaterial=LoadObject<UMaterialInterface>(nullptr,
+  TEXT("/Game/Environment/MindControl/M_GravehollowPool.M_GravehollowPool"));
+ CreateOceanFleet(GetWorld(),SeaMaterial?SeaMaterial:River);
  // Keep movement inside the finished terrain while the surrounding hills continue past the boundary.
  for(const float Side : {-1.f,1.f})
  {
   for(const bool bAlongX : {false,true})
   {
    auto* Boundary=GetWorld()->SpawnActor<AStaticMeshActor>(
-     FVector(bAlongX?0.f:Side*(CryptWorld::HalfWorldX-80),bAlongX?Side*(CryptWorld::HalfWorldY-80):0.f,3000),FRotator::ZeroRotator);
+     FVector(bAlongX?0.f:Side*(CryptWorld::OceanLimit-80),bAlongX?Side*(CryptWorld::OceanLimit-80):0.f,3000),FRotator::ZeroRotator);
    if(!Boundary) continue;
    auto* Collision=Boundary->GetStaticMeshComponent();
    Collision->SetMobility(EComponentMobility::Movable);
    Collision->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube")));
    Collision->SetCollisionProfileName(TEXT("BlockAll"));
-   Boundary->SetActorScale3D(bAlongX?FVector(2*CryptWorld::HalfWorldX/100,1,130):FVector(1,2*CryptWorld::HalfWorldY/100,130));
+   Boundary->SetActorScale3D(bAlongX?FVector(2*CryptWorld::OceanLimit/100,1,130):FVector(1,2*CryptWorld::OceanLimit/100,130));
    Boundary->SetActorHiddenInGame(true);
    Collision->SetMobility(EComponentMobility::Static);
   }

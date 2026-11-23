@@ -203,6 +203,7 @@ void ACryptHero::BeginPlay()
 void ACryptHero::Tick(float DeltaSeconds)
 {
  Super::Tick(DeltaSeconds);
+ UpdateSailing(DeltaSeconds);
  UpdateSwimming(DeltaSeconds);
  UpdateFlames(DeltaSeconds);
  UpdateChart();
@@ -319,8 +320,14 @@ void ACryptHero::UpdateSwimming(float DeltaSeconds)
  auto* Movement=GetCharacterMovement();
  const FVector Position=GetActorLocation();
  const double Radius=CryptWorld::PoolRadius(Position.X,Position.Y);
- const bool bInside=Radius<(bSwimmingPool?.84:.80)
-  && Position.Z<CryptWorld::PoolSurface+65.f && Position.Z>CryptWorld::PoolSurface-300.f;
+ const double SeaFloor=CryptWorld::MainlandEdge(Position.X,Position.Y)>.86
+  ? CryptDungeons::GetGroundHeight(Position.X,Position.Y) : CryptWorld::SeaLevel;
+ const bool bAtSea=SeaFloor<CryptWorld::SeaLevel-55.f &&
+  Position.Z<CryptWorld::SeaLevel+(bSwimmingPool?140.f:80.f) &&
+  Position.Z>CryptWorld::SeaLevel-400.f;
+ const bool bAtPool=Radius<(bSwimmingPool?.84:.80) &&
+  Position.Z<CryptWorld::PoolSurface+65.f && Position.Z>CryptWorld::PoolSurface-300.f;
+ const bool bInside=!SailingShip.IsValid() && (bAtSea || bAtPool);
  if(!bInside)
  {
   if(bSwimmingPool && Movement->MovementMode==MOVE_Flying)
@@ -346,12 +353,15 @@ void ACryptHero::UpdateSwimming(float DeltaSeconds)
  }
  else Movement->MaxFlySpeed=290.f;
  // Lift the capsule toward the surface so it can clear the sloped shore.
- const double SurfaceOffset=Radius>.68?85.:28.;
- Movement->Velocity.Z=FMath::Clamp((CryptWorld::PoolSurface+SurfaceOffset-Position.Z)*8.,-240.,360.);
+ const double TargetZ=bAtSea
+  ? FMath::Max(CryptWorld::SeaLevel+38.,SeaFloor+128.)
+  : CryptWorld::PoolSurface+(Radius>.68?85.:28.);
+ Movement->Velocity.Z=FMath::Clamp((TargetZ-Position.Z)*8.,-240.,360.);
 }
 
 void ACryptHero::JumpOrSwim()
 {
+ if(SailingShip.IsValid()) return;
  if(!bSwimmingPool)
  {
   Jump();
@@ -367,6 +377,11 @@ void ACryptHero::JumpOrSwim()
 
 void ACryptHero::MoveForward(float V)
 {
+ if(SailingShip.IsValid())
+ {
+  SailThrottle=V;
+  return;
+ }
  if(bBowAiming)
  {
   if(Controller && FMath::Abs(V)>.12f)
@@ -382,6 +397,11 @@ void ACryptHero::MoveForward(float V)
 
 void ACryptHero::MoveRight(float V)
 {
+ if(SailingShip.IsValid())
+ {
+  HelmInput=V;
+  return;
+ }
  if(bBowAiming)
  {
   if(Controller && FMath::Abs(V)>.12f)
@@ -565,6 +585,8 @@ ACryptTownActor* ACryptHero::GetInteractionTarget() const
 
 FString ACryptHero::GetInteractionLabel() const
 {
+ if(SailingShip.IsValid()) return TEXT("Dock near a pier | left stick sails and steers");
+ if(FindBoardableShip()) return TEXT("Board sailing ship");
  if(FindSecret()) return TEXT("Inspect loose stone");
  if(FindMerchant()!=INDEX_NONE) return TEXT("Trade with merchant");
  if(const ACryptTownActor* Target=GetInteractionTarget())
@@ -591,8 +613,96 @@ FString ACryptHero::GetQuestJournal() const
  return Journal.IsEmpty() ? FString(TEXT("Talk to a townsperson to begin.")) : Journal;
 }
 
+AActor* ACryptHero::FindBoardableShip() const
+{
+ const FVector Position=GetActorLocation();
+ if(CryptWorld::MainlandEdge(Position.X,Position.Y)<.85 ||
+    FMath::Abs(Position.Z-CryptWorld::SeaLevel)>400.) return nullptr;
+ AActor* Nearest=nullptr;
+ double Closest=FMath::Square(1375.);
+ for(TActorIterator<AStaticMeshActor> It(GetWorld());It;++It)
+ {
+  AActor* Ship=*It;
+  if(!Ship->ActorHasTag(TEXT("OceanShip"))) continue;
+  const double Distance=FVector::DistSquared2D(Position,Ship->GetActorLocation());
+  if(Distance>=Closest) continue;
+  Nearest=Ship;
+  Closest=Distance;
+ }
+ return Nearest;
+}
+
+bool ACryptHero::InteractWithShip()
+{
+ using namespace CryptWorld;
+ if(auto* Ship=SailingShip.Get())
+ {
+  int32 DockIndex=INDEX_NONE;
+  double Closest=FMath::Square(2400.);
+  for(int32 Index=0;Index<=UE_ARRAY_COUNT(Islands);++Index)
+  {
+   const double Distance=FVector::DistSquared2D(Ship->GetActorLocation(),ShipBerth(Index));
+   if(Distance>=Closest) continue;
+   Closest=Distance;
+   DockIndex=Index;
+  }
+  if(DockIndex==INDEX_NONE)
+  {
+   AppendEvent(TEXT("Sail closer to a pier before docking."));
+   return true;
+  }
+  Ship->SetActorLocationAndRotation(ShipBerth(DockIndex),DockDirection(DockIndex).Rotation());
+  SailingShip.Reset();
+  const FVector Landing=DockEnd(DockIndex)-DockDirection(DockIndex)*210.+FVector(0,0,130);
+  SetActorLocation(Landing,false,nullptr,ETeleportType::TeleportPhysics);
+  GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+  AppendEvent(DockIndex==0?FString(TEXT("Docked at the mainland."))
+   : FString::Printf(TEXT("Docked at %s."),Islands[DockIndex-1].Name));
+  return true;
+ }
+ AActor* Ship=FindBoardableShip();
+ if(!Ship) return false;
+ Ship->Tags.AddUnique(TEXT("ClaimedShip"));
+ SailingShip=Ship;
+ SailThrottle=HelmInput=ShipSpeed=0.f;
+ bSwimmingPool=false;
+ SwimBurstTime=SwimBurstCooldown=0.f;
+ StopJumping();
+ GetCharacterMovement()->StopMovementImmediately();
+ GetCharacterMovement()->DisableMovement();
+ UpdateSailing(0.f);
+ AppendEvent(TEXT("Use the left stick to sail and steer. Interact near a pier to dock."));
+ return true;
+}
+
+void ACryptHero::UpdateSailing(float DeltaSeconds)
+{
+ auto* Ship=SailingShip.Get();
+ if(!Ship) return;
+ using namespace CryptWorld;
+ FRotator Heading=Ship->GetActorRotation();
+ Heading.Yaw+=HelmInput*38.f*DeltaSeconds;
+ const double TargetSpeed=SailThrottle>=0.f?SailThrottle*2080.f:SailThrottle*650.f;
+ ShipSpeed=FMath::FInterpTo(ShipSpeed,static_cast<float>(TargetSpeed),DeltaSeconds,1.35f);
+ const FVector Current=Ship->GetActorLocation();
+ const FVector Direction=Heading.Vector();
+ FVector Next=Current+Direction*ShipSpeed*DeltaSeconds;
+ const FVector Keel=Next+Direction*(ShipSpeed>=0.f?850.:-850.);
+ if(FMath::Abs(Next.X)>OceanLimit-1450.f || FMath::Abs(Next.Y)>OceanLimit-1450.f ||
+    CryptDungeons::GetGroundHeight(Keel.X,Keel.Y)>SeaLevel-125.f)
+ {
+  Next=Current;
+  ShipSpeed=0.f;
+ }
+ Next.Z=SeaLevel;
+ Ship->SetActorLocationAndRotation(Next,Heading);
+ SetActorLocation(Next-Direction*375.+FVector(0,0,230),false,nullptr,ETeleportType::TeleportPhysics);
+ SetActorRotation(Heading);
+}
+
 void ACryptHero::Interact()
 {
+ if(InteractWithShip()) return;
  if(AActor* Secret=FindSecret())
  {
   OpenSecrets.Add(FCString::Atoi(*Secret->Tags[1].ToString()));
