@@ -2,6 +2,7 @@
 #include "Misc/ConfigCacheIni.h"
 #include "CryptMonster.h"
 #include "CryptDungeons.h"
+#include "CryptWorldLayout.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -202,6 +203,7 @@ void ACryptHero::BeginPlay()
 void ACryptHero::Tick(float DeltaSeconds)
 {
  Super::Tick(DeltaSeconds);
+ UpdateSwimming(DeltaSeconds);
  UpdateFlames(DeltaSeconds);
  UpdateChart();
  UpdateGearVisuals();
@@ -300,7 +302,7 @@ void ACryptHero::SetupPlayerInputComponent(UInputComponent* Input)
  Input->BindAxis("MoveRight",this,&ACryptHero::MoveRight);
  Input->BindAxis("Turn",this,&ACryptHero::Turn);
  Input->BindAxis("LookUp",this,&ACryptHero::LookUp);
- Input->BindAction("Jump",IE_Pressed,this,&ACharacter::Jump);
+ Input->BindAction("Jump",IE_Pressed,this,&ACryptHero::JumpOrSwim);
  Input->BindAction("Attack",IE_Pressed,this,&ACryptHero::AttackPressed);
  Input->BindAction("Attack",IE_Released,this,&ACryptHero::AttackReleased);
  Input->BindAction("Spin",IE_Pressed,this,&ACryptHero::SpinAttack);
@@ -312,6 +314,57 @@ void ACryptHero::SetupPlayerInputComponent(UInputComponent* Input)
  Input->BindKey(EKeys::F5,IE_Pressed,this,&ACryptHero::SaveProgress);
  Input->BindKey(EKeys::F9,IE_Pressed,this,&ACryptHero::RestoreProgress);
 }
+void ACryptHero::UpdateSwimming(float DeltaSeconds)
+{
+ auto* Movement=GetCharacterMovement();
+ const FVector Position=GetActorLocation();
+ const double Radius=CryptWorld::PoolRadius(Position.X,Position.Y);
+ const bool bInside=Radius<(bSwimmingPool?.84:.80)
+  && Position.Z<CryptWorld::PoolSurface+65.f && Position.Z>CryptWorld::PoolSurface-300.f;
+ if(!bInside)
+ {
+  if(bSwimmingPool && Movement->MovementMode==MOVE_Flying)
+   Movement->SetMovementMode(MOVE_Falling);
+  bSwimmingPool=false;
+  SwimBurstTime=0.f;
+  SwimBurstCooldown=0.f;
+  return;
+ }
+ if(!bSwimmingPool || Movement->MovementMode!=MOVE_Flying)
+ {
+  bSwimmingPool=true;
+  StopJumping();
+  Movement->MaxFlySpeed=290.f;
+  Movement->SetMovementMode(MOVE_Flying);
+ }
+ SwimBurstCooldown=FMath::Max(0.f,SwimBurstCooldown-DeltaSeconds);
+ SwimBurstTime=FMath::Max(0.f,SwimBurstTime-DeltaSeconds);
+ if(SwimBurstTime>0.f)
+ {
+  Movement->MaxFlySpeed=850.f;
+  Movement->Velocity=SwimBurstDirection*850.f;
+ }
+ else Movement->MaxFlySpeed=290.f;
+ // Lift the capsule toward the surface so it can clear the sloped shore.
+ const double SurfaceOffset=Radius>.68?85.:28.;
+ Movement->Velocity.Z=FMath::Clamp((CryptWorld::PoolSurface+SurfaceOffset-Position.Z)*8.,-240.,360.);
+}
+
+void ACryptHero::JumpOrSwim()
+{
+ if(!bSwimmingPool)
+ {
+  Jump();
+  return;
+ }
+ if(SwimBurstCooldown>0.f) return;
+ SwimBurstDirection=GetVelocity().GetSafeNormal2D();
+ if(SwimBurstDirection.IsNearlyZero())
+  SwimBurstDirection=GetActorForwardVector().GetSafeNormal2D();
+ SwimBurstTime=.24f;
+ SwimBurstCooldown=.55f;
+}
+
 void ACryptHero::MoveForward(float V)
 {
  if(bBowAiming)
@@ -948,7 +1001,7 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
   ThumbStartTime=GetWorld()->GetRealTimeSeconds();
   return;
  }
- if(Layout.Hit(TouchPoint,Layout.Jump)) Jump();
+ if(Layout.Hit(TouchPoint,Layout.Jump)) JumpOrSwim();
  else if(EquippedWeapon!=ECryptWeapon::Bow && Layout.Hit(TouchPoint,Layout.Attack)) Attack();
  else if(Layout.Hit(TouchPoint,Layout.Spin)) SpinAttack();
 }
@@ -993,7 +1046,7 @@ void ACryptHero::TouchReleased(ETouchIndex::Type FingerIndex,FVector Location)
  if(FVector2D::Distance(ThumbStart,FVector2D(Location.X,Location.Y))>24.f*Layout.Scale) return;
  switch(ThumbAction)
  {
-  case ECryptThumbAction::Jump: Jump(); break;
+  case ECryptThumbAction::Jump: JumpOrSwim(); break;
   case ECryptThumbAction::Attack: Attack(); break;
   case ECryptThumbAction::Spin: SpinAttack(); break;
   case ECryptThumbAction::Fire: CastFire(); break;

@@ -39,6 +39,7 @@ public:
  int32 GetExperience() const { return Experience; }
  int32 ExperienceNeeded() const { return 100+(Level-1)*40; }
  FString GetArrowLabel() const;
+ bool IsSwimmingInPool() const { return bSwimmingPool; }
  bool IsBowAiming() const { return bBowAiming; }
  float GetHealth() const { return Health; }
  float GetStamina() const { return Stamina; }
@@ -92,6 +93,12 @@ protected:
  int32 ThumbFinger=INDEX_NONE;
  FVector2D ThumbStart=FVector2D::ZeroVector;
  float ThumbStartTime=0.f;
+ void JumpOrSwim();
+ void UpdateSwimming(float DeltaSeconds);
+ bool bSwimmingPool=false;
+ float SwimBurstTime=0.f;
+ float SwimBurstCooldown=0.f;
+ FVector SwimBurstDirection=FVector::ZeroVector;
  void MoveForward(float Value);
  void MoveRight(float Value);
  void Turn(float Value);

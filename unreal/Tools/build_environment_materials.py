@@ -117,7 +117,7 @@ return Texture2DSample(Stone, StoneSampler, coordinates.yz).rgb * weights.x
     MATERIALS.recompile_material(asset)
 
 
-def water_material(name, waterfall):
+def water_material(name, waterfall, pool=False):
     asset = material(name)
     uv = node(asset, unreal.MaterialExpressionTextureCoordinate)
     time = node(asset, unreal.MaterialExpressionTime)
@@ -141,6 +141,14 @@ return lerp(body, float3(0.72, 0.87, 0.85), saturate(foam * 0.82 + edge * 0.65))
     connect(uv, "", waves, "UV")
     connect(time, "", waves, "Clock")
     output(waves, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    if pool:
+        asset.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+        asset.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+        asset.set_editor_property("two_sided", True)
+        opacity = node(asset, unreal.MaterialExpressionConstant)
+        opacity.set_editor_property("r", 0.48)
+        output(opacity, "", unreal.MaterialProperty.MP_OPACITY)
+        output(waves, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     MATERIALS.recompile_material(asset)
 
 
@@ -156,6 +164,7 @@ with TemporaryDirectory() as directory:
     projected_material(dirt, "M_Dirt", 320)
     water_material("M_River", False)
     water_material("M_Waterfall", True)
+    water_material("M_GravehollowPool", False, pool=True)
     satchel_task = unreal.AssetImportTask()
     satchel_task.filename = str(Path(__file__).resolve().parents[1] / "Art" / "T_Satchel.png")
     satchel_task.destination_path = DESTINATION

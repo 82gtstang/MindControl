@@ -18,6 +18,15 @@ namespace CryptWorld
  inline constexpr float RuinOffsetX=5500.f;
  inline const FVector2D Town(2420,TownNorth);
 
+ // The pool sits on the north bank of the Gravehollow entrance trench.
+ inline constexpr float PoolX=-1950.f, PoolY=2200.f;
+ inline constexpr float PoolRadiusX=950.f, PoolRadiusY=740.f;
+ inline constexpr float PoolSurface=-90.f;
+ inline double PoolRadius(double X,double Y)
+ {
+  return FMath::Sqrt(FMath::Square((X-PoolX)/PoolRadiusX)+FMath::Square((Y-PoolY)/PoolRadiusY));
+ }
+
  struct FRiver
  {
   float Start,End,Center,Width,Phase;

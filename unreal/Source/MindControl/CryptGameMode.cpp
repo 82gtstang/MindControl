@@ -26,6 +26,7 @@
 #include "Engine/Engine.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "TimerManager.h"
 namespace
 {
  constexpr float CastleApronCenterX=4450.f;
@@ -99,6 +100,7 @@ namespace
    *FMath::SmoothStep(-380.f,0.f,Y);
   const float RuinGround=(1.f-FMath::SmoothStep(1900.f,2400.f,FMath::Abs(X-(1000.f+CryptWorld::RuinOffsetX))))
    *(1.f-FMath::SmoothStep(1580.f,2170.f,FMath::Abs(Y-3200.f)));
+  Height=FMath::Lerp(Height,-340.f,static_cast<float>(1.-FMath::SmoothStep(.54,1.08,CryptWorld::PoolRadius(X,Y))));
   return FMath::Lerp(Height,-20.f,FMath::Max3(FMath::Max3(FMath::Max(WestRoad,DistrictRoad),EastRoad,CastleGround),
    FMath::Max(TownGround,TownRoad),RuinGround));
  }
@@ -342,7 +344,7 @@ namespace
       (FMath::Abs(X-CryptWorld::TownRoadX)<550.f && Y>0 && Y<CryptWorld::TownNorth) ||
       (FMath::Abs(X-CryptWorld::Castle.X)<1460. && FMath::Abs(Y)<1750.f) ||
       (FMath::Abs(X-(1000.f+CryptWorld::RuinOffsetX))<2000.f && FMath::Abs(Y-3200.f)<1660.f) ||
-      IsDirt(X,Y)) return;
+      CryptWorld::PoolRadius(X,Y)<1.11 || IsDirt(X,Y)) return;
    for(const auto& Mouth : CryptDungeons::EntrancePoints)
     if(FVector2D::DistSquared(Mouth,FVector2D(X,Y))<FMath::Square(1700.)) return;
    FHitResult Ground;
@@ -390,6 +392,102 @@ namespace
    for(float Y=-6000.f;Y<=6200.f;Y+=950.f)
     if(Random.FRand()<.78f)
      Plant(X+Random.FRandRange(-240,240),Y+Random.FRandRange(-240,240));
+ }
+
+ void CreateGravehollowPool(UWorld* World,UMaterialInterface* Water)
+ {
+  using namespace CryptWorld;
+  if(!Water) return;
+  auto* Surface=CreateSurface(World,TEXT("GravehollowPool"),false);
+  if(!Surface) return;
+  constexpr int32 Segments=64;
+  const FVector Center(PoolX,PoolY,PoolSurface);
+  TArray<FVector> Vertices{Center};
+  TArray<FVector2D> UVs{FVector2D(.5,.5)};
+  TArray<int32> Indices;
+  for(int32 Index=0;Index<Segments;++Index)
+  {
+   const double Angle=2.*PI*Index/Segments;
+   const double X=FMath::Cos(Angle),Y=FMath::Sin(Angle);
+   Vertices.Add(Center+FVector(X*PoolRadiusX,Y*PoolRadiusY,0));
+   UVs.Emplace(.5+X*.5,.5+Y*.5);
+   Indices.Append({0,1+(Index+1)%Segments,1+Index});
+  }
+  Surface->CreateMeshSection_LinearColor(0,Vertices,Indices,{},UVs,{}, {},false);
+  Surface->SetMaterial(0,Water);
+  Surface->SetCastShadow(false);
+
+  auto* Sphere=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+  auto* Cone=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cone.Cone"));
+  auto* Basic=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+  if(!Sphere || !Cone || !Basic) return;
+  const auto Part=[&](AActor* Owner,UStaticMesh* Mesh,FLinearColor Color,
+                       FVector Position,FVector Scale,FRotator Rotation=FRotator::ZeroRotator)
+  {
+   auto* Component=NewObject<UStaticMeshComponent>(Owner);
+   Owner->AddInstanceComponent(Component);
+   Component->SetupAttachment(Owner->GetRootComponent());
+   Component->SetStaticMesh(Mesh);
+   auto* Tint=UMaterialInstanceDynamic::Create(Basic,Component);
+   Tint->SetVectorParameterValue(TEXT("Color"),Color);
+   Component->SetMaterial(0,Tint);
+   Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+   Component->SetCastShadow(false);
+   Component->SetRelativeTransform(FTransform(Rotation,Position,Scale));
+   Component->RegisterComponent();
+  };
+  TArray<TWeakObjectPtr<AStaticMeshActor>> Fish;
+  const FLinearColor FishColors[]={{.16f,.55f,.58f},{.83f,.46f,.17f},{.52f,.69f,.78f}};
+  for(int32 Index=0;Index<14;++Index)
+  {
+   auto* Actor=World->SpawnActor<AStaticMeshActor>(Center-FVector(0,0,65),FRotator::ZeroRotator);
+   if(!Actor) continue;
+   Actor->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
+   const FLinearColor Color=FishColors[Index%3];
+   Part(Actor,Sphere,Color,FVector::ZeroVector,FVector(.34,.13,.18));
+   Part(Actor,Cone,Color,FVector(-20,0,0),FVector(.17,.26,.18),FRotator(90,0,0));
+   Part(Actor,Cone,Color,FVector(-2,0,8),FVector(.10,.12,.15));
+   Fish.Add(Actor);
+  }
+  for(int32 Index=0;Index<9;++Index)
+  {
+   const double Angle=Index*2.4;
+   FVector Base=Center+FVector(FMath::Cos(Angle)*420,FMath::Sin(Angle)*310,0);
+   Base.Z=TerrainHeight(Base.X,Base.Y)+9.;
+   for(int32 Arm=0;Arm<5;++Arm)
+   {
+    const double Yaw=72.*Arm;
+    const FRotator Rotation(0,Yaw,0);
+    auto* Star=World->SpawnActor<AStaticMeshActor>(Base+Rotation.Vector()*9.,Rotation);
+    if(!Star) continue;
+    Star->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
+    Part(Star,Sphere,FLinearColor(.86,.26,.12),FVector::ZeroVector,FVector(.26,.10,.065));
+   }
+   auto* Plant=World->SpawnActor<AStaticMeshActor>(Base+FVector(22,12,0),FRotator::ZeroRotator);
+   if(!Plant) continue;
+   Plant->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
+   for(int32 Leaf=-1;Leaf<=1;++Leaf)
+    Part(Plant,Sphere,FLinearColor(.09,.34,.13),FVector(Leaf*9,0,17),
+      FVector(.09,.045,.38),FRotator(0,0,Leaf*24));
+  }
+  FTimerHandle SwimTimer;
+  World->GetTimerManager().SetTimer(SwimTimer,FTimerDelegate::CreateWeakLambda(Surface,
+   [Fish=MoveTemp(Fish),Center,Elapsed=0.]() mutable
+   {
+    Elapsed+=.05;
+    for(int32 Index=0;Index<Fish.Num();++Index)
+    {
+     auto* Actor=Fish[Index].Get();
+     if(!Actor) continue;
+     const double Direction=Index%2==0?1.:-1.;
+     const double Phase=Index*2.39996+Direction*Elapsed*(.27+.022*(Index%4));
+     const double Radius=310.+45.*(Index%5);
+     const FVector Offset(FMath::Cos(Phase)*Radius,FMath::Sin(Phase)*Radius*.74,
+      -55.-18.*(Index%5)+12.*FMath::Sin(Phase*2.));
+     const FVector Forward=Direction*FVector(-FMath::Sin(Phase),FMath::Cos(Phase)*.74,0);
+     Actor->SetActorLocationAndRotation(Center+Offset,Forward.Rotation(),false);
+    }
+   }),.05f,true);
  }
 
  void CreateWater(UWorld* World,UMaterialInterface* RiverMaterial,UMaterialInterface* FallsMaterial)
@@ -553,6 +651,8 @@ void ACryptGameMode::BeginPlay()
  auto* Overworld=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Overworld.M_Overworld"));
  CreateTerrain(GetWorld(),Grass,Dirt,Overworld,Cobble);
  CreateWater(GetWorld(),River,Falls);
+ CreateGravehollowPool(GetWorld(),LoadObject<UMaterialInterface>(nullptr,
+  TEXT("/Game/Environment/MindControl/M_GravehollowPool.M_GravehollowPool")));
  // Keep movement inside the finished terrain while the surrounding hills continue past the boundary.
  for(const float Side : {-1.f,1.f})
  {
