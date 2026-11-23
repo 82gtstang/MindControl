@@ -20,6 +20,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Engine/PointLight.h"
 #include "Components/PointLightComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -162,12 +163,18 @@ namespace
 
  void DisableTemplateGround(UWorld* World)
  {
-  // The engine startup level can have its own floor. A terrain cutout only
-  // removes our mesh triangles, so that original floor must not span the shaft.
+  // The startup map can contain landscape above the procedural land and ocean.
+  // Remove its render and collision layers before creating the playable terrain.
   for(TActorIterator<AActor> It(World);It;++It)
   {
    AActor* Actor=*It;
-   if(Actor->IsA<AStaticMeshActor>() || Actor->GetClass()->GetName().StartsWith(TEXT("Landscape")))
+   if(Actor->GetClass()->GetName().StartsWith(TEXT("Landscape")))
+   {
+    Actor->SetActorHiddenInGame(true);
+    Actor->SetActorEnableCollision(false);
+    continue;
+   }
+   if(Actor->IsA<AStaticMeshActor>())
    {
     TArray<UPrimitiveComponent*> Primitives;
     Actor->GetComponents(Primitives);
@@ -175,14 +182,19 @@ namespace
     {
      const auto& Bounds=Primitive->Bounds;
      const FVector Extent=Bounds.BoxExtent;
-     const bool bLandscape=Actor->GetClass()->GetName().StartsWith(TEXT("Landscape"));
-     if(!bLandscape && (Extent.X<500 || Extent.Y<500 || Extent.Z>220)) continue;
+     if(Extent.X<500 || Extent.Y<500 || Extent.Z>220) continue;
+     const auto* MeshComponent=Cast<UStaticMeshComponent>(Primitive);
+     const auto* Mesh=MeshComponent?MeshComponent->GetStaticMesh():nullptr;
+     const FString MeshName=Mesh?Mesh->GetName():FString();
+     const auto* Material=Primitive->GetMaterial(0);
+     const bool bTemplateFloor=MeshName.Contains(TEXT("Floor")) ||
+       (Material && Material->GetName().Contains(TEXT("WorldGrid")));
      const FBox RoadDeck(FVector(MainRoadStart,-MainRoadHalfWidth,-60),
                         FVector(CastleApronStart,MainRoadHalfWidth,60));
      const FBox CastleFloor(FVector(CastleApronStart,-CastleApronHalfWidth,-60),
                            FVector(CastleApronEnd,CastleApronHalfWidth,60));
-     if((bLandscape || Extent.Z<FMath::Min(Extent.X,Extent.Y)*.18) &&
-        (RoadDeck.Intersect(Bounds.GetBox()) || CastleFloor.Intersect(Bounds.GetBox())))
+     if(bTemplateFloor || (Extent.Z<FMath::Min(Extent.X,Extent.Y)*.18 &&
+        (RoadDeck.Intersect(Bounds.GetBox()) || CastleFloor.Intersect(Bounds.GetBox()))))
      {
       Primitive->SetCollisionEnabled(ECollisionEnabled::NoCollision);
       Primitive->SetVisibility(false,true);
@@ -228,6 +240,16 @@ namespace
   {
    Northings.AddUnique(Side*MainRoadHalfWidth);
    Northings.AddUnique(Side*CastleApronHalfWidth);
+  }
+  // Sample the island crests and shorelines independently of the ocean grid.
+  for(const auto& Island : CryptWorld::Islands)
+  {
+   for(int32 Sample=-6;Sample<=6;++Sample)
+   {
+    const float Offset=Island.Radius*Sample/5.f;
+    Eastings.AddUnique(static_cast<float>(Island.Center.X)+Offset);
+    Northings.AddUnique(static_cast<float>(Island.Center.Y)+Offset);
+   }
   }
   Eastings.Sort();
   Northings.Sort();
