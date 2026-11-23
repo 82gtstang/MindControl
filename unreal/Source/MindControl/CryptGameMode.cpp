@@ -28,6 +28,10 @@
 #include "Misc/Parse.h"
 namespace
 {
+ constexpr float CastleApronCenterX=4450.f;
+ constexpr float CastleApronLength=1650.f;
+ constexpr float CastleRoadEnd=CryptWorld::CastleOffsetX+CastleApronCenterX-CastleApronLength*.5f;
+
  float TerrainHeight(float X,float Y)
  {
   const float South=FMath::SmoothStep(1100.f,2300.f,-Y);
@@ -79,7 +83,7 @@ namespace
   const float DistrictRoad=(1.f-FMath::SmoothStep(280.f,1350.f,FMath::Abs(X+6400.f)))
    *FMath::SmoothStep(-500.f,0.f,Y)
    *(1.f-FMath::SmoothStep(CryptSettlements::DistrictNorth,CryptSettlements::DistrictNorth+900.f,Y));
-  const float EastRoad=FMath::SmoothStep(5100.f,5500.f,X)
+  const float EastRoad=FMath::SmoothStep(4600.f,5000.f,X)
    *(1.f-FMath::SmoothStep(CryptWorld::MainRoadEnd,CryptWorld::MainRoadEnd+600.f,X))
    *(1.f-FMath::SmoothStep(245.f,3250.f,FMath::Abs(Y)));
   const float CastleGround=(1.f-FMath::SmoothStep(840.f,1450.f,FMath::Abs(X-static_cast<float>(CryptWorld::Castle.X))))
@@ -543,10 +547,10 @@ void ACryptGameMode::BeginPlay()
  }
  UMaterialInterface* Stone=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_CastleStone.M_CastleStone"));
  UMaterialInterface* RoadMaterial=Cobble?Cobble:Stone?Stone:Dirt?Dirt:Grass;
- PlaceBlock(FVector(0,0,-8),FVector(110,4,.12),FRotator::ZeroRotator,RoadMaterial); // main road
- constexpr float RoadStart=5500.f, RoadEnd=CryptWorld::MainRoadEnd;
- PlaceBlock(FVector((RoadStart+RoadEnd)*.5f,0,-8),FVector((RoadEnd-RoadStart)/100.f,4,.12f),
-   FRotator::ZeroRotator,RoadMaterial);
+ // End the road at the apron edge. Both surfaces finish at Z=0 without overlap.
+ constexpr float RoadStart=-5500.f;
+ PlaceBlock(FVector((RoadStart+CastleRoadEnd)*.5f,0,-10),
+   FVector((CastleRoadEnd-RoadStart)/100.f,4,.2),FRotator::ZeroRotator,RoadMaterial);
  // Wilderness stones and ruined pillars beside the approach.
  for(int32 i=0;i<10;++i)
  {
@@ -1015,7 +1019,7 @@ void ACryptGameMode::BeginPlay()
  {
   PlaceBlock(Location+FVector(CryptWorld::CastleOffsetX,0,0),Scale,Rotation,Stone,Mesh);
  };
- Masonry(FVector(4450,0,-10),FVector(16.5,24.5,.2));
+ Masonry(FVector(CastleApronCenterX,0,-10),FVector(CastleApronLength/100.f,24.5,.2));
  for(const float X : {3800.f,5100.f})
  {
   for(const float Y : {-1050.f,1050.f})
