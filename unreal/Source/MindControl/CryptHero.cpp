@@ -330,8 +330,10 @@ void ACryptHero::UpdateSwimming(float DeltaSeconds)
  const double Radius=CryptWorld::PoolRadius(Position.X,Position.Y);
  const double SeaFloor=CryptWorld::MainlandEdge(Position.X,Position.Y)>.86
   ? CryptDungeons::GetGroundHeight(Position.X,Position.Y) : CryptWorld::SeaLevel;
+ const double CapsuleHalfHeight=GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+ const double FeetZ=Position.Z-CapsuleHalfHeight;
  const bool bAtSea=SeaFloor<CryptWorld::SeaLevel-55.f &&
-  Position.Z<CryptWorld::SeaLevel+(bSwimmingPool?140.f:80.f) &&
+  FeetZ<CryptWorld::SeaLevel+(bSwimmingPool?48.:8.) &&
   Position.Z>=SeaFloor-220. && GetChartIndex()==INDEX_NONE;
  const bool bAtPool=Radius<(bSwimmingPool?.84:.80) &&
   Position.Z<CryptWorld::PoolSurface+65.f && Position.Z>CryptWorld::PoolSurface-300.f;
@@ -366,7 +368,7 @@ void ACryptHero::UpdateSwimming(float DeltaSeconds)
  const double SurfaceZ=bAtSea?CryptWorld::SeaLevel:CryptWorld::PoolSurface;
  const double SurfaceLimit=SurfaceZ+38.;
  const double Floor=bAtSea?SeaFloor:CryptDungeons::GetGroundHeight(Position.X,Position.Y);
- const double BottomLimit=FMath::Min(SurfaceLimit,Floor+GetCapsuleComponent()->GetScaledCapsuleHalfHeight()+12.);
+ const double BottomLimit=FMath::Min(SurfaceLimit,Floor+CapsuleHalfHeight+12.);
  SwimTargetZ=FMath::Clamp(SwimTargetZ+SwimDepthInput*215.*DeltaSeconds,BottomLimit,SurfaceLimit);
  const double VerticalSpeed=(SwimTargetZ-Position.Z)*8.;
  Movement->Velocity.Z=FMath::Clamp(VerticalSpeed,-235.,290.);

@@ -163,56 +163,25 @@ namespace
 
  void DisableTemplateGround(UWorld* World)
  {
-  // The startup map can contain landscape above the procedural land and ocean.
-  // Remove its render and collision layers before creating the playable terrain.
+  // All playable ground is created below. Keep startup lighting and sky,
+  // but discard authored ground regardless of its material, size, or height.
   for(TActorIterator<AActor> It(World);It;++It)
   {
    AActor* Actor=*It;
-   if(Actor->GetClass()->GetName().StartsWith(TEXT("Landscape")))
+   const bool bLandscape=Actor->GetClass()->GetName().StartsWith(TEXT("Landscape"));
+   TArray<UPrimitiveComponent*> Primitives;
+   Actor->GetComponents(Primitives);
+   for(UPrimitiveComponent* Primitive : Primitives)
    {
-    Actor->SetActorHiddenInGame(true);
-    Actor->SetActorEnableCollision(false);
-    continue;
-   }
-   if(Actor->IsA<AStaticMeshActor>())
-   {
-    TArray<UPrimitiveComponent*> Primitives;
-    Actor->GetComponents(Primitives);
-    for(UPrimitiveComponent* Primitive : Primitives)
-    {
-     const auto& Bounds=Primitive->Bounds;
-     const FVector Extent=Bounds.BoxExtent;
-     if(Extent.X<500 || Extent.Y<500 || Extent.Z>220) continue;
-     const auto* MeshComponent=Cast<UStaticMeshComponent>(Primitive);
-     const UStaticMesh* Mesh=nullptr;
-     if(MeshComponent) Mesh=MeshComponent->GetStaticMesh();
-     const FString MeshName=Mesh?Mesh->GetName():FString();
-     const auto* Material=Primitive->GetMaterial(0);
-     const bool bTemplateFloor=MeshName.Contains(TEXT("Floor")) ||
-       (Material && Material->GetName().Contains(TEXT("WorldGrid")));
-     const FBox RoadDeck(FVector(MainRoadStart,-MainRoadHalfWidth,-60),
-                        FVector(CastleApronStart,MainRoadHalfWidth,60));
-     const FBox CastleFloor(FVector(CastleApronStart,-CastleApronHalfWidth,-60),
-                           FVector(CastleApronEnd,CastleApronHalfWidth,60));
-     if(bTemplateFloor || (Extent.Z<FMath::Min(Extent.X,Extent.Y)*.18 &&
-        (RoadDeck.Intersect(Bounds.GetBox()) || CastleFloor.Intersect(Bounds.GetBox()))))
-     {
-      Primitive->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-      Primitive->SetVisibility(false,true);
-      continue;
-     }
-     for(int32 I=0;I<CryptDungeons::Count;++I)
-     {
-      const FVector Mouth=CryptDungeons::Entrance(I);
-      const FVector Chamber=CryptDungeons::Room(I);
-      const FBox Shaft(FVector(Mouth.X-20,Mouth.Y-CryptDungeons::RampHalfWidth,Chamber.Z),
-                       FVector(Mouth.X+CryptDungeons::RampLength+20,Mouth.Y+CryptDungeons::RampHalfWidth,Mouth.Z+200));
-      if(!Shaft.Intersect(Bounds.GetBox())) continue;
-      Primitive->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-      Primitive->SetVisibility(false,true);
-      break;
-     }
-    }
+    if(!bLandscape && !Primitive->IsA<UStaticMeshComponent>() &&
+       !Primitive->IsA<UProceduralMeshComponent>() &&
+       !Primitive->GetClass()->GetName().StartsWith(TEXT("Landscape"))) continue;
+
+    Primitive->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    // Sky domes may be static meshes. Keep their rendering only.
+    if(!Actor->GetName().Contains(TEXT("Sky")) &&
+       !Primitive->GetName().Contains(TEXT("Sky")))
+     Primitive->SetHiddenInGame(true);
    }
   }
  }
