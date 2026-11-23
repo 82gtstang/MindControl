@@ -30,7 +30,11 @@ namespace
 {
  constexpr float CastleApronCenterX=4450.f;
  constexpr float CastleApronLength=1650.f;
- constexpr float CastleRoadEnd=CryptWorld::CastleOffsetX+CastleApronCenterX-CastleApronLength*.5f;
+ constexpr float CastleApronStart=CryptWorld::CastleOffsetX+CastleApronCenterX-CastleApronLength*.5f;
+ constexpr float CastleApronEnd=CastleApronStart+CastleApronLength;
+ constexpr float CastleApronHalfWidth=1225.f;
+ constexpr float MainRoadStart=-5500.f;
+ constexpr float MainRoadHalfWidth=200.f;
 
  float TerrainHeight(float X,float Y)
  {
@@ -153,8 +157,12 @@ namespace
      const FVector Extent=Bounds.BoxExtent;
      const bool bLandscape=Actor->GetClass()->GetName().StartsWith(TEXT("Landscape"));
      if(!bLandscape && (Extent.X<500 || Extent.Y<500 || Extent.Z>220)) continue;
-     const FBox RoadDeck(FVector(-5500,-205,-26),FVector(CryptWorld::MainRoadEnd,205,25));
-     if(!bLandscape && Extent.Z<FMath::Min(Extent.X,Extent.Y)*.18 && RoadDeck.Intersect(Bounds.GetBox()))
+     const FBox RoadDeck(FVector(MainRoadStart,-MainRoadHalfWidth,-60),
+                        FVector(CastleApronStart,MainRoadHalfWidth,60));
+     const FBox CastleFloor(FVector(CastleApronStart,-CastleApronHalfWidth,-60),
+                           FVector(CastleApronEnd,CastleApronHalfWidth,60));
+     if((bLandscape || Extent.Z<FMath::Min(Extent.X,Extent.Y)*.18) &&
+        (RoadDeck.Intersect(Bounds.GetBox()) || CastleFloor.Intersect(Bounds.GetBox())))
      {
       Primitive->SetCollisionEnabled(ECollisionEnabled::NoCollision);
       Primitive->SetVisibility(false,true);
@@ -176,7 +184,8 @@ namespace
   }
  }
 
- void CreateTerrain(UWorld* World,UMaterialInterface* Grass,UMaterialInterface* Dirt,UMaterialInterface* Overworld)
+ void CreateTerrain(UWorld* World,UMaterialInterface* Grass,UMaterialInterface* Dirt,UMaterialInterface* Overworld,
+                    UMaterialInterface* Paving)
  {
   auto* Surface=CreateSurface(World,TEXT("GroundSurface"),true);
   if(!Surface) return;
@@ -194,6 +203,14 @@ namespace
    Eastings.AddUnique(P.X+CryptDungeons::RampLength);
    for(float Y=P.Y-300;Y<=P.Y+300;Y+=100) Northings.AddUnique(Y);
   }
+  Eastings.AddUnique(MainRoadStart);
+  Eastings.AddUnique(CastleApronStart);
+  Eastings.AddUnique(CastleApronEnd);
+  for(const float Side : {-1.f,1.f})
+  {
+   Northings.AddUnique(Side*MainRoadHalfWidth);
+   Northings.AddUnique(Side*CastleApronHalfWidth);
+  }
   Eastings.Sort();
   Northings.Sort();
   const int32 Columns=Eastings.Num()-1;
@@ -203,7 +220,7 @@ namespace
   TArray<FVector2D> UVs;
   TArray<FLinearColor> TerrainMasks;
   TArray<FProcMeshTangent> Tangents;
-  TArray<int32> Triangles,DirtTriangles;
+  TArray<int32> Triangles,DirtTriangles,PavingTriangles;
   Vertices.Reserve(Stride*(Rows+1));
   Normals.Reserve(Stride*(Rows+1));
   UVs.Reserve(Stride*(Rows+1));
@@ -247,7 +264,10 @@ namespace
      const int32 B=A+1;
      const int32 C=A+Stride;
      const int32 D=C+1;
-     auto& Section=(!Overworld && Dirt && IsDirt(TileX,TileY))?DirtTriangles:Triangles;
+     const bool bRoad=TileX>=MainRoadStart && TileX<CastleApronStart && FMath::Abs(TileY)<MainRoadHalfWidth;
+     const bool bApron=TileX>=CastleApronStart && TileX<CastleApronEnd && FMath::Abs(TileY)<CastleApronHalfWidth;
+     auto& Section=Paving && (bRoad || bApron)?PavingTriangles:
+       (!Overworld && Dirt && IsDirt(TileX,TileY))?DirtTriangles:Triangles;
      Section.Append({A,C,B,B,C,D});
     }
    }
@@ -258,6 +278,11 @@ namespace
   {
    Surface->CreateMeshSection_LinearColor(1,Vertices,DirtTriangles,Normals,UVs,{},Tangents,true);
    Surface->SetMaterial(1,Dirt);
+  }
+  if(!PavingTriangles.IsEmpty())
+  {
+   Surface->CreateMeshSection_LinearColor(2,Vertices,PavingTriangles,Normals,UVs,{},Tangents,true);
+   Surface->SetMaterial(2,Paving);
   }
  }
 
@@ -526,7 +551,7 @@ void ACryptGameMode::BeginPlay()
  UMaterialInterface* Falls=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Waterfall.M_Waterfall"));
  DisableTemplateGround(GetWorld());
  auto* Overworld=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Overworld.M_Overworld"));
- CreateTerrain(GetWorld(),Grass,Dirt,Overworld);
+ CreateTerrain(GetWorld(),Grass,Dirt,Overworld,Cobble);
  CreateWater(GetWorld(),River,Falls);
  // Keep movement inside the finished terrain while the surrounding hills continue past the boundary.
  for(const float Side : {-1.f,1.f})
@@ -547,10 +572,6 @@ void ACryptGameMode::BeginPlay()
  }
  UMaterialInterface* Stone=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_CastleStone.M_CastleStone"));
  UMaterialInterface* RoadMaterial=Cobble?Cobble:Stone?Stone:Dirt?Dirt:Grass;
- // End the road at the apron edge. Both surfaces finish at Z=0 without overlap.
- constexpr float RoadStart=-5500.f;
- PlaceBlock(FVector((RoadStart+CastleRoadEnd)*.5f,0,-10),
-   FVector((CastleRoadEnd-RoadStart)/100.f,4,.2),FRotator::ZeroRotator,RoadMaterial);
  // Wilderness stones and ruined pillars beside the approach.
  for(int32 i=0;i<10;++i)
  {
@@ -558,7 +579,7 @@ void ACryptGameMode::BeginPlay()
   const float Y=(i%2==0?1.f:-1.f)*(600.f+(i%3)*220.f);
   PlaceBlock(FVector(X,Y,75),FVector(1.2f,1.2f,2.5f+(i%3)),FRotator::ZeroRotator,Stone);
  }
- PlaceBlock(FVector(-6048,0,-24),FVector(11.04,4,.10),FRotator::ZeroRotator,RoadMaterial);
+ PlaceBlock(FVector(-6050,0,-25),FVector(11,4,.10),FRotator::ZeroRotator,RoadMaterial);
  const float DistrictNorth=CryptSettlements::DistrictNorth;
  PlaceBlock(FVector(-6400,DistrictNorth*.5f,-12),FVector(4.f,DistrictNorth/100.f,.14f),
   FRotator::ZeroRotator,RoadMaterial);
@@ -1019,7 +1040,6 @@ void ACryptGameMode::BeginPlay()
  {
   PlaceBlock(Location+FVector(CryptWorld::CastleOffsetX,0,0),Scale,Rotation,Stone,Mesh);
  };
- Masonry(FVector(CastleApronCenterX,0,-10),FVector(CastleApronLength/100.f,24.5,.2));
  for(const float X : {3800.f,5100.f})
  {
   for(const float Y : {-1050.f,1050.f})
