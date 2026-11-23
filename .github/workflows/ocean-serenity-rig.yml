@@ -14,6 +14,7 @@ on:
       - '.github/workflows/unreal-android.yml'
       - 'unreal/**'
       - 'tools/import_ocean_serenity.py'
+      - 'tools/import_townsperson.py'
 jobs:
   rig:
     runs-on: [self-hosted, Windows, X64, unreal-5-7, android-sdk]
