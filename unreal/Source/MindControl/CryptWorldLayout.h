@@ -13,10 +13,59 @@ namespace CryptWorld
  inline constexpr float South=-5500.f;
  inline constexpr float North=5500.f;
  inline const FVector2D Castle(4540+CastleOffsetX,0);
- inline constexpr float TownNorth=(North-South)/3.f;
+ inline constexpr float TownNorth=4800.f;
  inline constexpr float TownRoadX=3650.f;
  inline constexpr float RuinOffsetX=5500.f;
  inline const FVector2D Town(2420,TownNorth);
+
+ // The pool sits on the north bank of the Gravehollow entrance trench.
+ inline constexpr float PoolX=-1950.f, PoolY=2200.f;
+ inline constexpr float PoolRadiusX=950.f, PoolRadiusY=740.f;
+ inline constexpr float PoolSurface=-90.f;
+ inline double PoolRadius(double X,double Y)
+ {
+  return FMath::Sqrt(FMath::Square((X-PoolX)/PoolRadiusX)+FMath::Square((Y-PoolY)/PoolRadiusY));
+ }
+
+ inline constexpr float OceanLimit=108000.f;
+ inline constexpr float SeaLevel=-550.f;
+ struct FIsland
+ {
+  const TCHAR* Name;
+  FVector2D Center;
+  float Radius;
+ };
+ inline const FIsland Islands[]={
+  {TEXT("Gull Cay"),{85000,21000},5600},
+  {TEXT("Lantern Isle"),{42000,82000},6500},
+  {TEXT("Saltwind Key"),{-14000,86500},5500},
+  {TEXT("Black Sail Isle"),{-82000,47000},6900},
+  {TEXT("Driftwood Cay"),{-87500,-21500},4800},
+  {TEXT("Pearl Shoal"),{-38000,-83500},5800},
+  {TEXT("Stormhook Isle"),{50000,-81500},6900}
+ };
+ inline double MainlandEdge(double X,double Y)
+ {
+  return FMath::Max(FMath::Abs(X)/HalfWorldX,FMath::Abs(Y)/HalfWorldY);
+ }
+ inline FVector DockDirection(int32 Index)
+ {
+  if(Index==0) return FVector::ForwardVector;
+  const auto& P=Islands[Index-1].Center;
+  return FVector(P.X,P.Y,0).GetSafeNormal();
+ }
+ inline FVector DockEnd(int32 Index)
+ {
+  if(Index==0) return FVector(HalfWorldX,0,SeaLevel+90.f);
+  const auto& Island=Islands[Index-1];
+  return FVector(Island.Center.X,Island.Center.Y,SeaLevel+90.f)+DockDirection(Index)*Island.Radius;
+ }
+ inline FVector ShipBerth(int32 Index)
+ {
+  FVector Berth=DockEnd(Index)+DockDirection(Index)*1050.;
+  Berth.Z=SeaLevel;
+  return Berth;
+ }
 
  struct FRiver
  {
@@ -43,8 +92,8 @@ namespace CryptWorld
  inline FVector2D MapPoint(const FVector& Location,bool bOverview=false)
  {
   if(bOverview)
-   return FVector2D(FMath::Clamp((Location.X+HalfWorldX)/(2*HalfWorldX),0.,1.),
-     FMath::Clamp((HalfWorldY-Location.Y)/(2*HalfWorldY),0.,1.));
+   return FVector2D(FMath::Clamp((Location.X+OceanLimit)/(2*OceanLimit),0.,1.),
+     FMath::Clamp((OceanLimit-Location.Y)/(2*OceanLimit),0.,1.));
   return FVector2D(FMath::Clamp((Location.X-West)/(East-West),0.,1.),
     FMath::Clamp((North-Location.Y)/(North-South),0.,1.));
  }
