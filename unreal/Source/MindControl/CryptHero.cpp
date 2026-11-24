@@ -912,6 +912,13 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
    }
    return;
   }
+  if(!bSatchelJournal && !bGearPage)
+   for(int32 Index=0;Index<4;++Index)
+    if(Layout.HitAudio(TouchPoint,Index))
+    {
+     AdjustAudioVolume(Index<2,Index%2?.1f:-.1f);
+     return;
+    }
   if(!bSatchelJournal)
    for(int32 Index=0;Index<int32(ECryptThumbAction::Count);++Index)
     if(Layout.HitThumbAction(TouchPoint,Index))
@@ -1731,5 +1738,17 @@ void ACryptHero::UpdateFlames(float DeltaSeconds)
    Part->SetActorLocationAndRotation(TongueBase+Direction*Length*.42,FRotationMatrix::MakeFromZ(Direction).Rotator());
    Part->SetActorScale3D(FVector(Width,Width,Length)/100.);
   }
+ }
+}
+
+void ACryptHero::AdjustAudioVolume(bool bMusic,float Delta)
+{
+ float& Volume=bMusic?MusicVolume:EffectsVolume;
+ Volume=FMath::Clamp(Volume+Delta,0.f,1.f);
+ if(bMusic && MusicPlayer) MusicPlayer->SetVolumeMultiplier(Volume);
+ if(GConfig)
+ {
+  GConfig->SetFloat(TEXT("MindControl.Audio"),bMusic?TEXT("MusicVolume"):TEXT("EffectsVolume"),Volume,GGameUserSettingsIni);
+  GConfig->Flush(false,GGameUserSettingsIni);
  }
 }
