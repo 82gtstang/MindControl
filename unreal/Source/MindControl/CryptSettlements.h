@@ -14,6 +14,9 @@
 
 namespace CryptSettlements
 {
+ // The existing western settlement grid is centered on Y=0.
+ inline constexpr float DistrictNorth = 0.f;
+
  struct FResident
  {
   TArray<FVector> Route;
