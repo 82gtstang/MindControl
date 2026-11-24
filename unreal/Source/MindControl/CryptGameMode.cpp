@@ -20,14 +20,24 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Engine/PointLight.h"
 #include "Components/PointLightComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Engine/Engine.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "TimerManager.h"
 namespace
 {
+ constexpr float CastleApronCenterX=4450.f;
+ constexpr float CastleApronLength=1650.f;
+ constexpr float CastleApronStart=CryptWorld::CastleOffsetX+CastleApronCenterX-CastleApronLength*.5f;
+ constexpr float CastleApronEnd=CastleApronStart+CastleApronLength;
+ constexpr float CastleApronHalfWidth=1225.f;
+ constexpr float MainRoadStart=-5500.f;
+ constexpr float MainRoadHalfWidth=200.f;
+
  float TerrainHeight(float X,float Y)
  {
   const float South=FMath::SmoothStep(1100.f,2300.f,-Y);
@@ -40,17 +50,39 @@ namespace
   float Height=-20.f+South*(WestHill+EastHill-Valley)+North;
   const float Edge=FMath::Max(FMath::Abs(X)/5600.f,FMath::Abs(Y)/5100.f);
   const float CoreDistance=FMath::Max(FMath::Abs(X),FMath::Abs(Y));
-  Height+=760.f*FMath::SmoothStep(.96f,1.16f,Edge)*(1.f-FMath::SmoothStep(6300.f,12200.f,CoreDistance));
+  // Leave the village and its northern exit open through the old inner rim.
+  const float TownOpening=(1.f-FMath::SmoothStep(1900.f,3500.f,
+    FMath::Abs(X-static_cast<float>(CryptWorld::Town.X))))*FMath::SmoothStep(2500.f,4300.f,Y);
+  Height+=760.f*FMath::SmoothStep(.96f,1.16f,Edge)*
+   (1.f-FMath::SmoothStep(6300.f,12200.f,CoreDistance))*(1.f-TownOpening);
   const float Wilder=FMath::SmoothStep(6600.f,12200.f,CoreDistance);
   const float Ridges=610.f*FMath::Sin((X+.32f*Y)/5900.f)+420.f*FMath::Cos((Y-.24f*X)/4600.f);
   const float Rolling=175.f*FMath::Sin(X/1960.f)*FMath::Cos(Y/2420.f);
   Height+=Wilder*(Ridges+Rolling+750.f);
   const float MapEdge=FMath::Max(FMath::Abs(X)/CryptWorld::HalfWorldX,FMath::Abs(Y)/CryptWorld::HalfWorldY);
-  Height+=1800.f*FMath::SmoothStep(.94f,1.f,MapEdge);
+  if(MapEdge>.86f)
+  {
+   Height=FMath::Lerp(Height,CryptWorld::SeaLevel-1350.f,FMath::SmoothStep(.86f,1.01f,MapEdge));
+   // Keep the coastal approach shallow, then fall to a 20-hero-height ocean floor.
+   constexpr float DeepOceanDepth=20.f*192.f;
+   Height-= (DeepOceanDepth-1350.f)*FMath::SmoothStep(1.01f,1.15f,MapEdge);
+   for(const auto& Island : CryptWorld::Islands)
+   {
+    const double Distance=FVector2D::Distance(FVector2D(X,Y),Island.Center)/Island.Radius;
+    const float Profile=static_cast<float>(1.-FMath::SmoothStep(.32,1.03,Distance));
+    if(Profile>0.f)
+    {
+     const float Hills=210.f*FMath::Sin(X/1170.f)*FMath::Cos(Y/1600.f);
+     const float IslandHeight=CryptWorld::SeaLevel-450.f+Profile*(1260.f+Hills);
+     const float Shelf=static_cast<float>(1.-FMath::SmoothStep(.79,1.03,Distance));
+     Height=FMath::Max(Height,FMath::Lerp(Height,IslandHeight,Shelf));
+    }
+   }
+  }
   if(X<-6600.f)
   {
    const float ByTown=(1.f-FMath::SmoothStep(24900.f,27600.f,-X))*
-      (1.f-FMath::SmoothStep(5850.f,8400.f,FMath::Abs(Y)));
+      (1.f-FMath::SmoothStep(5850.f,8400.f,FMath::Abs(Y-CryptSettlements::DistrictNorth)));
    Height=FMath::Lerp(Height,-33.f,ByTown);
   }
   for(const auto& River : CryptWorld::Rivers)
@@ -72,19 +104,23 @@ namespace
   }
   const float WestRoad = FMath::SmoothStep(5500.f, 6520.f, -X)
    * (1.f - FMath::SmoothStep(235.f, 575.f, FMath::Abs(Y)));
-  const float EastRoad=FMath::SmoothStep(5100.f,5500.f,X)
+  const float DistrictRoad=(1.f-FMath::SmoothStep(280.f,1350.f,FMath::Abs(X+6400.f)))
+   *FMath::SmoothStep(-500.f,0.f,Y)
+   *(1.f-FMath::SmoothStep(CryptSettlements::DistrictNorth,CryptSettlements::DistrictNorth+900.f,Y));
+  const float EastRoad=FMath::SmoothStep(4600.f,5000.f,X)
    *(1.f-FMath::SmoothStep(CryptWorld::MainRoadEnd,CryptWorld::MainRoadEnd+600.f,X))
    *(1.f-FMath::SmoothStep(245.f,3250.f,FMath::Abs(Y)));
   const float CastleGround=(1.f-FMath::SmoothStep(840.f,1450.f,FMath::Abs(X-static_cast<float>(CryptWorld::Castle.X))))
    *(1.f-FMath::SmoothStep(1270.f,2050.f,FMath::Abs(Y)));
-  const float TownGround=(1.f-FMath::SmoothStep(1450.f,2080.f,FMath::Abs(X-2400.f)))
-   *(1.f-FMath::SmoothStep(1430.f,2100.f,FMath::Abs(Y-CryptWorld::TownNorth)));
-  const float TownRoad=(1.f-FMath::SmoothStep(250.f,700.f,FMath::Abs(X-CryptWorld::TownRoadX)))
+  const float TownGround=(1.f-FMath::SmoothStep(1750.f,3200.f,FMath::Abs(X-static_cast<float>(CryptWorld::Town.X))))
+   *(1.f-FMath::SmoothStep(1680.f,3500.f,FMath::Abs(Y-CryptWorld::TownNorth)));
+  const float TownRoad=(1.f-FMath::SmoothStep(325.f,1100.f,FMath::Abs(X-CryptWorld::TownRoadX)))
    *(1.f-FMath::SmoothStep(CryptWorld::TownNorth,CryptWorld::TownNorth+550.f,Y))
    *FMath::SmoothStep(-380.f,0.f,Y);
   const float RuinGround=(1.f-FMath::SmoothStep(1900.f,2400.f,FMath::Abs(X-(1000.f+CryptWorld::RuinOffsetX))))
    *(1.f-FMath::SmoothStep(1580.f,2170.f,FMath::Abs(Y-3200.f)));
-  return FMath::Lerp(Height,-20.f,FMath::Max3(FMath::Max3(WestRoad,EastRoad,CastleGround),
+  Height=FMath::Lerp(Height,-340.f,static_cast<float>(1.-FMath::SmoothStep(.54,1.08,CryptWorld::PoolRadius(X,Y))));
+  return FMath::Lerp(Height,-20.f,FMath::Max3(FMath::Max3(FMath::Max(WestRoad,DistrictRoad),EastRoad,CastleGround),
    FMath::Max(TownGround,TownRoad),RuinGround));
  }
 
@@ -127,126 +163,144 @@ namespace
 
  void DisableTemplateGround(UWorld* World)
  {
-  // The engine startup level can have its own floor. A terrain cutout only
-  // removes our mesh triangles, so that original floor must not span the shaft.
+  // All playable ground is created below. Keep startup lighting and sky,
+  // but discard authored ground regardless of its material, size, or height.
   for(TActorIterator<AActor> It(World);It;++It)
   {
    AActor* Actor=*It;
-   if(Actor->IsA<AStaticMeshActor>() || Actor->GetClass()->GetName().StartsWith(TEXT("Landscape")))
+   const bool bLandscape=Actor->GetClass()->GetName().StartsWith(TEXT("Landscape"));
+   TArray<UPrimitiveComponent*> Primitives;
+   Actor->GetComponents(Primitives);
+   for(UPrimitiveComponent* Primitive : Primitives)
    {
-    TArray<UPrimitiveComponent*> Primitives;
-    Actor->GetComponents(Primitives);
-    for(UPrimitiveComponent* Primitive : Primitives)
-    {
-     const auto& Bounds=Primitive->Bounds;
-     const FVector Extent=Bounds.BoxExtent;
-     const bool bLandscape=Actor->GetClass()->GetName().StartsWith(TEXT("Landscape"));
-     if(!bLandscape && (Extent.X<500 || Extent.Y<500 || Extent.Z>220)) continue;
-     const FBox RoadDeck(FVector(-5500,-205,-26),FVector(CryptWorld::MainRoadEnd,205,25));
-     if(!bLandscape && Extent.Z<FMath::Min(Extent.X,Extent.Y)*.18 && RoadDeck.Intersect(Bounds.GetBox()))
-     {
-      Primitive->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-      Primitive->SetVisibility(false,true);
-      continue;
-     }
-     for(int32 I=0;I<CryptDungeons::Count;++I)
-     {
-      const FVector Mouth=CryptDungeons::Entrance(I);
-      const FVector Chamber=CryptDungeons::Room(I);
-      const FBox Shaft(FVector(Mouth.X-20,Mouth.Y-CryptDungeons::RampHalfWidth,Chamber.Z),
-                       FVector(Mouth.X+CryptDungeons::RampLength+20,Mouth.Y+CryptDungeons::RampHalfWidth,Mouth.Z+200));
-      if(!Shaft.Intersect(Bounds.GetBox())) continue;
-      Primitive->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-      Primitive->SetVisibility(false,true);
-      break;
-     }
-    }
+    if(!bLandscape && !Primitive->IsA<UStaticMeshComponent>() &&
+       !Primitive->IsA<UProceduralMeshComponent>() &&
+       !Primitive->GetClass()->GetName().StartsWith(TEXT("Landscape"))) continue;
+
+    Primitive->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    // Sky domes may be static meshes. Keep their rendering only.
+    if(!Actor->GetName().Contains(TEXT("Sky")) &&
+       !Primitive->GetName().Contains(TEXT("Sky")))
+     Primitive->SetHiddenInGame(true);
    }
   }
  }
 
- void CreateTerrain(UWorld* World,UMaterialInterface* Grass,UMaterialInterface* Dirt,UMaterialInterface* Overworld)
+ void CreateTerrain(UWorld* World,UMaterialInterface* Grass,UMaterialInterface* Dirt,UMaterialInterface* Overworld,
+                    UMaterialInterface* Paving)
  {
-  auto* Surface=CreateSurface(World,TEXT("GroundSurface"),true);
-  if(!Surface) return;
   TArray<float> Eastings,Northings;
-  for(float X=-CryptWorld::HalfWorldX;X<=CryptWorld::HalfWorldX;X+=1500.f) Eastings.Add(X);
-  for(float Y=-CryptWorld::HalfWorldY;Y<=CryptWorld::HalfWorldY;Y+=1500.f) Northings.Add(Y);
+  for(float X=-CryptWorld::OceanLimit;X<=CryptWorld::OceanLimit;X+=1500.f) Eastings.Add(X);
+  for(float Y=-CryptWorld::OceanLimit;Y<=CryptWorld::OceanLimit;Y+=1500.f) Northings.Add(Y);
   for(float X=-6600;X<=CryptWorld::East;X+=100) Eastings.AddUnique(X);
-  for(float Y=-6000;Y<=6000;Y+=100) Northings.AddUnique(Y);
+  for(float Y=-6000;Y<=CryptWorld::TownNorth+3600.f;Y+=100) Northings.AddUnique(Y);
   Eastings.AddUnique(-24900);
-  Northings.AddUnique(-5850);
-  Northings.AddUnique(5850);
+  Northings.AddUnique(CryptSettlements::DistrictNorth-5850.f);
+  Northings.AddUnique(CryptSettlements::DistrictNorth+5850.f);
   for(const auto& P : CryptDungeons::EntrancePoints)
   {
    for(float X=P.X-300;X<=P.X+300;X+=100) Eastings.AddUnique(X);
    Eastings.AddUnique(P.X+CryptDungeons::RampLength);
    for(float Y=P.Y-300;Y<=P.Y+300;Y+=100) Northings.AddUnique(Y);
   }
+  Eastings.AddUnique(MainRoadStart);
+  Eastings.AddUnique(CastleApronStart);
+  Eastings.AddUnique(CastleApronEnd);
+  for(const float Side : {-1.f,1.f})
+  {
+   Northings.AddUnique(Side*MainRoadHalfWidth);
+   Northings.AddUnique(Side*CastleApronHalfWidth);
+  }
+  // Sample the island crests and shorelines independently of the ocean grid.
+  for(const auto& Island : CryptWorld::Islands)
+  {
+   for(int32 Sample=-6;Sample<=6;++Sample)
+   {
+    const float Offset=Island.Radius*Sample/5.f;
+    Eastings.AddUnique(static_cast<float>(Island.Center.X)+Offset);
+    Northings.AddUnique(static_cast<float>(Island.Center.Y)+Offset);
+   }
+  }
   Eastings.Sort();
   Northings.Sort();
   const int32 Columns=Eastings.Num()-1;
   const int32 Rows=Northings.Num()-1;
   const int32 Stride=Columns+1;
-  TArray<FVector> Vertices,Normals;
-  TArray<FVector2D> UVs;
-  TArray<FLinearColor> TerrainMasks;
-  TArray<FProcMeshTangent> Tangents;
-  TArray<int32> Triangles,DirtTriangles;
-  Vertices.Reserve(Stride*(Rows+1));
-  Normals.Reserve(Stride*(Rows+1));
-  UVs.Reserve(Stride*(Rows+1));
-  TerrainMasks.Reserve(Stride*(Rows+1));
-  Tangents.Reserve(Stride*(Rows+1));
-  Triangles.Reserve(Columns*Rows*6);
-  DirtTriangles.Reserve(Columns*Rows);
-  for(int32 Row=0;Row<=Rows;++Row)
+  // Use local indices for each strip so mobile rendering never needs a large index range.
+  constexpr int32 RowsPerStrip=32;
+  for(int32 FirstRow=0;FirstRow<Rows;FirstRow+=RowsPerStrip)
   {
-   const float Y=Northings[Row];
-   for(int32 Column=0;Column<=Columns;++Column)
+   const int32 LastRow=FMath::Min(FirstRow+RowsPerStrip,Rows);
+   auto* Surface=CreateSurface(World,TEXT("GroundSurface"),true);
+   if(!Surface) continue;
+   TArray<FVector> Vertices,Normals;
+   TArray<FVector2D> UVs;
+   TArray<FLinearColor> TerrainMasks;
+   TArray<FProcMeshTangent> Tangents;
+   TArray<int32> Triangles,DirtTriangles,PavingTriangles;
+   Vertices.Reserve(Stride*(LastRow-FirstRow+1));
+   Normals.Reserve(Stride*(LastRow-FirstRow+1));
+   UVs.Reserve(Stride*(LastRow-FirstRow+1));
+   TerrainMasks.Reserve(Stride*(LastRow-FirstRow+1));
+   Tangents.Reserve(Stride*(LastRow-FirstRow+1));
+   Triangles.Reserve(Columns*(LastRow-FirstRow)*6);
+   DirtTriangles.Reserve(Columns*(LastRow-FirstRow));
+   for(int32 Row=FirstRow;Row<=LastRow;++Row)
    {
-    const float X=Eastings[Column];
-    const float Dx=(TerrainHeight(X+5,Y)-TerrainHeight(X-5,Y))*.1f;
-    const float Dy=(TerrainHeight(X,Y+5)-TerrainHeight(X,Y-5))*.1f;
-    Vertices.Emplace(X,Y,TerrainHeight(X,Y));
-    Normals.Add(FVector(-Dx,-Dy,1).GetSafeNormal());
-    Tangents.Emplace(FVector(1,0,Dx).GetSafeNormal(),false);
-    UVs.Emplace(float(Column)/Columns,float(Row)/Rows);
-    const float WoodlandPattern=FMath::Sin(X/2850.f+Y/5200.f)*FMath::Cos(Y/3400.f-X/6900.f);
-    const float Woodland=FMath::SmoothStep(-.42f,.55f,WoodlandPattern);
-    const float Slope=FMath::Sqrt(Dx*Dx+Dy*Dy);
-    const float Rocky=FMath::SmoothStep(.22f,.60f,Slope);
-    float Bank=0.f;
-    for(const auto& River : CryptWorld::Rivers)
+    const float Y=Northings[Row];
+    for(int32 Column=0;Column<=Columns;++Column)
     {
-     if(Y<=River.Start || Y>=River.End) continue;
-     const float Distance=FMath::Abs(X-River.X(Y));
-     const float Edge=River.BedWidth();
-     const float Fade=FMath::SmoothStep(0.f,250.f,FMath::Min(Y-River.Start,River.End-Y));
-     Bank=FMath::Max(Bank,Fade*(1.f-FMath::SmoothStep(Edge+10.f,Edge+260.f,Distance)));
-    }
-    TerrainMasks.Emplace(Woodland,Rocky,Bank,IsTrail(X,Y)?1.f:0.f);
-    if(Row<Rows && Column<Columns)
-    {
-     const float TileX=(X+Eastings[Column+1])*.5f;
-     const float TileY=(Y+Northings[Row+1])*.5f;
-     if((TileX>-24900 && TileX<-6600 && FMath::Abs(TileY)<5850) ||
-        CryptDungeons::IsRampCell(TileX,TileY)) continue;
-     const int32 A=Row*Stride+Column;
-     const int32 B=A+1;
-     const int32 C=A+Stride;
-     const int32 D=C+1;
-     auto& Section=(!Overworld && Dirt && IsDirt(TileX,TileY))?DirtTriangles:Triangles;
-     Section.Append({A,C,B,B,C,D});
+     const float X=Eastings[Column];
+     const float Dx=(TerrainHeight(X+5,Y)-TerrainHeight(X-5,Y))*.1f;
+     const float Dy=(TerrainHeight(X,Y+5)-TerrainHeight(X,Y-5))*.1f;
+     Vertices.Emplace(X,Y,TerrainHeight(X,Y));
+     Normals.Add(FVector(-Dx,-Dy,1).GetSafeNormal());
+     Tangents.Emplace(FVector(1,0,Dx).GetSafeNormal(),false);
+     UVs.Emplace(float(Column)/Columns,float(Row)/Rows);
+     const float WoodlandPattern=FMath::Sin(X/2850.f+Y/5200.f)*FMath::Cos(Y/3400.f-X/6900.f);
+     const float Woodland=FMath::SmoothStep(-.42f,.55f,WoodlandPattern);
+     const float Slope=FMath::Sqrt(Dx*Dx+Dy*Dy);
+     const float Rocky=FMath::SmoothStep(.22f,.60f,Slope);
+     float Bank=0.f;
+     for(const auto& River : CryptWorld::Rivers)
+     {
+      if(Y<=River.Start || Y>=River.End) continue;
+      const float Distance=FMath::Abs(X-River.X(Y));
+      const float Edge=River.BedWidth();
+      const float Fade=FMath::SmoothStep(0.f,250.f,FMath::Min(Y-River.Start,River.End-Y));
+      Bank=FMath::Max(Bank,Fade*(1.f-FMath::SmoothStep(Edge+10.f,Edge+260.f,Distance)));
+     }
+     TerrainMasks.Emplace(Woodland,Rocky,Bank,IsTrail(X,Y)?1.f:0.f);
+     if(Row<LastRow && Column<Columns)
+     {
+      const float TileX=(X+Eastings[Column+1])*.5f;
+      const float TileY=(Y+Northings[Row+1])*.5f;
+      if((TileX>-24900 && TileX<-6600 && FMath::Abs(TileY-CryptSettlements::DistrictNorth)<5850) ||
+         CryptDungeons::IsRampCell(TileX,TileY)) continue;
+      const int32 A=(Row-FirstRow)*Stride+Column;
+      const int32 B=A+1;
+      const int32 C=A+Stride;
+      const int32 D=C+1;
+      const bool bRoad=TileX>=MainRoadStart && TileX<CastleApronStart && FMath::Abs(TileY)<MainRoadHalfWidth;
+      const bool bApron=TileX>=CastleApronStart && TileX<CastleApronEnd && FMath::Abs(TileY)<CastleApronHalfWidth;
+      auto& Section=Paving && (bRoad || bApron)?PavingTriangles:
+        (!Overworld && Dirt && IsDirt(TileX,TileY))?DirtTriangles:Triangles;
+      Section.Append({A,C,B,B,C,D});
+     }
     }
    }
-  }
-  Surface->CreateMeshSection_LinearColor(0,Vertices,Triangles,Normals,UVs,TerrainMasks,Tangents,true);
-  if(Overworld || Grass) Surface->SetMaterial(0,Overworld?Overworld:Grass);
-  if(!DirtTriangles.IsEmpty())
-  {
-   Surface->CreateMeshSection_LinearColor(1,Vertices,DirtTriangles,Normals,UVs,{},Tangents,true);
-   Surface->SetMaterial(1,Dirt);
+   Surface->CreateMeshSection_LinearColor(0,Vertices,Triangles,Normals,UVs,TerrainMasks,Tangents,true);
+   if(Overworld || Grass) Surface->SetMaterial(0,Overworld?Overworld:Grass);
+   if(!DirtTriangles.IsEmpty())
+   {
+    Surface->CreateMeshSection_LinearColor(1,Vertices,DirtTriangles,Normals,UVs,{},Tangents,true);
+    Surface->SetMaterial(1,Dirt);
+   }
+   if(!PavingTriangles.IsEmpty())
+   {
+    Surface->CreateMeshSection_LinearColor(2,Vertices,PavingTriangles,Normals,UVs,{},Tangents,true);
+    Surface->SetMaterial(2,Paving);
+   }
   }
  }
 
@@ -301,12 +355,12 @@ namespace
   const auto Plant=[&](float X,float Y)
   {
    if((X>-6800.f && X<CryptWorld::MainRoadEnd+400.f && FMath::Abs(Y)<590.f) ||
-      (X>-25200.f && X<-6300.f && FMath::Abs(Y)<6200.f) ||
+      (X>-25200.f && X<-6300.f && FMath::Abs(Y-CryptSettlements::DistrictNorth)<6200.f) ||
       (X>510.f && X<4280.f && Y>CryptWorld::TownNorth-1770.f && Y<CryptWorld::TownNorth+1700.f) ||
       (FMath::Abs(X-CryptWorld::TownRoadX)<550.f && Y>0 && Y<CryptWorld::TownNorth) ||
       (FMath::Abs(X-CryptWorld::Castle.X)<1460. && FMath::Abs(Y)<1750.f) ||
       (FMath::Abs(X-(1000.f+CryptWorld::RuinOffsetX))<2000.f && FMath::Abs(Y-3200.f)<1660.f) ||
-      IsDirt(X,Y)) return;
+      CryptWorld::PoolRadius(X,Y)<1.11 || IsDirt(X,Y)) return;
    for(const auto& Mouth : CryptDungeons::EntrancePoints)
     if(FVector2D::DistSquared(Mouth,FVector2D(X,Y))<FMath::Square(1700.)) return;
    FHitResult Ground;
@@ -350,10 +404,208 @@ namespace
    for(float Y=-57000.f;Y<=57000.f;Y+=3100.f)
     if(Random.FRand()<.78f)
      Plant(X+Random.FRandRange(-990,990),Y+Random.FRandRange(-990,990));
+  for(const auto& Island : CryptWorld::Islands)
+   for(int32 Tree=0;Tree<19;++Tree)
+   {
+    const double Angle=Tree*2.39996;
+    const double Radius=Island.Radius*(.14+.45*FMath::Sqrt(Tree/19.));
+    const float X=Island.Center.X+Radius*FMath::Cos(Angle);
+    const float Y=Island.Center.Y+Radius*FMath::Sin(Angle);
+    if(TerrainHeight(X,Y)>CryptWorld::SeaLevel+100.f) Plant(X,Y);
+   }
   for(float X=-5900.f;X<=12600.f;X+=930.f)
    for(float Y=-6000.f;Y<=6200.f;Y+=950.f)
     if(Random.FRand()<.78f)
      Plant(X+Random.FRandRange(-240,240),Y+Random.FRandRange(-240,240));
+ }
+
+ void CreateGravehollowPool(UWorld* World,UMaterialInterface* Water)
+ {
+  using namespace CryptWorld;
+  if(!Water) return;
+  auto* Surface=CreateSurface(World,TEXT("GravehollowPool"),false);
+  if(!Surface) return;
+  constexpr int32 Segments=64;
+  const FVector Center(PoolX,PoolY,PoolSurface);
+  TArray<FVector> Vertices{Center};
+  TArray<FVector2D> UVs{FVector2D(.5,.5)};
+  TArray<int32> Indices;
+  for(int32 Index=0;Index<Segments;++Index)
+  {
+   const double Angle=2.*PI*Index/Segments;
+   const double X=FMath::Cos(Angle),Y=FMath::Sin(Angle);
+   Vertices.Add(Center+FVector(X*PoolRadiusX,Y*PoolRadiusY,0));
+   UVs.Emplace(.5+X*.5,.5+Y*.5);
+   Indices.Append({0,1+(Index+1)%Segments,1+Index});
+  }
+  Surface->CreateMeshSection_LinearColor(0,Vertices,Indices,{},UVs,{}, {},false);
+  Surface->SetMaterial(0,Water);
+  Surface->SetCastShadow(false);
+
+  auto* Sphere=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+  auto* Cone=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cone.Cone"));
+  auto* Basic=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+  if(!Sphere || !Cone || !Basic) return;
+  const auto Part=[&](AActor* Owner,UStaticMesh* Mesh,FLinearColor Color,
+                       FVector Position,FVector Scale,FRotator Rotation=FRotator::ZeroRotator)
+  {
+   auto* Component=NewObject<UStaticMeshComponent>(Owner);
+   Owner->AddInstanceComponent(Component);
+   Component->SetupAttachment(Owner->GetRootComponent());
+   Component->SetStaticMesh(Mesh);
+   auto* Tint=UMaterialInstanceDynamic::Create(Basic,Component);
+   Tint->SetVectorParameterValue(TEXT("Color"),Color);
+   Component->SetMaterial(0,Tint);
+   Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+   Component->SetCastShadow(false);
+   Component->SetRelativeTransform(FTransform(Rotation,Position,Scale));
+   Component->RegisterComponent();
+  };
+  TArray<TWeakObjectPtr<AStaticMeshActor>> Fish;
+  const FLinearColor FishColors[]={{.16f,.55f,.58f},{.83f,.46f,.17f},{.52f,.69f,.78f}};
+  for(int32 Index=0;Index<14;++Index)
+  {
+   auto* Actor=World->SpawnActor<AStaticMeshActor>(Center-FVector(0,0,65),FRotator::ZeroRotator);
+   if(!Actor) continue;
+   Actor->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
+   const FLinearColor Color=FishColors[Index%3];
+   Part(Actor,Sphere,Color,FVector::ZeroVector,FVector(.34,.13,.18));
+   Part(Actor,Cone,Color,FVector(-20,0,0),FVector(.17,.26,.18),FRotator(90,0,0));
+   Part(Actor,Cone,Color,FVector(-2,0,8),FVector(.10,.12,.15));
+   Fish.Add(Actor);
+  }
+  for(int32 Index=0;Index<9;++Index)
+  {
+   const double Angle=Index*2.4;
+   FVector Base=Center+FVector(FMath::Cos(Angle)*420,FMath::Sin(Angle)*310,0);
+   Base.Z=TerrainHeight(Base.X,Base.Y)+9.;
+   for(int32 Arm=0;Arm<5;++Arm)
+   {
+    const double Yaw=72.*Arm;
+    const FRotator Rotation(0,Yaw,0);
+    auto* Star=World->SpawnActor<AStaticMeshActor>(Base+Rotation.Vector()*9.,Rotation);
+    if(!Star) continue;
+    Star->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
+    Part(Star,Sphere,FLinearColor(.86,.26,.12),FVector::ZeroVector,FVector(.26,.10,.065));
+   }
+   auto* Plant=World->SpawnActor<AStaticMeshActor>(Base+FVector(22,12,0),FRotator::ZeroRotator);
+   if(!Plant) continue;
+   Plant->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
+   for(int32 Leaf=-1;Leaf<=1;++Leaf)
+    Part(Plant,Sphere,FLinearColor(.09,.34,.13),FVector(Leaf*9,0,17),
+      FVector(.09,.045,.38),FRotator(0,0,Leaf*24));
+  }
+  FTimerHandle SwimTimer;
+  World->GetTimerManager().SetTimer(SwimTimer,FTimerDelegate::CreateWeakLambda(Surface,
+   [Fish=MoveTemp(Fish),Center,Elapsed=0.]() mutable
+   {
+    Elapsed+=.05;
+    for(int32 Index=0;Index<Fish.Num();++Index)
+    {
+     auto* Actor=Fish[Index].Get();
+     if(!Actor) continue;
+     const double Direction=Index%2==0?1.:-1.;
+     const double Phase=Index*2.39996+Direction*Elapsed*(.27+.022*(Index%4));
+     const double Radius=310.+45.*(Index%5);
+     const FVector Offset(FMath::Cos(Phase)*Radius,FMath::Sin(Phase)*Radius*.74,
+      -55.-18.*(Index%5)+12.*FMath::Sin(Phase*2.));
+     const FVector Forward=Direction*FVector(-FMath::Sin(Phase),FMath::Cos(Phase)*.74,0);
+     Actor->SetActorLocationAndRotation(Center+Offset,Forward.Rotation(),false);
+    }
+   }),.05f,true);
+ }
+
+ void CreateOceanFleet(UWorld* World,UMaterialInterface* Water)
+ {
+  using namespace CryptWorld;
+  if(Water)
+  {
+   if(auto* Surface=CreateSurface(World,TEXT("OceanSurface"),false))
+   {
+    const double L=OceanLimit;
+    Surface->CreateMeshSection_LinearColor(0,
+     {FVector(-L,-L,SeaLevel),FVector(L,-L,SeaLevel),FVector(-L,L,SeaLevel),FVector(L,L,SeaLevel)},
+     {0,2,1,1,2,3},{FVector::UpVector,FVector::UpVector,FVector::UpVector,FVector::UpVector},
+     {FVector2D(0,0),FVector2D(85,0),FVector2D(0,85),FVector2D(85,85)},{},{},false);
+    Surface->SetMaterial(0,Water);
+    Surface->SetCastShadow(false);
+   }
+  }
+  auto* Cube=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));
+  auto* Sphere=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+  auto* Cylinder=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+  auto* Basic=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+  if(!Cube || !Sphere || !Cylinder || !Basic) return;
+  const auto Part=[&](AActor* Owner,UStaticMesh* Mesh,FVector At,FVector Size,FLinearColor Color,
+                       FRotator Rotation=FRotator::ZeroRotator,bool bCollision=false)
+  {
+   auto* Component=NewObject<UStaticMeshComponent>(Owner);
+   Owner->AddInstanceComponent(Component);
+   Component->SetupAttachment(Owner->GetRootComponent());
+   Component->SetStaticMesh(Mesh);
+   auto* Tint=UMaterialInstanceDynamic::Create(Basic,Component);
+   if(Tint)
+   {
+    Tint->SetVectorParameterValue(TEXT("Color"),Color);
+    Component->SetMaterial(0,Tint);
+   }
+   Component->SetCollisionProfileName(bCollision?TEXT("BlockAll"):TEXT("NoCollision"));
+   Component->SetRelativeTransform(FTransform(Rotation,At,Size/100.));
+   Component->RegisterComponent();
+  };
+  const FLinearColor Wood(.21f,.10f,.045f), Planks(.42f,.24f,.12f), Canvas(.83f,.76f,.57f);
+  for(int32 Index=0;Index<=UE_ARRAY_COUNT(Islands);++Index)
+  {
+   const FVector Out=DockDirection(Index);
+   const double Length=Index==0?9000.:2800.;
+   const FVector End=DockEnd(Index);
+   const FVector Center=End-Out*Length*.5;
+   auto* Dock=World->SpawnActor<AStaticMeshActor>(Center,Out.Rotation());
+   if(!Dock) continue;
+   Part(Dock,Cube,FVector::ZeroVector,FVector(Length,460,36),Planks,FRotator::ZeroRotator,true);
+   for(double X=-Length*.5+200.;X<Length*.5;X+=480.)
+    for(const double Y : {-195.,195.})
+     Part(Dock,Cylinder,FVector(X,Y,-130),FVector(42,42,480),Wood);
+  }
+  TArray<TWeakObjectPtr<AStaticMeshActor>> Patrols;
+  for(int32 Index=0;Index<4;++Index)
+  {
+   // Two ships start moored; the other two sail offshore until boarded.
+   const bool bPatrol=Index>=2;
+   const FVector Start=bPatrol?FVector(78000.-(Index-2)*155000.,-32000,SeaLevel):ShipBerth(Index);
+   auto* Ship=World->SpawnActor<AStaticMeshActor>(Start,bPatrol?FRotator::ZeroRotator:DockDirection(Index).Rotation());
+   if(!Ship) continue;
+   Ship->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
+   Ship->Tags.Add(TEXT("OceanShip"));
+   Part(Ship,Sphere,FVector(0,0,-20),FVector(1900,610,430),Wood);
+   Part(Ship,Cube,FVector(0,0,120),FVector(1530,480,38),Planks,FRotator::ZeroRotator,true);
+   for(const double Side : {-1.,1.})
+    Part(Ship,Cube,FVector(0,Side*244,167),FVector(1500,24,75),Wood);
+   for(const double X : {-460.,0.,450.})
+   {
+    Part(Ship,Cylinder,FVector(X,0,575),FVector(52,52,930),Wood);
+    Part(Ship,Cylinder,FVector(X,0,790),FVector(29,29,680),Wood,FRotator(0,0,90));
+    Part(Ship,Sphere,FVector(X+36,0,620),FVector(135,620,345),Canvas);
+   }
+   Part(Ship,Cube,FVector(-460,98,979),FVector(12,195,90),FLinearColor(.05f,.05f,.06f));
+   if(bPatrol) Patrols.Add(Ship);
+  }
+  FTimerHandle PatrolTimer;
+  World->GetTimerManager().SetTimer(PatrolTimer,FTimerDelegate::CreateWeakLambda(World,
+   [Patrols=MoveTemp(Patrols),Time=0.]() mutable
+   {
+    Time+=.08;
+    for(int32 Index=0;Index<Patrols.Num();++Index)
+    {
+     auto* Ship=Patrols[Index].Get();
+     if(!Ship || Ship->ActorHasTag(TEXT("ClaimedShip"))) continue;
+     const double Angle=Time*.052+Index*PI;
+     const FVector Position((Index==0?81000.:-81000.)+FMath::Cos(Angle)*5200.,
+      -36000.+FMath::Sin(Angle)*13000.,SeaLevel+FMath::Sin(Time*1.6)*12.);
+     const FVector Heading(-FMath::Sin(Angle)*5200.,FMath::Cos(Angle)*13000.,0.);
+     Ship->SetActorLocationAndRotation(Position,Heading.Rotation());
+    }
+   }),.08f,true);
  }
 
  void CreateWater(UWorld* World,UMaterialInterface* RiverMaterial,UMaterialInterface* FallsMaterial)
@@ -515,31 +767,32 @@ void ACryptGameMode::BeginPlay()
  UMaterialInterface* Falls=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Waterfall.M_Waterfall"));
  DisableTemplateGround(GetWorld());
  auto* Overworld=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Overworld.M_Overworld"));
- CreateTerrain(GetWorld(),Grass,Dirt,Overworld);
+ CreateTerrain(GetWorld(),Grass,Dirt,Overworld,Cobble);
  CreateWater(GetWorld(),River,Falls);
+ CreateGravehollowPool(GetWorld(),LoadObject<UMaterialInterface>(nullptr,
+  TEXT("/Game/Environment/MindControl/M_GravehollowPool.M_GravehollowPool")));
+ auto* SeaMaterial=LoadObject<UMaterialInterface>(nullptr,
+  TEXT("/Game/Environment/MindControl/M_GravehollowPool.M_GravehollowPool"));
+ CreateOceanFleet(GetWorld(),SeaMaterial?SeaMaterial:River);
  // Keep movement inside the finished terrain while the surrounding hills continue past the boundary.
  for(const float Side : {-1.f,1.f})
  {
   for(const bool bAlongX : {false,true})
   {
    auto* Boundary=GetWorld()->SpawnActor<AStaticMeshActor>(
-     FVector(bAlongX?0.f:Side*(CryptWorld::HalfWorldX-80),bAlongX?Side*(CryptWorld::HalfWorldY-80):0.f,3000),FRotator::ZeroRotator);
+     FVector(bAlongX?0.f:Side*(CryptWorld::OceanLimit-80),bAlongX?Side*(CryptWorld::OceanLimit-80):0.f,3000),FRotator::ZeroRotator);
    if(!Boundary) continue;
    auto* Collision=Boundary->GetStaticMeshComponent();
    Collision->SetMobility(EComponentMobility::Movable);
    Collision->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube")));
    Collision->SetCollisionProfileName(TEXT("BlockAll"));
-   Boundary->SetActorScale3D(bAlongX?FVector(2*CryptWorld::HalfWorldX/100,1,130):FVector(1,2*CryptWorld::HalfWorldY/100,130));
+   Boundary->SetActorScale3D(bAlongX?FVector(2*CryptWorld::OceanLimit/100,1,130):FVector(1,2*CryptWorld::OceanLimit/100,130));
    Boundary->SetActorHiddenInGame(true);
    Collision->SetMobility(EComponentMobility::Static);
   }
  }
  UMaterialInterface* Stone=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_CastleStone.M_CastleStone"));
  UMaterialInterface* RoadMaterial=Cobble?Cobble:Stone?Stone:Dirt?Dirt:Grass;
- PlaceBlock(FVector(0,0,-8),FVector(110,4,.12),FRotator::ZeroRotator,RoadMaterial); // main road
- constexpr float RoadStart=5500.f, RoadEnd=CryptWorld::MainRoadEnd;
- PlaceBlock(FVector((RoadStart+RoadEnd)*.5f,0,-8),FVector((RoadEnd-RoadStart)/100.f,4,.12f),
-   FRotator::ZeroRotator,RoadMaterial);
  // Wilderness stones and ruined pillars beside the approach.
  for(int32 i=0;i<10;++i)
  {
@@ -547,7 +800,10 @@ void ACryptGameMode::BeginPlay()
   const float Y=(i%2==0?1.f:-1.f)*(600.f+(i%3)*220.f);
   PlaceBlock(FVector(X,Y,75),FVector(1.2f,1.2f,2.5f+(i%3)),FRotator::ZeroRotator,Stone);
  }
- PlaceBlock(FVector(-6048,0,-24),FVector(11.04,4,.10),FRotator::ZeroRotator,RoadMaterial);
+ PlaceBlock(FVector(-6050,0,-25),FVector(11,4,.10),FRotator::ZeroRotator,RoadMaterial);
+ const float DistrictNorth=CryptSettlements::DistrictNorth;
+ PlaceBlock(FVector(-6400,DistrictNorth*.5f,-12),FVector(4.f,DistrictNorth/100.f,.14f),
+  FRotator::ZeroRotator,RoadMaterial);
  const FVector TownOffset(0,CryptWorld::TownNorth,0);
  const FVector RuinOffset(CryptWorld::RuinOffsetX,0,0);
  const float TownRoad=CryptWorld::TownRoadX;
@@ -1005,7 +1261,6 @@ void ACryptGameMode::BeginPlay()
  {
   PlaceBlock(Location+FVector(CryptWorld::CastleOffsetX,0,0),Scale,Rotation,Stone,Mesh);
  };
- Masonry(FVector(4450,0,-10),FVector(16.5,24.5,.2));
  for(const float X : {3800.f,5100.f})
  {
   for(const float Y : {-1050.f,1050.f})
