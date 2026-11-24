@@ -170,3 +170,23 @@ with TemporaryDirectory() as directory:
     satchel.set_editor_property("never_stream", True)
     if not ASSETS.save_directory(DESTINATION, only_if_is_dirty=False, recursive=True):
         raise RuntimeError("Could not save the environment materials")
+
+
+# Mobile Sky Atmosphere requires an opaque, unlit IsSky surface.
+sky_dir = "/Game/Environment/MindControl"
+sky_path = sky_dir + "/M_MobileAtmosphereSky"
+sky = unreal.EditorAssetLibrary.load_asset(sky_path) if unreal.EditorAssetLibrary.does_asset_exist(sky_path) else TOOLS.create_asset("M_MobileAtmosphereSky", sky_dir, unreal.Material, unreal.MaterialFactoryNew())
+if not sky:
+    raise RuntimeError("Unable to create mobile sky material")
+sky.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+sky.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
+sky.set_editor_property("is_sky", True)
+sky.set_editor_property("two_sided", True)
+mel = unreal.MaterialEditingLibrary
+mel.delete_all_material_expressions(sky)
+luminance = mel.create_material_expression(sky, unreal.MaterialExpressionSkyAtmosphereViewLuminance, -300, 0)
+if not mel.connect_material_property(luminance, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR):
+    raise RuntimeError("Unable to connect sky atmosphere luminance")
+mel.recompile_material(sky)
+unreal.EditorAssetLibrary.save_loaded_asset(sky, only_if_is_dirty=False)
+print("MOBILE_SKY_MATERIAL_SUCCESS", sky_path)
