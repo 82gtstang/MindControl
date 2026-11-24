@@ -26,7 +26,6 @@
 #include "Components/DirectionalLightComponent.h"
 #include "Engine/SkyLight.h"
 #include "Components/SkyLightComponent.h"
-#include "Components/SkyAtmosphereComponent.h"
 #include "Components/PointLightComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Engine/Engine.h"
@@ -771,13 +770,6 @@ void ACryptGameMode::BeginPlay()
  UMaterialInterface* River=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_River.M_River"));
  UMaterialInterface* Falls=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Waterfall.M_Waterfall"));
  DisableTemplateGround(GetWorld());
- // Mobile uses a conventional sky backdrop rather than unsupported atmospheric scattering.
- for(TActorIterator<AActor> It(GetWorld());It;++It)
- {
-  TArray<USkyAtmosphereComponent*> Atmospheres;
-  It->GetComponents(Atmospheres);
-  for(auto* Atmosphere : Atmospheres) Atmosphere->SetVisibility(false);
- }
  bool bHasSun=false;
  for(TActorIterator<ADirectionalLight> It(GetWorld());It;++It)
  {
