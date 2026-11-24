@@ -22,6 +22,11 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/PointLight.h"
+#include "Engine/DirectionalLight.h"
+#include "Components/DirectionalLightComponent.h"
+#include "Engine/SkyLight.h"
+#include "Components/SkyLightComponent.h"
+#include "Components/SkyAtmosphereComponent.h"
 #include "Components/PointLightComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Engine/Engine.h"
@@ -766,6 +771,31 @@ void ACryptGameMode::BeginPlay()
  UMaterialInterface* River=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_River.M_River"));
  UMaterialInterface* Falls=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Waterfall.M_Waterfall"));
  DisableTemplateGround(GetWorld());
+ // Mobile uses a conventional sky backdrop rather than unsupported atmospheric scattering.
+ for(TActorIterator<AActor> It(GetWorld());It;++It)
+ {
+  TArray<USkyAtmosphereComponent*> Atmospheres;
+  It->GetComponents(Atmospheres);
+  for(auto* Atmosphere : Atmospheres) Atmosphere->SetVisibility(false);
+ }
+ bool bHasSun=false;
+ for(TActorIterator<ADirectionalLight> It(GetWorld());It;++It)
+ {
+  auto* Sun=Cast<UDirectionalLightComponent>(It->GetLightComponent());
+  if(!Sun) continue;
+  It->SetActorRotation(FRotator(-48.f,-35.f,0.f));
+  Sun->SetIntensity(4.f);
+  bHasSun=true;
+ }
+ if(!bHasSun)
+ {
+  auto* SunActor=GetWorld()->SpawnActor<ADirectionalLight>(FVector::ZeroVector,FRotator(-48.f,-35.f,0.f));
+  if(SunActor) SunActor->GetLightComponent()->SetIntensity(4.f);
+ }
+ for(TActorIterator<ASkyLight> It(GetWorld());It;++It)
+ {
+  if(auto* Sky=It->GetLightComponent()) Sky->SetIntensity(1.5f);
+ }
  auto* Overworld=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Overworld.M_Overworld"));
  CreateTerrain(GetWorld(),Grass,Dirt,Overworld,Cobble);
  CreateWater(GetWorld(),River,Falls);
