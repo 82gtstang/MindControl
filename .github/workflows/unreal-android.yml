@@ -224,6 +224,7 @@ jobs:
             '-nop4'
             '-nosplash'
             '-nullrhi'
+            '-AllowCommandletAudio'
             ('-abslog="{0}"' -f $log)
           )
           $process = Start-Process -FilePath $editor -ArgumentList $arguments -Wait -PassThru
