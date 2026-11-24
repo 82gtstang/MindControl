@@ -1,9 +1,8 @@
 #include "CryptHero.h"
-#include "Sound/SoundBase.h"
-#include "Components/AudioComponent.h"
 #include "Misc/ConfigCacheIni.h"
 #include "CryptMonster.h"
 #include "CryptDungeons.h"
+#include "CryptWorldLayout.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -48,13 +47,6 @@ namespace
 ACryptHero::ACryptHero()
 {
  PrimaryActorTick.bCanEverTick = true;
- static ConstructorHelpers::FObjectFinder<USoundBase> Music(TEXT("/Game/Environment/MindControl/Audio/FantasyExploration.FantasyExploration"));
- static ConstructorHelpers::FObjectFinder<USoundBase> Step(TEXT("/Game/Environment/MindControl/Audio/Footstep.Footstep"));
- static ConstructorHelpers::FObjectFinder<USoundBase> Swim(TEXT("/Game/Environment/MindControl/Audio/SwimStroke.SwimStroke"));
- static ConstructorHelpers::FObjectFinder<USoundBase> Punch(TEXT("/Game/Environment/MindControl/Audio/Punch.Punch"));
- static ConstructorHelpers::FObjectFinder<USoundBase> Sword(TEXT("/Game/Environment/MindControl/Audio/SwordSwing.SwordSwing"));
- FantasyMusic=Music.Object; FootstepSound=Step.Object; SwimSound=Swim.Object;
- PunchSound=Punch.Object; SwordSound=Sword.Object;
  GetCharacterMovement()->MaxWalkSpeed = 520;
  GetCharacterMovement()->JumpZVelocity = 650;
  GetCharacterMovement()->AirControl = .45f;
@@ -101,10 +93,11 @@ ACryptHero::ACryptHero()
   static ConstructorHelpers::FObjectFinder<UAnimSequence> SpinAnim(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Spin.OceanSerenityOcean_Spin"));
   static ConstructorHelpers::FObjectFinder<UAnimSequence> WalkDiagonal(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_WalkDiagonal.OceanSerenityOcean_WalkDiagonal"));
   static ConstructorHelpers::FObjectFinder<UAnimSequence> RunDiagonal(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_RunDiagonal.OceanSerenityOcean_RunDiagonal"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> Swim(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Swim.OceanSerenityOcean_Swim"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> TreadWater(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_TreadWater.OceanSerenityOcean_TreadWater"));
+  OceanSwim=Swim.Object; OceanTreadWater=TreadWater.Object;
   OceanIdle=Idle.Object; OceanWalk=Walk.Object; OceanRun=Run.Object;
   OceanWalkDiagonal=WalkDiagonal.Object; OceanRunDiagonal=RunDiagonal.Object;
-  static ConstructorHelpers::FObjectFinder<UAnimSequence> SwimAnim(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Swim.OceanSerenityOcean_Swim"));
-  OceanSwim=SwimAnim.Object;
   OceanJump=JumpAnim.Object; OceanAttack=AttackAnim.Object; OceanSpin=SpinAnim.Object;
   // Start the relaxed idle immediately; never leave the mesh in FBX reference pose.
   if (OceanIdle)
@@ -166,15 +159,6 @@ ACryptHero::ACryptHero()
 void ACryptHero::BeginPlay()
 {
  Super::BeginPlay();
- if(GConfig)
- {
-  GConfig->GetFloat(TEXT("MindControl.Audio"),TEXT("MusicVolume"),MusicVolume,GGameUserSettingsIni);
-  GConfig->GetFloat(TEXT("MindControl.Audio"),TEXT("EffectsVolume"),EffectsVolume,GGameUserSettingsIni);
- }
- MusicVolume=FMath::Clamp(MusicVolume,0.f,1.f);
- EffectsVolume=FMath::Clamp(EffectsVolume,0.f,1.f);
- if(FantasyMusic && IsLocallyControlled())
-  MusicPlayer=UGameplayStatics::SpawnSound2D(this,FantasyMusic,MusicVolume,1.f,0.f,nullptr,false,false);
  int32 StoredAction=0;
  if(GConfig && GConfig->GetInt(TEXT("MindControl.Controls"),TEXT("RightThumbAction"),StoredAction,GGameUserSettingsIni) &&
     StoredAction>=0 && StoredAction<int32(ECryptThumbAction::Count))
@@ -222,19 +206,8 @@ void ACryptHero::BeginPlay()
 void ACryptHero::Tick(float DeltaSeconds)
 {
  Super::Tick(DeltaSeconds);
- if(IsLocallyControlled())
- {
-  if(MusicPlayer && !MusicPlayer->IsPlaying() && MusicVolume>0.f) MusicPlayer->Play();
-  StepAudioTime=FMath::Max(0.f,StepAudioTime-DeltaSeconds);
-  const bool bSwimming=GetCharacterMovement()->IsSwimming();
-  const float AudioSpeed=GetVelocity().Size();
-  if(StepAudioTime<=0.f && AudioSpeed>20.f && (bSwimming || GetCharacterMovement()->IsMovingOnGround()))
-  {
-   if(USoundBase* StepSound=bSwimming?SwimSound:FootstepSound)
-    UGameplayStatics::PlaySoundAtLocation(this,StepSound,GetActorLocation(),EffectsVolume);
-   StepAudioTime=bSwimming?.60f:FMath::Clamp(85.f/AudioSpeed,.25f,.65f);
-  }
- }
+ UpdateSailing(DeltaSeconds);
+ UpdateSwimming(DeltaSeconds);
  UpdateFlames(DeltaSeconds);
  UpdateChart();
  UpdateGearVisuals();
@@ -262,14 +235,15 @@ void ACryptHero::Tick(float DeltaSeconds)
  const FVector Velocity=GetVelocity();
  const float Speed=Velocity.Size2D();
  bool bLoop=true;
- if (OceanActionTime > 0.f && ActiveOceanAnimation)
+ if (bSwimmingPool && OceanSwim && OceanTreadWater)
+ {
+  Desired=(FMath::Abs(SwimDepthInput)>.12f || Speed>(ActiveOceanAnimation==OceanSwim?22.f:42.f))
+   ?OceanSwim:OceanTreadWater;
+ }
+ else if (OceanActionTime > 0.f && ActiveOceanAnimation)
  {
   Desired=ActiveOceanAnimation;
   bLoop=false;
- }
- else if (GetCharacterMovement()->IsSwimming() && OceanSwim)
- {
-  Desired=OceanSwim;
  }
  else if (GetCharacterMovement()->IsFalling() && OceanJump)
  {
@@ -314,7 +288,7 @@ void ACryptHero::Tick(float DeltaSeconds)
  {
   const bool bRunning=Desired && (Desired==OceanRun || Desired==OceanRunDiagonal);
   const float ReferenceSpeed=bRunning?290.f:105.f;
-  const float Rate=IsGait(Desired)?FMath::Clamp(Speed/ReferenceSpeed,.50f,1.85f):1.f;
+  const float Rate=Desired==OceanSwim?FMath::Clamp(Speed/230.f,.72f,1.8f):IsGait(Desired)?FMath::Clamp(Speed/ReferenceSpeed,.50f,1.85f):1.f;
   if (auto* Player=GetMesh()->GetSingleNodeInstance()) Player->SetPlayRate(Rate);
  }
 }
@@ -337,7 +311,7 @@ void ACryptHero::SetupPlayerInputComponent(UInputComponent* Input)
  Input->BindAxis("MoveRight",this,&ACryptHero::MoveRight);
  Input->BindAxis("Turn",this,&ACryptHero::Turn);
  Input->BindAxis("LookUp",this,&ACryptHero::LookUp);
- Input->BindAction("Jump",IE_Pressed,this,&ACharacter::Jump);
+ Input->BindAction("Jump",IE_Pressed,this,&ACryptHero::JumpOrSwim);
  Input->BindAction("Attack",IE_Pressed,this,&ACryptHero::AttackPressed);
  Input->BindAction("Attack",IE_Released,this,&ACryptHero::AttackReleased);
  Input->BindAction("Spin",IE_Pressed,this,&ACryptHero::SpinAttack);
@@ -349,8 +323,88 @@ void ACryptHero::SetupPlayerInputComponent(UInputComponent* Input)
  Input->BindKey(EKeys::F5,IE_Pressed,this,&ACryptHero::SaveProgress);
  Input->BindKey(EKeys::F9,IE_Pressed,this,&ACryptHero::RestoreProgress);
 }
+void ACryptHero::UpdateSwimming(float DeltaSeconds)
+{
+ auto* Movement=GetCharacterMovement();
+ const FVector Position=GetActorLocation();
+ const double Radius=CryptWorld::PoolRadius(Position.X,Position.Y);
+ const double SeaFloor=CryptWorld::MainlandEdge(Position.X,Position.Y)>.86
+  ? CryptDungeons::GetGroundHeight(Position.X,Position.Y) : CryptWorld::SeaLevel;
+ const double CapsuleHalfHeight=GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+ const double FeetZ=Position.Z-CapsuleHalfHeight;
+ const bool bAtSea=SeaFloor<CryptWorld::SeaLevel-55.f &&
+  FeetZ<CryptWorld::SeaLevel+(bSwimmingPool?48.:8.) &&
+  Position.Z>=SeaFloor-220. && GetChartIndex()==INDEX_NONE;
+ const bool bAtPool=Radius<(bSwimmingPool?.84:.80) &&
+  Position.Z<CryptWorld::PoolSurface+65.f && Position.Z>CryptWorld::PoolSurface-300.f;
+ const bool bInside=!SailingShip.IsValid() && (bAtSea || bAtPool);
+ if(!bInside)
+ {
+  if(bSwimmingPool && Movement->MovementMode==MOVE_Flying)
+   Movement->SetMovementMode(MOVE_Falling);
+  bSwimmingPool=false;
+  SwimDepthInput=0.f;
+  SwimBurstTime=0.f;
+  SwimBurstCooldown=0.f;
+  return;
+ }
+ if(!bSwimmingPool || Movement->MovementMode!=MOVE_Flying)
+ {
+  bSwimmingPool=true;
+  SwimTargetZ=Position.Z;
+  StopJumping();
+  Movement->MaxFlySpeed=290.f;
+  Movement->SetMovementMode(MOVE_Flying);
+ }
+ SwimBurstCooldown=FMath::Max(0.f,SwimBurstCooldown-DeltaSeconds);
+ SwimBurstTime=FMath::Max(0.f,SwimBurstTime-DeltaSeconds);
+ if(SwimBurstTime>0.f)
+ {
+  Movement->MaxFlySpeed=850.f;
+  Movement->Velocity=SwimBurstDirection*850.f;
+ }
+ else Movement->MaxFlySpeed=290.f;
+ // Keep the capsule in swimming movement even when it contacts the bed.
+ const double SurfaceZ=bAtSea?CryptWorld::SeaLevel:CryptWorld::PoolSurface;
+ const double SurfaceLimit=SurfaceZ+38.;
+ const double Floor=bAtSea?SeaFloor:CryptDungeons::GetGroundHeight(Position.X,Position.Y);
+ const double BottomLimit=FMath::Min(SurfaceLimit,Floor+CapsuleHalfHeight+12.);
+ SwimTargetZ=FMath::Clamp(SwimTargetZ+SwimDepthInput*215.*DeltaSeconds,BottomLimit,SurfaceLimit);
+ const double VerticalSpeed=(SwimTargetZ-Position.Z)*8.;
+ Movement->Velocity.Z=FMath::Clamp(VerticalSpeed,-235.,290.);
+ // Push toward shore once the player reaches the surface and keeps pressing up.
+ if(SwimDepthInput>.12f && Position.Z>SurfaceLimit-14. && SwimBurstTime<=0.f)
+  AddMovementInput(FRotationMatrix(FRotator(0,GetControlRotation().Yaw,0)).GetUnitAxis(EAxis::X),SwimDepthInput);
+}
+
+void ACryptHero::JumpOrSwim()
+{
+ if(SailingShip.IsValid()) return;
+ if(!bSwimmingPool)
+ {
+  Jump();
+  return;
+ }
+ if(SwimBurstCooldown>0.f) return;
+ SwimBurstDirection=GetVelocity().GetSafeNormal2D();
+ if(SwimBurstDirection.IsNearlyZero())
+  SwimBurstDirection=GetActorForwardVector().GetSafeNormal2D();
+ SwimBurstTime=.24f;
+ SwimBurstCooldown=.55f;
+}
+
 void ACryptHero::MoveForward(float V)
 {
+ if(bSwimmingPool)
+ {
+  SwimDepthInput=FMath::Abs(V)>.12f?FMath::Clamp(V,-1.f,1.f):0.f;
+  return;
+ }
+ if(SailingShip.IsValid())
+ {
+  SailThrottle=V;
+  return;
+ }
  if(bBowAiming)
  {
   if(Controller && FMath::Abs(V)>.12f)
@@ -366,6 +420,11 @@ void ACryptHero::MoveForward(float V)
 
 void ACryptHero::MoveRight(float V)
 {
+ if(SailingShip.IsValid())
+ {
+  HelmInput=V;
+  return;
+ }
  if(bBowAiming)
  {
   if(Controller && FMath::Abs(V)>.12f)
@@ -469,8 +528,6 @@ void ACryptHero::StartStrike(bool bSpin)
  StrikeDuration=bSpin?1.12f:(StrikeWeapon==ECryptWeapon::Axe?.90f:.78f);
  AttackCooldown=StrikeDuration+FMath::Max(.04f,.28f-GetDexterity()*.010f);
  PlayOceanAction(bSpin?OceanSpin:OceanAttack,StrikeDuration);
- if(USoundBase* StrikeSound=StrikeWeapon==ECryptWeapon::Sword || StrikeWeapon==ECryptWeapon::Axe ? SwordSound : PunchSound)
-  UGameplayStatics::PlaySoundAtLocation(this,StrikeSound,GetActorLocation(),EffectsVolume);
 }
 
 void ACryptHero::ResolveStrike()
@@ -551,6 +608,8 @@ ACryptTownActor* ACryptHero::GetInteractionTarget() const
 
 FString ACryptHero::GetInteractionLabel() const
 {
+ if(SailingShip.IsValid()) return TEXT("Dock near a pier | left stick sails and steers");
+ if(FindBoardableShip()) return TEXT("Board sailing ship");
  if(FindSecret()) return TEXT("Inspect loose stone");
  if(FindMerchant()!=INDEX_NONE) return TEXT("Trade with merchant");
  if(const ACryptTownActor* Target=GetInteractionTarget())
@@ -577,8 +636,96 @@ FString ACryptHero::GetQuestJournal() const
  return Journal.IsEmpty() ? FString(TEXT("Talk to a townsperson to begin.")) : Journal;
 }
 
+AActor* ACryptHero::FindBoardableShip() const
+{
+ const FVector Position=GetActorLocation();
+ if(CryptWorld::MainlandEdge(Position.X,Position.Y)<.85 ||
+    FMath::Abs(Position.Z-CryptWorld::SeaLevel)>400.) return nullptr;
+ AActor* Nearest=nullptr;
+ double Closest=FMath::Square(1375.);
+ for(TActorIterator<AStaticMeshActor> It(GetWorld());It;++It)
+ {
+  AActor* Ship=*It;
+  if(!Ship->ActorHasTag(TEXT("OceanShip"))) continue;
+  const double Distance=FVector::DistSquared2D(Position,Ship->GetActorLocation());
+  if(Distance>=Closest) continue;
+  Nearest=Ship;
+  Closest=Distance;
+ }
+ return Nearest;
+}
+
+bool ACryptHero::InteractWithShip()
+{
+ using namespace CryptWorld;
+ if(auto* Ship=SailingShip.Get())
+ {
+  int32 DockIndex=INDEX_NONE;
+  double Closest=FMath::Square(2400.);
+  for(int32 Index=0;Index<=UE_ARRAY_COUNT(Islands);++Index)
+  {
+   const double Distance=FVector::DistSquared2D(Ship->GetActorLocation(),ShipBerth(Index));
+   if(Distance>=Closest) continue;
+   Closest=Distance;
+   DockIndex=Index;
+  }
+  if(DockIndex==INDEX_NONE)
+  {
+   AppendEvent(TEXT("Sail closer to a pier before docking."));
+   return true;
+  }
+  Ship->SetActorLocationAndRotation(ShipBerth(DockIndex),DockDirection(DockIndex).Rotation());
+  SailingShip.Reset();
+  const FVector Landing=DockEnd(DockIndex)-DockDirection(DockIndex)*210.+FVector(0,0,130);
+  SetActorLocation(Landing,false,nullptr,ETeleportType::TeleportPhysics);
+  GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+  AppendEvent(DockIndex==0?FString(TEXT("Docked at the mainland."))
+   : FString::Printf(TEXT("Docked at %s."),Islands[DockIndex-1].Name));
+  return true;
+ }
+ AActor* Ship=FindBoardableShip();
+ if(!Ship) return false;
+ Ship->Tags.AddUnique(TEXT("ClaimedShip"));
+ SailingShip=Ship;
+ SailThrottle=HelmInput=ShipSpeed=0.f;
+ bSwimmingPool=false;
+ SwimBurstTime=SwimBurstCooldown=0.f;
+ StopJumping();
+ GetCharacterMovement()->StopMovementImmediately();
+ GetCharacterMovement()->DisableMovement();
+ UpdateSailing(0.f);
+ AppendEvent(TEXT("Use the left stick to sail and steer. Interact near a pier to dock."));
+ return true;
+}
+
+void ACryptHero::UpdateSailing(float DeltaSeconds)
+{
+ auto* Ship=SailingShip.Get();
+ if(!Ship) return;
+ using namespace CryptWorld;
+ FRotator Heading=Ship->GetActorRotation();
+ Heading.Yaw+=HelmInput*38.f*DeltaSeconds;
+ const double TargetSpeed=SailThrottle>=0.f?SailThrottle*2080.f:SailThrottle*650.f;
+ ShipSpeed=FMath::FInterpTo(ShipSpeed,static_cast<float>(TargetSpeed),DeltaSeconds,1.35f);
+ const FVector Current=Ship->GetActorLocation();
+ const FVector Direction=Heading.Vector();
+ FVector Next=Current+Direction*ShipSpeed*DeltaSeconds;
+ const FVector Keel=Next+Direction*(ShipSpeed>=0.f?850.:-850.);
+ if(FMath::Abs(Next.X)>OceanLimit-1450.f || FMath::Abs(Next.Y)>OceanLimit-1450.f ||
+    CryptDungeons::GetGroundHeight(Keel.X,Keel.Y)>SeaLevel-125.f)
+ {
+  Next=Current;
+  ShipSpeed=0.f;
+ }
+ Next.Z=SeaLevel;
+ Ship->SetActorLocationAndRotation(Next,Heading);
+ SetActorLocation(Next-Direction*375.+FVector(0,0,230),false,nullptr,ETeleportType::TeleportPhysics);
+ SetActorRotation(Heading);
+}
+
 void ACryptHero::Interact()
 {
+ if(InteractWithShip()) return;
  if(AActor* Secret=FindSecret())
  {
   OpenSecrets.Add(FCString::Atoi(*Secret->Tags[1].ToString()));
@@ -912,13 +1059,6 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
    }
    return;
   }
-  if(!bSatchelJournal && !bGearPage)
-   for(int32 Index=0;Index<4;++Index)
-    if(Layout.HitAudio(TouchPoint,Index))
-    {
-     AdjustAudioVolume(Index<2,Index%2?.1f:-.1f);
-     return;
-    }
   if(!bSatchelJournal)
    for(int32 Index=0;Index<int32(ECryptThumbAction::Count);++Index)
     if(Layout.HitThumbAction(TouchPoint,Index))
@@ -994,7 +1134,7 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
   ThumbStartTime=GetWorld()->GetRealTimeSeconds();
   return;
  }
- if(Layout.Hit(TouchPoint,Layout.Jump)) Jump();
+ if(Layout.Hit(TouchPoint,Layout.Jump)) JumpOrSwim();
  else if(EquippedWeapon!=ECryptWeapon::Bow && Layout.Hit(TouchPoint,Layout.Attack)) Attack();
  else if(Layout.Hit(TouchPoint,Layout.Spin)) SpinAttack();
 }
@@ -1039,7 +1179,7 @@ void ACryptHero::TouchReleased(ETouchIndex::Type FingerIndex,FVector Location)
  if(FVector2D::Distance(ThumbStart,FVector2D(Location.X,Location.Y))>24.f*Layout.Scale) return;
  switch(ThumbAction)
  {
-  case ECryptThumbAction::Jump: Jump(); break;
+  case ECryptThumbAction::Jump: JumpOrSwim(); break;
   case ECryptThumbAction::Attack: Attack(); break;
   case ECryptThumbAction::Spin: SpinAttack(); break;
   case ECryptThumbAction::Fire: CastFire(); break;
@@ -1738,17 +1878,5 @@ void ACryptHero::UpdateFlames(float DeltaSeconds)
    Part->SetActorLocationAndRotation(TongueBase+Direction*Length*.42,FRotationMatrix::MakeFromZ(Direction).Rotator());
    Part->SetActorScale3D(FVector(Width,Width,Length)/100.);
   }
- }
-}
-
-void ACryptHero::AdjustAudioVolume(bool bMusic,float Delta)
-{
- float& Volume=bMusic?MusicVolume:EffectsVolume;
- Volume=FMath::Clamp(Volume+Delta,0.f,1.f);
- if(bMusic && MusicPlayer) MusicPlayer->SetVolumeMultiplier(Volume);
- if(GConfig)
- {
-  GConfig->SetFloat(TEXT("MindControl.Audio"),bMusic?TEXT("MusicVolume"):TEXT("EffectsVolume"),Volume,GGameUserSettingsIni);
-  GConfig->Flush(false,GGameUserSettingsIni);
  }
 }
