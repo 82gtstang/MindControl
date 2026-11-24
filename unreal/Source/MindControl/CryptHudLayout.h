@@ -67,12 +67,6 @@ struct FCryptHudLayout
    FMath::Abs(Delta.Y)<=SatchelSize.Y*.040;
  }
 
- FVector2D AudioButton(int32 Index) const { return InSatchel(.27f+.46f*(Index/2)+.13f*(Index%2),.885f); }
- bool HitAudio(const FVector2D& Point,int32 Index) const
- {
-  const FVector2D D=Point-AudioButton(Index);
-  return FMath::Abs(D.X)<=SatchelSize.X*.055f && FMath::Abs(D.Y)<=SatchelSize.Y*.03f;
- }
  FVector2D LogSize,LogOrigin,LogOlder,LogNewer;
  FVector2D RightThumbCenter;
  float RightThumbRadius;
