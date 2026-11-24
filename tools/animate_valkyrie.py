@@ -12,7 +12,7 @@ from mathutils import Quaternion, Vector
 FPS = 60
 X = Vector((1, 0, 0))
 Z = Vector((0, 0, 1))
-CLIPS = ("Idle", "Walk", "Run", "WalkDiagonal", "RunDiagonal", "Jump", "Attack", "Spin")
+CLIPS = ("Idle", "Walk", "Run", "WalkDiagonal", "RunDiagonal", "Jump", "Attack", "Spin", "Swim")
 
 
 def smooth(a, b, value):
@@ -178,12 +178,27 @@ def side_punch(rig, phase):
         upper.rotation_quaternion = guard.slerp(strike, extend)
         rotate(fore, X, -.95 * (1 - extend))
 
+def swim_pose(rig, phase):
+    wave = math.tau * phase
+    rotate(rig.pose.bones["pelvis"], X, math.radians(78))
+    rotate(rig.pose.bones["spine"], X, .08 * math.sin(2 * wave))
+    rotate(rig.pose.bones["chest"], Z, .17 * math.sin(wave))
+    rotate(rig.pose.bones["head"], X, -.20)
+    for side, offset in (("L", 0), ("R", math.pi)):
+        t = wave + offset
+        rotate(rig.pose.bones[f"upperarm_{side}"], X, -1.25 - 1.15 * math.cos(t))
+        rotate(rig.pose.bones[f"forearm_{side}"], X, -.45 - .40 * math.sin(t))
+        rotate(rig.pose.bones[f"thigh_{side}"], X, .22 * math.sin(2 * wave + offset))
+        rotate(rig.pose.bones[f"shin_{side}"], X, .22 + .18 * math.cos(2 * wave + offset))
+        rotate(rig.pose.bones[f"foot_{side}"], X, -.25)
+
+
 def hair_pose(rig, name, phase):
     strength = {
         "Idle": .017, "Walk": .095, "Run": .165, "WalkDiagonal": .084,
-        "RunDiagonal": .143, "Jump": .15, "Attack": .16, "Spin": .22,
+        "RunDiagonal": .143, "Swim": .10, "Jump": .15, "Attack": .16, "Spin": .22,
     }[name]
-    loop = name == "Idle" or name.startswith(("Walk", "Run"))
+    loop = name in ("Idle", "Swim") or name.startswith(("Walk", "Run"))
     envelope = 1.0 if loop else math.sin(math.pi * phase)**2
     wave = math.tau * phase
     for index, bone_name in enumerate(("hair_upper", "hair_lower")):
@@ -203,9 +218,9 @@ def make_clips(scene, rig, source):
     for name in CLIPS:
         original = source.get(name)
         walking = name.startswith(("Walk", "Run"))
-        length = gait_lengths[name] if walking else round(2 * (original.frame_range[1] - original.frame_range[0]))
+        length = 72 if name == "Swim" else gait_lengths[name] if walking else round(2 * (original.frame_range[1] - original.frame_range[0]))
         poses = []
-        if not walking:
+        if not walking and name != "Swim":
             # Preserve the established action choreography, now evaluated at 60 Hz.
             action_data.action = original
             start = float(original.frame_range[0])
@@ -226,6 +241,8 @@ def make_clips(scene, rig, source):
                     bone.matrix_basis = poses[sample][bone.name]
             if walking:
                 gait(rig, phase, name.startswith("Run"), name.endswith("Diagonal"))
+            if name == "Swim":
+                swim_pose(rig, phase)
             if name == "Attack":
                 side_punch(rig, phase)
             if name == "Jump":
@@ -267,7 +284,7 @@ def main():
     missing = sorted(required - set(rig.data.bones.keys()))
     if missing:
         raise RuntimeError("Incompatible Ocean Serenity skeleton; missing bones: " + ", ".join(missing))
-    missing_clips = sorted(set(CLIPS) - set(originals))
+    missing_clips = sorted((set(CLIPS) - {"Swim"}) - set(originals))
     if missing_clips:
         raise RuntimeError("Input FBX missing required source clips: " + ", ".join(missing_clips))
     separate_hand_hip_geometry(body)
