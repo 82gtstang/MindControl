@@ -39,6 +39,7 @@ public:
  int32 GetExperience() const { return Experience; }
  int32 ExperienceNeeded() const { return 100+(Level-1)*40; }
  FString GetArrowLabel() const;
+ bool IsSwimmingInPool() const { return bSwimmingPool; }
  bool IsBowAiming() const { return bBowAiming; }
  float GetHealth() const { return Health; }
  float GetStamina() const { return Stamina; }
@@ -85,8 +86,6 @@ public:
  void TouchReleased(ETouchIndex::Type FingerIndex,FVector Location);
  void TouchMoved(ETouchIndex::Type FingerIndex,FVector Location);
  ECryptThumbAction GetThumbAction() const { return ThumbAction; }
- float GetAudioVolume(bool bMusic) const { return bMusic?MusicVolume:EffectsVolume; }
- void AdjustAudioVolume(bool bMusic,float Delta);
 protected:
  virtual void BeginPlay() override;
  void SetThumbAction(ECryptThumbAction Action);
@@ -94,6 +93,21 @@ protected:
  int32 ThumbFinger=INDEX_NONE;
  FVector2D ThumbStart=FVector2D::ZeroVector;
  float ThumbStartTime=0.f;
+ bool InteractWithShip();
+ AActor* FindBoardableShip() const;
+ void UpdateSailing(float DeltaSeconds);
+ TWeakObjectPtr<AActor> SailingShip;
+ float SailThrottle=0.f;
+ float HelmInput=0.f;
+ float ShipSpeed=0.f;
+ void JumpOrSwim();
+ void UpdateSwimming(float DeltaSeconds);
+ bool bSwimmingPool=false;
+ float SwimDepthInput=0.f;
+ double SwimTargetZ=0.;
+ float SwimBurstTime=0.f;
+ float SwimBurstCooldown=0.f;
+ FVector SwimBurstDirection=FVector::ZeroVector;
  void MoveForward(float Value);
  void MoveRight(float Value);
  void Turn(float Value);
@@ -185,20 +199,12 @@ protected:
  UPROPERTY() class UAnimSequence* OceanRun = nullptr;
  UPROPERTY() class UAnimSequence* OceanWalkDiagonal = nullptr;
  UPROPERTY() class UAnimSequence* OceanRunDiagonal = nullptr;
+ UPROPERTY() class UAnimSequence* OceanSwim = nullptr;
+ UPROPERTY() class UAnimSequence* OceanTreadWater = nullptr;
  UPROPERTY() class UAnimSequence* OceanJump = nullptr;
  UPROPERTY() class UAnimSequence* OceanAttack = nullptr;
  UPROPERTY() class UAnimSequence* OceanSpin = nullptr;
- UPROPERTY() class UAnimSequence* OceanSwim = nullptr;
  UPROPERTY() class UAnimSequence* ActiveOceanAnimation = nullptr;
- UPROPERTY() class USoundBase* FantasyMusic = nullptr;
- UPROPERTY() class USoundBase* FootstepSound = nullptr;
- UPROPERTY() class USoundBase* SwimSound = nullptr;
- UPROPERTY() class USoundBase* PunchSound = nullptr;
- UPROPERTY() class USoundBase* SwordSound = nullptr;
- UPROPERTY() class UAudioComponent* MusicPlayer = nullptr;
- float MusicVolume = .45f;
- float EffectsVolume = .65f;
- float StepAudioTime = 0.f;
  float OceanActionTime = 0.f;
  void PlayOceanAction(class UAnimSequence* Sequence, float Duration);
 };
