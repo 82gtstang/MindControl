@@ -186,6 +186,7 @@ protected:
  UPROPERTY() class UAnimSequence* OceanJump = nullptr;
  UPROPERTY() class UAnimSequence* OceanAttack = nullptr;
  UPROPERTY() class UAnimSequence* OceanSpin = nullptr;
+ UPROPERTY() class UAnimSequence* OceanSwim = nullptr;
  UPROPERTY() class UAnimSequence* ActiveOceanAnimation = nullptr;
  float OceanActionTime = 0.f;
  void PlayOceanAction(class UAnimSequence* Sequence, float Duration);
