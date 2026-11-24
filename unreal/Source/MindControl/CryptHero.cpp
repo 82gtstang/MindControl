@@ -1,4 +1,6 @@
 #include "CryptHero.h"
+#include "Sound/SoundBase.h"
+#include "Components/AudioComponent.h"
 #include "Misc/ConfigCacheIni.h"
 #include "CryptMonster.h"
 #include "CryptDungeons.h"
@@ -46,6 +48,13 @@ namespace
 ACryptHero::ACryptHero()
 {
  PrimaryActorTick.bCanEverTick = true;
+ static ConstructorHelpers::FObjectFinder<USoundBase> Music(TEXT("/Game/Environment/MindControl/Audio/FantasyExploration.FantasyExploration"));
+ static ConstructorHelpers::FObjectFinder<USoundBase> Step(TEXT("/Game/Environment/MindControl/Audio/Footstep.Footstep"));
+ static ConstructorHelpers::FObjectFinder<USoundBase> Swim(TEXT("/Game/Environment/MindControl/Audio/SwimStroke.SwimStroke"));
+ static ConstructorHelpers::FObjectFinder<USoundBase> Punch(TEXT("/Game/Environment/MindControl/Audio/Punch.Punch"));
+ static ConstructorHelpers::FObjectFinder<USoundBase> Sword(TEXT("/Game/Environment/MindControl/Audio/SwordSwing.SwordSwing"));
+ FantasyMusic=Music.Object; FootstepSound=Step.Object; SwimSound=Swim.Object;
+ PunchSound=Punch.Object; SwordSound=Sword.Object;
  GetCharacterMovement()->MaxWalkSpeed = 520;
  GetCharacterMovement()->JumpZVelocity = 650;
  GetCharacterMovement()->AirControl = .45f;
@@ -157,6 +166,15 @@ ACryptHero::ACryptHero()
 void ACryptHero::BeginPlay()
 {
  Super::BeginPlay();
+ if(GConfig)
+ {
+  GConfig->GetFloat(TEXT("MindControl.Audio"),TEXT("MusicVolume"),MusicVolume,GGameUserSettingsIni);
+  GConfig->GetFloat(TEXT("MindControl.Audio"),TEXT("EffectsVolume"),EffectsVolume,GGameUserSettingsIni);
+ }
+ MusicVolume=FMath::Clamp(MusicVolume,0.f,1.f);
+ EffectsVolume=FMath::Clamp(EffectsVolume,0.f,1.f);
+ if(FantasyMusic && IsLocallyControlled())
+  MusicPlayer=UGameplayStatics::SpawnSound2D(this,FantasyMusic,MusicVolume,1.f,0.f,nullptr,false,false);
  int32 StoredAction=0;
  if(GConfig && GConfig->GetInt(TEXT("MindControl.Controls"),TEXT("RightThumbAction"),StoredAction,GGameUserSettingsIni) &&
     StoredAction>=0 && StoredAction<int32(ECryptThumbAction::Count))
@@ -204,6 +222,19 @@ void ACryptHero::BeginPlay()
 void ACryptHero::Tick(float DeltaSeconds)
 {
  Super::Tick(DeltaSeconds);
+ if(IsLocallyControlled())
+ {
+  if(MusicPlayer && !MusicPlayer->IsPlaying() && MusicVolume>0.f) MusicPlayer->Play();
+  StepAudioTime=FMath::Max(0.f,StepAudioTime-DeltaSeconds);
+  const bool bSwimming=GetCharacterMovement()->IsSwimming();
+  const float AudioSpeed=GetVelocity().Size();
+  if(StepAudioTime<=0.f && AudioSpeed>20.f && (bSwimming || GetCharacterMovement()->IsMovingOnGround()))
+  {
+   if(USoundBase* StepSound=bSwimming?SwimSound:FootstepSound)
+    UGameplayStatics::PlaySoundAtLocation(this,StepSound,GetActorLocation(),EffectsVolume);
+   StepAudioTime=bSwimming?.60f:FMath::Clamp(85.f/AudioSpeed,.25f,.65f);
+  }
+ }
  UpdateFlames(DeltaSeconds);
  UpdateChart();
  UpdateGearVisuals();
@@ -438,6 +469,8 @@ void ACryptHero::StartStrike(bool bSpin)
  StrikeDuration=bSpin?1.12f:(StrikeWeapon==ECryptWeapon::Axe?.90f:.78f);
  AttackCooldown=StrikeDuration+FMath::Max(.04f,.28f-GetDexterity()*.010f);
  PlayOceanAction(bSpin?OceanSpin:OceanAttack,StrikeDuration);
+ if(USoundBase* StrikeSound=StrikeWeapon==ECryptWeapon::Sword || StrikeWeapon==ECryptWeapon::Axe ? SwordSound : PunchSound)
+  UGameplayStatics::PlaySoundAtLocation(this,StrikeSound,GetActorLocation(),EffectsVolume);
 }
 
 void ACryptHero::ResolveStrike()
