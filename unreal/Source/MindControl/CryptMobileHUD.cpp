@@ -484,6 +484,18 @@ void ACryptMobileHUD::DrawHUD()
 
    if(!Hero->bSatchelJournal && !Hero->bGearPage)
    {
+    for(int32 Group=0;Group<2;++Group)
+    {
+     const FVector2D Label=Layout.InSatchel(.10f+.46f*Group,.85f);
+     DrawText(FString::Printf(TEXT("%s %d%%"),Group==0?TEXT("Music"):TEXT("SFX"),FMath::RoundToInt(Hero->GetAudioVolume(Group==0)*100)),Gold,Label.X,Label.Y,nullptr,.85f*S,false);
+     for(int32 Sign=0;Sign<2;++Sign)
+     {
+      const FVector2D P=Layout.AudioButton(Group*2+Sign);
+      const float W=Layout.SatchelSize.X*.055f,H=Layout.SatchelSize.Y*.03f;
+      Frame(P.X-W,P.Y-H,2*W,2*H,Ink,Bronze);
+      DrawText(Sign?TEXT("+"):TEXT("-"),Gold,P.X-5*S,P.Y-8*S,nullptr,S,false);
+     }
+    }
     const FVector2D Heading=Layout.InSatchel(.12f,.722f);
     DrawText(TEXT("Right thumb tap"),Gold,Heading.X,Heading.Y,nullptr,1.08f*S,false);
     const float HalfWidth=Layout.SatchelSize.X*.075f;
