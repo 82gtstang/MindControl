@@ -63,9 +63,34 @@ def effect(name, duration, freq, noise, decay):
         buf.append(.45*env*(noise*low+(1-noise)*tone))
     write(name,buf)
 
+def footstep():
+    """Short leather boot heel and sole contact, without a pitched drum tone."""
+    rng = random.Random("leather_boot_v2")
+    buf = []
+    slow = mid = previous = 0.0
+    for i in range(int(.24 * RATE)):
+        t = i / RATE
+        white = rng.uniform(-1, 1)
+        slow += .035 * (white - slow)
+        mid += .22 * (white - mid)
+        grit = mid - slow
+        heel = min(1., t / .003) * math.exp(-t / .023)
+        sole_t = max(0., t - .042)
+        sole = min(1., sole_t / .008) * math.exp(-sole_t / .038)
+        scuff_t = max(0., t - .075)
+        scuff = min(1., scuff_t / .012) * math.exp(-scuff_t / .035)
+        contact = heel * (1.4 * slow + .32 * grit)
+        contact += sole * (.75 * slow + .48 * grit)
+        contact += scuff * .12 * (white - previous)
+        previous = white
+        buf.append(contact * min(1., (.24 - t) / .025))
+    peak = max(abs(x) for x in buf)
+    write("Footstep", [x * .48 / max(peak, .001) for x in buf])
+
 if __name__ == "__main__":
     music()
-    for args in [("Footstep",.25,85,.8,12),("Punch",.22,100,.55,16),
+    footstep()
+    for args in [("Punch",.22,100,.55,16),
                  ("SwordSwing",.4,380,.92,5),("SwordImpact",.45,720,.55,8),
                  ("Splash",.7,140,.95,4),("SwimStroke",.55,90,.95,5)]:
         effect(*args)
