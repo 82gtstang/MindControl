@@ -94,6 +94,8 @@ ACryptHero::ACryptHero()
   static ConstructorHelpers::FObjectFinder<UAnimSequence> RunDiagonal(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_RunDiagonal.OceanSerenityOcean_RunDiagonal"));
   OceanIdle=Idle.Object; OceanWalk=Walk.Object; OceanRun=Run.Object;
   OceanWalkDiagonal=WalkDiagonal.Object; OceanRunDiagonal=RunDiagonal.Object;
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> SwimAnim(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_Swim.OceanSerenityOcean_Swim"));
+  OceanSwim=SwimAnim.Object;
   OceanJump=JumpAnim.Object; OceanAttack=AttackAnim.Object; OceanSpin=SpinAnim.Object;
   // Start the relaxed idle immediately; never leave the mesh in FBX reference pose.
   if (OceanIdle)
@@ -233,6 +235,10 @@ void ACryptHero::Tick(float DeltaSeconds)
  {
   Desired=ActiveOceanAnimation;
   bLoop=false;
+ }
+ else if (GetCharacterMovement()->IsSwimming() && OceanSwim)
+ {
+  Desired=OceanSwim;
  }
  else if (GetCharacterMovement()->IsFalling() && OceanJump)
  {
