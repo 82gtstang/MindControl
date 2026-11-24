@@ -188,6 +188,15 @@ protected:
  UPROPERTY() class UAnimSequence* OceanSpin = nullptr;
  UPROPERTY() class UAnimSequence* OceanSwim = nullptr;
  UPROPERTY() class UAnimSequence* ActiveOceanAnimation = nullptr;
+ UPROPERTY() class USoundBase* FantasyMusic = nullptr;
+ UPROPERTY() class USoundBase* FootstepSound = nullptr;
+ UPROPERTY() class USoundBase* SwimSound = nullptr;
+ UPROPERTY() class USoundBase* PunchSound = nullptr;
+ UPROPERTY() class USoundBase* SwordSound = nullptr;
+ UPROPERTY() class UAudioComponent* MusicPlayer = nullptr;
+ float MusicVolume = .45f;
+ float EffectsVolume = .65f;
+ float StepAudioTime = 0.f;
  float OceanActionTime = 0.f;
  void PlayOceanAction(class UAnimSequence* Sequence, float Duration);
 };
