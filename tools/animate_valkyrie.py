@@ -104,7 +104,7 @@ def gait(rig, phase, running, diagonal):
     pelvis = rig.pose.bones["pelvis"]
     pelvis.location = pelvis.bone.matrix_local.to_3x3().inverted() @ Vector((0, 0, bob))
     # The Valkyrie faces -Y in armature space. Positive X pitch leans forward.
-    rotate(rig.pose.bones["spine"], X, math.radians(11 if running else 7))
+    rotate(rig.pose.bones["spine"], X, math.radians(14 if running else 9))
     rotate(rig.pose.bones["chest"], Z, math.sin(wave) * (.09 if diagonal else .05))
     rotate(rig.pose.bones["head"], Z, -math.sin(wave) * .025)
 
@@ -141,7 +141,7 @@ def gait(rig, phase, running, diagonal):
         rotate(foot, X, -shin_pitch + 1.1 * lift)
 
         arm_phase = math.cos(math.tau * cycle)
-        swing_angle = arm_phase * (.38 if running else .23)
+        swing_angle = arm_phase * (.52 if running else .34)
         upper = rig.pose.bones[f"upperarm_{side}"]
         fore = rig.pose.bones[f"forearm_{side}"]
         # Keep the hands clear of the hips while the elbows stay softly bent.
@@ -155,24 +155,32 @@ def gait(rig, phase, running, diagonal):
 
 
 def side_punch(rig, phase):
-    """Alternating outward punches with a guarded recovery and mild torso twist."""
-    # Left hand extends first, right hand follows; no root translation.
+    """Alternate forward head-height strikes with a guarded recovery."""
+    pulses = {}
     for side, start in (("L", .10), ("R", .48)):
-        extend = smooth(start, start + .15, phase) * (1 - smooth(start + .27, start + .43, phase))
+        pulses[side] = smooth(start, start + .15, phase) * (1 - smooth(start + .27, start + .43, phase))
+    twist = .19 * (pulses["L"] - pulses["R"])
+    rotate(rig.pose.bones["chest"], Z, twist)
+    rotate(rig.pose.bones["spine"], X, .09 * math.sin(math.pi * phase))
+    bpy.context.view_layer.update()
+    for side in ("L", "R"):
+        extend = pulses[side]
         upper = rig.pose.bones[f"upperarm_{side}"]
         fore = rig.pose.bones[f"forearm_{side}"]
-        # Arm spreads laterally, elbow straightens on impact, then returns.
-        rotate(upper, Z, (1 if side == "L" else -1) * (.20 + 1.10 * extend))
-        rotate(fore, X, -.78 * (1 - extend) - .10 * extend)
-    twist = .16 * (smooth(.10, .25, phase) * (1 - smooth(.37, .53, phase))
-                   - smooth(.48, .63, phase) * (1 - smooth(.75, .91, phase)))
-    rotate(rig.pose.bones["chest"], Z, twist)
-    rotate(rig.pose.bones["spine"], X, -.07 * math.sin(math.pi * phase))
-
+        # Aim in armature space, toward -Y and slightly upward from shoulder.
+        direction = Vector((0, -1, .32)).normalized()
+        rest = (fore.bone.head_local - upper.bone.head_local).normalized()
+        parent_delta = upper.parent.matrix.to_quaternion() @ upper.parent.bone.matrix_local.to_quaternion().inverted()
+        target = parent_delta.inverted() @ direction
+        local = upper.bone.matrix_local.to_quaternion()
+        strike = local.inverted() @ rest.rotation_difference(target) @ local
+        guard = Quaternion(local.inverted() @ X, -.48)
+        upper.rotation_quaternion = guard.slerp(strike, extend)
+        rotate(fore, X, -.95 * (1 - extend))
 
 def hair_pose(rig, name, phase):
     strength = {
-        "Idle": .017, "Walk": .076, "Run": .129, "WalkDiagonal": .084,
+        "Idle": .017, "Walk": .095, "Run": .165, "WalkDiagonal": .084,
         "RunDiagonal": .143, "Jump": .15, "Attack": .16, "Spin": .22,
     }[name]
     loop = name == "Idle" or name.startswith(("Walk", "Run"))
