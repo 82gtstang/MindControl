@@ -21,7 +21,7 @@ void ACryptMobileHUD::DrawHUD()
  const FLinearColor Gold(.96f,.79f,.44f);
  const FLinearColor Bronze(.53f,.37f,.21f,.95f);
  const FLinearColor Ink(.061f,.083f,.099f,.97f);
- enum class EIcon { Fist, Sword, Axe, Spear, Jump, Spin, Bag, Talk, Save, Restore, Castle, Town, Fire, Storm, Bow };
+ enum class EIcon { Fist, Sword, Axe, Spear, Jump, Swim, Spin, Bag, Talk, Save, Restore, Castle, Town, Fire, Storm, Bow };
  const auto Stroke=[&](FVector2D A,FVector2D B,FLinearColor Color,float Width=1.6f)
  {
   DrawLine(A.X,A.Y,B.X,B.Y,Color,Width*S);
@@ -79,6 +79,12 @@ void ACryptMobileHUD::DrawHUD()
    case EIcon::Jump:
     Path({{-.63,-.17},{0,-.79},{.63,-.17}});
     Segment(0,-.76,0,.57); Segment(-.55,.70,.55,.70);
+    break;
+   case EIcon::Swim:
+    Path({{-.76,.28},{-.40,.08},{-.05,.28},{.30,.08},{.68,.28}});
+    Path({{-.76,.61},{-.40,.41},{-.05,.61},{.30,.41},{.68,.61}});
+    Path({{-.41,-.32},{.53,-.32},{.16,-.68}});
+    Segment(.53,-.32,.16,-.05);
     break;
    case EIcon::Spin:
     Path({{.72,-.54},{.28,-.83},{-.33,-.79},{-.77,-.39},{-.80,.25},{-.42,.71},{.17,.82},{.73,.44}});
@@ -174,7 +180,8 @@ void ACryptMobileHUD::DrawHUD()
   GetTextSize(Label,Width,Height,nullptr,.90f*S);
   DrawText(Label,FLinearColor::White,Center.X-Width*.5,Center.Y+R*.43f-Height*.5,nullptr,.90f*S,false);
  };
- Button(Layout.Jump,EIcon::Jump,TEXT("JUMP"));
+ const bool bSwimming=Hero && Hero->IsSwimmingInPool();
+ Button(Layout.Jump,bSwimming?EIcon::Swim:EIcon::Jump,bSwimming?TEXT("SWIM"):TEXT("JUMP"));
  const bool bBow=Hero->EquippedWeapon==ECryptWeapon::Bow;
  if(!bBow) Button(Layout.Attack,WeaponIcon(Hero->EquippedWeapon),bArmed?TEXT("ATTACK"):TEXT("PUNCH"),Strength>.1f);
  Button(Layout.Spin,EIcon::Spin,TEXT("SPIN"));
@@ -203,7 +210,7 @@ void ACryptMobileHUD::DrawHUD()
  Button(Layout.Bag,EIcon::Bag,TEXT("BAG"),Hero->bInventoryOpen);
  if(!Hero->bInventoryOpen)
  {
-  const EIcon ThumbIcons[]={EIcon::Jump,WeaponIcon(Hero->EquippedWeapon),EIcon::Spin,EIcon::Fire,EIcon::Storm};
+  const EIcon ThumbIcons[]={bSwimming?EIcon::Swim:EIcon::Jump,WeaponIcon(Hero->EquippedWeapon),EIcon::Spin,EIcon::Fire,EIcon::Storm};
   Icon(bBow?EIcon::Bow:ThumbIcons[int32(Hero->GetThumbAction())],Layout.RightThumbCenter,17*S,Gold);
   if(bBow)
   {
@@ -273,6 +280,18 @@ void ACryptMobileHUD::DrawHUD()
  {
   DrawLine(A.X,A.Y,B.X,B.Y,Color,Thickness*S);
  };
+ if(bOverview)
+ {
+  const auto MainlandDock=ToMap(CryptWorld::DockEnd(0));
+  Icon(EIcon::Castle,MainlandDock,4.5f*S,Gold);
+  for(int32 Index=0;Index<UE_ARRAY_COUNT(CryptWorld::Islands);++Index)
+  {
+   const auto& Island=CryptWorld::Islands[Index];
+   const auto Point=ToMap(FVector(Island.Center.X,Island.Center.Y,0));
+   DrawRect(FLinearColor(.28f,.54f,.32f),Point.X-4*S,Point.Y-4*S,8*S,8*S);
+   DrawText(FString::FromInt(Index+1),FLinearColor::White,Point.X+5*S,Point.Y-6*S,nullptr,.78f*S,false);
+  }
+ }
  for(const FVector2D Hill : {FVector2D(-3250,-2800),FVector2D(3400,-2950),FVector2D(-3300,3200),FVector2D(4330,3200)})
  {
   for(int32 Ring=1;Ring<=3;++Ring)
@@ -304,6 +323,16 @@ void ACryptMobileHUD::DrawHUD()
    MapLine(Previous,Point,RiverColor,1.7f);
    Previous=Point;
   }
+ }
+ for(int32 Segment=0;Segment<24;++Segment)
+ {
+  const auto PoolPoint=[&](int32 Index)
+  {
+   const double Angle=2.*PI*Index/24.;
+   return ToMap(FVector(CryptWorld::PoolX+CryptWorld::PoolRadiusX*FMath::Cos(Angle),
+    CryptWorld::PoolY+CryptWorld::PoolRadiusY*FMath::Sin(Angle),0));
+  };
+  MapLine(PoolPoint(Segment),PoolPoint(Segment+1),FLinearColor(.28f,.76f,.85f),1.5f*S);
  }
  const auto Landmark=[&](FVector2D World,const TCHAR* Label,float OffsetY,EIcon Shape)
  {
@@ -484,18 +513,6 @@ void ACryptMobileHUD::DrawHUD()
 
    if(!Hero->bSatchelJournal && !Hero->bGearPage)
    {
-    for(int32 Group=0;Group<2;++Group)
-    {
-     const FVector2D Label=Layout.InSatchel(.10f+.46f*Group,.85f);
-     DrawText(FString::Printf(TEXT("%s %d%%"),Group==0?TEXT("Music"):TEXT("SFX"),FMath::RoundToInt(Hero->GetAudioVolume(Group==0)*100)),Gold,Label.X,Label.Y,nullptr,.85f*S,false);
-     for(int32 Sign=0;Sign<2;++Sign)
-     {
-      const FVector2D P=Layout.AudioButton(Group*2+Sign);
-      const float W=Layout.SatchelSize.X*.055f,H=Layout.SatchelSize.Y*.03f;
-      Frame(P.X-W,P.Y-H,2*W,2*H,Ink,Bronze);
-      DrawText(Sign?TEXT("+"):TEXT("-"),Gold,P.X-5*S,P.Y-8*S,nullptr,S,false);
-     }
-    }
     const FVector2D Heading=Layout.InSatchel(.12f,.722f);
     DrawText(TEXT("Right thumb tap"),Gold,Heading.X,Heading.Y,nullptr,1.08f*S,false);
     const float HalfWidth=Layout.SatchelSize.X*.075f;
