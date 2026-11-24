@@ -102,6 +102,15 @@ protected:
  float ShipSpeed=0.f;
  void JumpOrSwim();
  void UpdateSwimming(float DeltaSeconds);
+ UPROPERTY() class USoundBase* FantasyMusic=nullptr;
+ UPROPERTY() class USoundBase* FootstepSound=nullptr;
+ UPROPERTY() class USoundBase* SwimSound=nullptr;
+ UPROPERTY() class USoundBase* PunchSound=nullptr;
+ UPROPERTY() class USoundBase* SwordSound=nullptr;
+ UPROPERTY() class UAudioComponent* MusicPlayer=nullptr;
+ float MusicVolume=.45f;
+ float EffectsVolume=.65f;
+ float StepAudioTime=0.f;
  bool bSwimmingPool=false;
  float SwimDepthInput=0.f;
  double SwimTargetZ=0.;
