@@ -12,6 +12,7 @@ on:
       - 'assets/ocean3d/OceanSerenity.fbx'
       - 'unreal/**'
       - 'tools/animate_valkyrie.py'
+      - 'tools/generate_fantasy_audio.py'
       - 'tools/import_ocean_serenity.py'
       - 'tools/bake_dungeon_assets.py'
       - 'tools/import_townsperson.py'
