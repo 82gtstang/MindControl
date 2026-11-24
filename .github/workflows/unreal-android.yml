@@ -227,10 +227,10 @@ jobs:
             ('-abslog="{0}"' -f $log)
           )
           $process = Start-Process -FilePath $editor -ArgumentList $arguments -Wait -PassThru
-          $missing = @('M_Grass','M_CastleStone','M_Cobblestone','M_Dirt','M_River','M_Waterfall','T_Satchel') | Where-Object {
+          $missing = @('M_Grass','M_CastleStone','M_Cobblestone','M_Dirt','M_River','M_Waterfall','T_Satchel','M_MobileAtmosphereSky') | Where-Object {
             !(Test-Path (Join-Path $materials "$_.uasset"))
           }
-          if ($process.ExitCode -ne 0 -or $missing) {
+          if ($process.ExitCode -ne 0 -or $missing -or !(Test-Path $log) -or !(Select-String -Path $log -Pattern 'MOBILE_SKY_MATERIAL_SUCCESS' -Quiet)) {
             if (Test-Path $log) { Get-Content $log -Tail 100 }
             throw "Environment material import failed with exit code $($process.ExitCode)"
           }
