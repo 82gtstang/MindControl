@@ -85,6 +85,8 @@ public:
  void TouchReleased(ETouchIndex::Type FingerIndex,FVector Location);
  void TouchMoved(ETouchIndex::Type FingerIndex,FVector Location);
  ECryptThumbAction GetThumbAction() const { return ThumbAction; }
+ float GetAudioVolume(bool bMusic) const { return bMusic?MusicVolume:EffectsVolume; }
+ void AdjustAudioVolume(bool bMusic,float Delta);
 protected:
  virtual void BeginPlay() override;
  void SetThumbAction(ECryptThumbAction Action);
