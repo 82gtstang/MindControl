@@ -50,3 +50,32 @@ for clip in clips:
     if not isinstance(sequence,unreal.AnimSequence):
         raise RuntimeError("Required Ocean animation missing after import: "+path)
 print("OCEAN_IMPORT_SUCCESS "+expected+" animations="+",".join(clips))
+
+
+# Generate and import original game audio before Android cooking.
+import runpy
+import sys
+import tempfile
+from pathlib import Path
+audio_script = Path(__file__).with_name("generate_fantasy_audio.py")
+with tempfile.TemporaryDirectory(prefix="mindcontrol_audio_") as audio_dir:
+    old_argv = sys.argv[:]
+    try:
+        sys.argv = [str(audio_script), audio_dir]
+        runpy.run_path(str(audio_script), run_name="__main__")
+    finally:
+        sys.argv = old_argv
+    audio_tasks = []
+    for wav in sorted(Path(audio_dir).glob("*.wav")):
+        audio_task = unreal.AssetImportTask()
+        audio_task.set_editor_property("filename", str(wav))
+        audio_task.set_editor_property("destination_path", "/Game/Environment/MindControl/Audio")
+        audio_task.set_editor_property("automated", True)
+        audio_task.set_editor_property("replace_existing", True)
+        audio_task.set_editor_property("save", True)
+        audio_tasks.append(audio_task)
+    unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(audio_tasks)
+    for audio_task in audio_tasks:
+        if not audio_task.imported_object_paths:
+            raise RuntimeError("Audio import failed: " + audio_task.filename)
+    print("MINDCONTROL_AUDIO_IMPORT_SUCCESS", len(audio_tasks))
