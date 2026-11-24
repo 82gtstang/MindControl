@@ -770,6 +770,25 @@ void ACryptGameMode::BeginPlay()
  UMaterialInterface* River=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_River.M_River"));
  UMaterialInterface* Falls=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_Waterfall.M_Waterfall"));
  DisableTemplateGround(GetWorld());
+ // Supply the mobile renderer with a real IsSky surface enclosing the ocean.
+ auto* SkyMaterial=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_MobileAtmosphereSky.M_MobileAtmosphereSky"));
+ auto* SkySphere=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+ if(SkyMaterial && SkySphere)
+ {
+  auto* Dome=GetWorld()->SpawnActor<AStaticMeshActor>(FVector::ZeroVector,FRotator::ZeroRotator);
+  if(Dome)
+  {
+   Dome->Tags.Add(TEXT("MobileAtmosphereSky"));
+   auto* Mesh=Dome->GetStaticMeshComponent();
+   Mesh->SetMobility(EComponentMobility::Movable);
+   Mesh->SetStaticMesh(SkySphere);
+   Mesh->SetMaterial(0,SkyMaterial);
+   Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+   Mesh->SetCastShadow(false);
+   Dome->SetActorScale3D(FVector(20000.f));
+  }
+ }
+ else UE_LOG(LogTemp,Error,TEXT("Mobile atmosphere sky material or sphere missing"));
  bool bHasSun=false;
  for(TActorIterator<ADirectionalLight> It(GetWorld());It;++It)
  {
