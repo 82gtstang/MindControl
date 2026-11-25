@@ -64,6 +64,16 @@ void ACryptMonster::ConfigureCreature(int32 Index,int32 InDungeon,bool bInBoss)
 void ACryptMonster::Tick(float Dt)
 {
  Super::Tick(Dt);
+ if(Health>0.f && Body && Body->GetStaticMesh())
+ {
+  FHitResult Ground;
+  FCollisionQueryParams GroundQuery;
+  GroundQuery.AddIgnoredActor(this);
+  if(auto* Pawn=UGameplayStatics::GetPlayerPawn(this,0)) GroundQuery.AddIgnoredActor(Pawn);
+  const FVector P=GetActorLocation();
+  if(GetWorld()->LineTraceSingleByChannel(Ground,P+FVector(0,0,60),P-FVector(0,0,500),ECC_WorldStatic,GroundQuery) && Ground.ImpactNormal.Z>.55f)
+   SetActorLocation(FVector(P.X,P.Y,Ground.ImpactPoint.Z+95.f),false);
+ }
  if(PoisonTicks || BurnTicks)
  {
   EffectTimer-=Dt;
