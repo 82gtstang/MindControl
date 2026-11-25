@@ -157,9 +157,9 @@ def gait(rig, phase, running, diagonal):
 
 def jump_pose(rig, phase):
     # In-place anticipation, airborne tuck and landing; gameplay owns altitude.
-    crouch = smooth(0, .12, phase) * (1 - smooth(.12, .26, phase))
-    tuck = smooth(.22, .43, phase) * (1 - smooth(.56, .76, phase))
-    landing = smooth(.73, .85, phase) * (1 - smooth(.85, 1, phase))
+    crouch = .35 * (1 - smooth(0, .14, phase))
+    tuck = smooth(.02, .34, phase) * (1 - smooth(.55, .88, phase))
+    landing = .35 * smooth(.86, 1, phase)
     bend = .55 * crouch + .36 * tuck + .62 * landing
     rotate(rig.pose.bones["spine"], X, .20 * (crouch + landing) + .08 * tuck)
     rotate(rig.pose.bones["chest"], X, .08 * (crouch + landing))
@@ -270,6 +270,12 @@ def make_clips(scene, rig, source):
                 # The movement component supplies the jump arc.
                 jump_pose(rig, phase)
                 rig.pose.bones["root"].location = (0, 0, 0)
+            if walking or name == "Jump":
+                chest = rig.pose.bones["chest"]
+                amplitude = .022 if name.startswith("Run") else .012
+                bounce = amplitude * math.sin(2 * math.tau * phase - .45) if walking else .025 * math.sin(math.pi * phase)**2 * math.sin(2 * math.tau * phase)
+                local = chest.bone.matrix_local.to_quaternion().inverted()
+                chest.rotation_quaternion = chest.rotation_quaternion @ Quaternion(local @ X, bounce)
             hair_pose(rig, name, phase)
             for bone in rig.pose.bones:
                 bone.keyframe_insert("rotation_quaternion", frame=sample + 1, group=bone.name)
