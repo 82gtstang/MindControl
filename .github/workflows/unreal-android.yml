@@ -236,6 +236,46 @@ jobs:
             if (Test-Path $log) { Get-Content $log -Tail 100 }
             throw "Environment material import failed with exit code $($process.ExitCode)"
           }
+      - name: Generate MindControl Android launch artwork
+        shell: powershell
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          $dir = Join-Path $env:GITHUB_WORKSPACE 'unreal\Build\Android\res\drawable'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $bmp = New-Object System.Drawing.Bitmap(1920,1080)
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+          $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+          $rect = New-Object System.Drawing.Rectangle(0,0,1920,1080)
+          $bg = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect, [System.Drawing.Color]::FromArgb(8,13,28), [System.Drawing.Color]::FromArgb(24,66,100), 90)
+          $g.FillRectangle($bg,$rect)
+          $random = New-Object System.Random(82)
+          for ($i=0;$i -lt 180;$i++) {
+            $x=$random.Next(0,1920); $y=$random.Next(0,850); $n=$random.Next(1,4)
+            $g.FillEllipse([System.Drawing.Brushes]::LightSteelBlue,$x,$y,$n,$n)
+          }
+          $dark = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(9,17,29))
+          foreach ($x in @(150,390,1350,1590)) {
+            $g.FillRectangle($dark,$x,590,180,490)
+            for ($j=0;$j -lt 3;$j++) { $g.FillRectangle($dark,($x+60*$j),550,35,60) }
+          }
+          $g.FillRectangle($dark,0,820,1920,260)
+          $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(100,100,190,245),3)
+          $g.DrawEllipse($pen,710,110,500,500)
+          $g.DrawEllipse($pen,730,130,460,460)
+          $font = New-Object System.Drawing.Font('Georgia',128,[System.Drawing.FontStyle]::Bold,[System.Drawing.GraphicsUnit]::Pixel)
+          $small = New-Object System.Drawing.Font('Georgia',32,[System.Drawing.FontStyle]::Regular,[System.Drawing.GraphicsUnit]::Pixel)
+          $fmt = New-Object System.Drawing.StringFormat
+          $fmt.Alignment = [System.Drawing.StringAlignment]::Center
+          $titleRect = New-Object System.Drawing.RectangleF(0,390,1920,190)
+          $g.DrawString('MINDCONTROL',$font,[System.Drawing.Brushes]::Black,(New-Object System.Drawing.RectangleF(4,396,1920,190)),$fmt)
+          $g.DrawString('MINDCONTROL',$font,[System.Drawing.Brushes]::LightSteelBlue,$titleRect,$fmt)
+          $g.DrawString('A  R E A L M  O F  M A G I C  A N D  S T E E L',$small,[System.Drawing.Brushes]::White,(New-Object System.Drawing.RectangleF(0,590,1920,80)),$fmt)
+          $bmp.Save((Join-Path $dir 'downloadimageh.png'),[System.Drawing.Imaging.ImageFormat]::Png)
+          $bmp.Save((Join-Path $dir 'splashscreen_landscape.png'),[System.Drawing.Imaging.ImageFormat]::Png)
+          $g.Dispose()
+          $bmp.Dispose()
+
       - name: Build and package Android APK
         timeout-minutes: 35
         if: inputs.play_bundle != true
