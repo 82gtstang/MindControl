@@ -100,6 +100,9 @@ ACryptHero::ACryptHero()
   OceanSwim=Swim.Object; OceanTreadWater=TreadWater.Object;
   OceanIdle=Idle.Object; OceanWalk=Walk.Object; OceanRun=Run.Object;
   OceanWalkDiagonal=WalkDiagonal.Object; OceanRunDiagonal=RunDiagonal.Object;
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> WalkAttack(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_WalkAttack.OceanSerenityOcean_WalkAttack"));
+  static ConstructorHelpers::FObjectFinder<UAnimSequence> RunAttack(TEXT("/Game/Characters/OceanSerenity/OceanSerenityOcean_RunAttack.OceanSerenityOcean_RunAttack"));
+  OceanWalkAttack=WalkAttack.Object; OceanRunAttack=RunAttack.Object;
   OceanJump=JumpAnim.Object; OceanAttack=AttackAnim.Object; OceanSpin=SpinAnim.Object;
   // Start the relaxed idle immediately; never leave the mesh in FBX reference pose.
   if (OceanIdle)
@@ -338,6 +341,12 @@ void ACryptHero::Tick(float DeltaSeconds)
 void ACryptHero::PlayOceanAction(UAnimSequence* Sequence,float Duration)
 {
  if (!Sequence || !GetMesh()) return;
+ if (Sequence==OceanAttack && !GetCharacterMovement()->IsFalling() && !bSwimmingPool)
+ {
+  const float Speed=GetVelocity().Size2D();
+  if (Speed>195.f && OceanRunAttack) Sequence=OceanRunAttack;
+  else if (Speed>15.f && OceanWalkAttack) Sequence=OceanWalkAttack;
+ }
  ActiveOceanAnimation=Sequence;
  OceanActionTime=Duration;
  GetMesh()->PlayAnimation(Sequence,false);
