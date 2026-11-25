@@ -65,3 +65,10 @@ jobs:
           path: rig-output/OceanSerenity.fbx
           if-no-files-found: error
 
+      - name: Upload arm deformation measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: OceanSerenity-Arm-Deformation-Audit
+          path: rig-output/ArmDeformationAudit.json
+          if-no-files-found: warn
