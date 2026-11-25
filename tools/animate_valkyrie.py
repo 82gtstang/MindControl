@@ -52,6 +52,45 @@ def separate_hand_hip_geometry(body):
     body.data.update()
 
 
+def clean_arm_fragments(body):
+    """Remove tiny disconnected islands in the hand and underarm regions only."""
+    import bmesh
+    mesh = bmesh.new()
+    mesh.from_mesh(body.data)
+    pending = set(mesh.verts)
+    remove = []
+    islands = 0
+    while pending:
+        seed = pending.pop()
+        component = [seed]
+        stack = [seed]
+        while stack:
+            v = stack.pop()
+            for edge in v.link_edges:
+                other = edge.other_vert(v)
+                if other in pending:
+                    pending.remove(other)
+                    component.append(other)
+                    stack.append(other)
+        if len(component) > 300:
+            continue
+        xs = [v.co.x for v in component]
+        ys = [v.co.y for v in component]
+        zs = [v.co.z for v in component]
+        span = max(max(xs)-min(xs), max(ys)-min(ys), max(zs)-min(zs))
+        center = sum((v.co for v in component), Vector((0,0,0))) / len(component)
+        # Exclude large armor, fingers, hair and the main connected skin.
+        if span < .035 and abs(center.x) > .16 and .84 < center.z < 1.55:
+            remove.extend(component)
+            islands += 1
+    if remove:
+        bmesh.ops.delete(mesh, geom=remove, context="VERTS")
+    mesh.to_mesh(body.data)
+    mesh.free()
+    body.data.update()
+    print("ARM_FRAGMENT_CLEANUP", islands, "islands", len(remove), "vertices", flush=True)
+
+
 def add_hair_rig(body, rig):
     bpy.context.view_layer.objects.active = rig
     rig.select_set(True)
@@ -316,6 +355,7 @@ def main():
     if missing_clips:
         raise RuntimeError("Input FBX missing required source clips: " + ", ".join(missing_clips))
     separate_hand_hip_geometry(body)
+    clean_arm_fragments(body)
     add_hair_rig(body, rig)
     scene.render.fps = FPS
     make_clips(scene, rig, originals)
