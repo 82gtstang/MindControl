@@ -105,13 +105,14 @@ def gait(rig, phase, running, diagonal):
     pelvis.location = pelvis.bone.matrix_local.to_3x3().inverted() @ Vector((0, 0, bob))
     # The Valkyrie faces -Y in armature space. Positive X pitch leans forward.
     rotate(rig.pose.bones["spine"], X, math.radians(14 if running else 9))
-    rotate(rig.pose.bones["chest"], Z, math.sin(wave) * (.09 if diagonal else .05))
+    rotate(pelvis, Z, -.045 * math.sin(wave))
+    rotate(rig.pose.bones["chest"], Z, math.sin(wave) * (.11 if diagonal else .08))
     rotate(rig.pose.bones["head"], Z, -math.sin(wave) * .025)
 
     for side, cycle in (("L", phase), ("R", phase + .5)):
         t = cycle % 1
         stance = .39 if running else .60
-        stride = .39 if running else .26
+        stride = .34 if running else .23
         if t < stance:
             forward = stride * (2 * t / stance - 1)
             lift = 0
@@ -121,7 +122,7 @@ def gait(rig, phase, running, diagonal):
             travel = 2 * swing**3 - 3 * swing**2 + 1
             tangent = ((2 * swing - 3) * swing + 1) * swing + (swing - 1) * swing**2
             forward = stride * (2 * travel - 1 + 2 * (1 - stance) / stance * tangent)
-            lift = (.19 if running else .105) * math.sin(math.pi * swing)**2
+            lift = (.16 if running else .085) * math.sin(math.pi * swing)**2
 
         thigh, shin, foot = (rig.pose.bones[f"{part}_{side}"] for part in ("thigh", "shin", "foot"))
         hip = thigh.bone.head_local
@@ -154,6 +155,24 @@ def gait(rig, phase, running, diagonal):
         rotate(fore, X, -(.38 if running else .28) - (.16 if running else .09) * arm_phase)
 
 
+def jump_pose(rig, phase):
+    # In-place anticipation, airborne tuck and landing; gameplay owns altitude.
+    crouch = smooth(0, .12, phase) * (1 - smooth(.12, .26, phase))
+    tuck = smooth(.22, .43, phase) * (1 - smooth(.56, .76, phase))
+    landing = smooth(.73, .85, phase) * (1 - smooth(.85, 1, phase))
+    bend = .55 * crouch + .36 * tuck + .62 * landing
+    rotate(rig.pose.bones["spine"], X, .20 * (crouch + landing) + .08 * tuck)
+    rotate(rig.pose.bones["chest"], X, .08 * (crouch + landing))
+    pelvis = rig.pose.bones["pelvis"]
+    pelvis.location = pelvis.bone.matrix_local.to_3x3().inverted() @ Vector((0, 0, -.085 * (crouch + landing)))
+    for side in ("L", "R"):
+        rotate(rig.pose.bones[f"thigh_{side}"], X, -bend)
+        rotate(rig.pose.bones[f"shin_{side}"], X, 1.65 * bend)
+        rotate(rig.pose.bones[f"foot_{side}"], X, -.65 * bend)
+        rotate(rig.pose.bones[f"upperarm_{side}"], X, .32 * crouch - .85 * tuck - .28 * landing)
+        rotate(rig.pose.bones[f"forearm_{side}"], X, -.28 * (crouch + tuck + landing))
+
+
 def side_punch(rig, phase):
     """Alternate forward head-height strikes with a guarded recovery."""
     pulses = {}
@@ -168,25 +187,27 @@ def side_punch(rig, phase):
         upper = rig.pose.bones[f"upperarm_{side}"]
         fore = rig.pose.bones[f"forearm_{side}"]
         # Aim in armature space, toward -Y and slightly upward from shoulder.
-        direction = Vector((0, -1, .32)).normalized()
+        direction = Vector((0, -1, .48)).normalized()
         rest = (fore.bone.head_local - upper.bone.head_local).normalized()
         parent_delta = upper.parent.matrix.to_quaternion() @ upper.parent.bone.matrix_local.to_quaternion().inverted()
         target = parent_delta.inverted() @ direction
         local = upper.bone.matrix_local.to_quaternion()
         strike = local.inverted() @ rest.rotation_difference(target) @ local
-        guard = Quaternion(local.inverted() @ X, -.48)
+        guard = Quaternion(local.inverted() @ X, -.48 * (smooth(0, .10, phase) * (1 - smooth(.90, 1, phase))))
         upper.rotation_quaternion = guard.slerp(strike, extend)
-        rotate(fore, X, -.95 * (1 - extend))
+        rotate(fore, X, -.95 * (1 - extend) * smooth(0, .10, phase) * (1 - smooth(.90, 1, phase)))
 
 def swim_pose(rig, phase):
     wave = math.tau * phase
     rotate(rig.pose.bones["pelvis"], X, math.radians(78))
     rotate(rig.pose.bones["spine"], X, .08 * math.sin(2 * wave))
-    rotate(rig.pose.bones["chest"], Z, .17 * math.sin(wave))
+    rotate(rig.pose.bones["chest"], Vector((0, 1, 0)), .23 * math.sin(wave))
     rotate(rig.pose.bones["head"], X, -.20)
     for side, offset in (("L", 0), ("R", math.pi)):
         t = wave + offset
-        rotate(rig.pose.bones[f"upperarm_{side}"], X, -1.25 - 1.15 * math.cos(t))
+        upper = rig.pose.bones[f"upperarm_{side}"]
+        local = upper.bone.matrix_local.to_quaternion().inverted()
+        upper.rotation_quaternion = Quaternion(local @ Vector((0, 1, 0)), math.copysign(.16 + .13 * math.sin(t), -upper.bone.head_local.x)) @ Quaternion(local @ X, -1.35 - 1.30 * math.cos(t))
         rotate(rig.pose.bones[f"forearm_{side}"], X, -.45 - .40 * math.sin(t))
         rotate(rig.pose.bones[f"thigh_{side}"], X, .22 * math.sin(2 * wave + offset))
         rotate(rig.pose.bones[f"shin_{side}"], X, .22 + .18 * math.cos(2 * wave + offset))
@@ -218,9 +239,9 @@ def make_clips(scene, rig, source):
     for name in CLIPS:
         original = source.get(name)
         walking = name.startswith(("Walk", "Run"))
-        length = 72 if name == "Swim" else gait_lengths[name] if walking else round(2 * (original.frame_range[1] - original.frame_range[0]))
+        length = 90 if name == "Swim" else gait_lengths[name] if walking else round(2 * (original.frame_range[1] - original.frame_range[0]))
         poses = []
-        if not walking and name != "Swim":
+        if not walking and name not in ("Swim", "Jump", "Attack"):
             # Preserve the established action choreography, now evaluated at 60 Hz.
             action_data.action = original
             start = float(original.frame_range[0])
@@ -247,6 +268,7 @@ def make_clips(scene, rig, source):
                 side_punch(rig, phase)
             if name == "Jump":
                 # The movement component supplies the jump arc.
+                jump_pose(rig, phase)
                 rig.pose.bones["root"].location = (0, 0, 0)
             hair_pose(rig, name, phase)
             for bone in rig.pose.bones:
