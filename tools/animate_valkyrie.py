@@ -91,6 +91,52 @@ def clean_arm_fragments(body):
     print("ARM_FRAGMENT_CLEANUP", islands, "islands", len(remove), "vertices", flush=True)
 
 
+def repair_cross_weighted_arm_regions(body, rig):
+    """Correct arm/torso cross-influences away from the shoulder joint."""
+    groups = {g.index: g.name for g in body.vertex_groups}
+    changed = 0
+    for side, sign in (("L", -1), ("R", 1)):
+        names = {f"{part}_{side}" for part in ("upperarm", "forearm", "hand")}
+        arm = {i for i, name in groups.items() if name in names or
+               (name.endswith("_" + side) and any(k in name.lower() for k in ("finger", "thumb", "index", "middle", "ring", "pinky")))}
+        torso = {i for i, name in groups.items() if name in ("pelvis", "spine", "chest", "thigh_" + side)}
+        shoulder = rig.data.bones["upperarm_" + side].head_local
+        elbow = rig.data.bones["forearm_" + side].head_local
+        wrist = rig.data.bones["hand_" + side].head_local
+        def distance(p, a, b):
+            d = b-a
+            t = max(0., min(1., (p-a).dot(d)/max(d.length_squared, 1e-9)))
+            return (p-a-t*d).length
+        for v in body.data.vertices:
+            x,y,z = v.co
+            if sign*x < .12 or not (.84 < z < shoulder.z-.09):
+                continue
+            weights = {g.group:g.weight for g in v.groups}
+            aw = sum(weights.get(i,0) for i in arm)
+            tw = sum(weights.get(i,0) for i in torso)
+            if min(aw,tw) < .015:
+                continue
+            # Preserve ambiguous contact vertices and shoulder articulation.
+            d = min(distance(v.co, shoulder, elbow), distance(v.co, elbow, wrist),
+                    distance(v.co, wrist, rig.data.bones["hand_" + side].tail_local))
+            if aw > .72 and d < .075:
+                discard = torso
+            elif tw > .72 and d > .095:
+                discard = arm
+            else:
+                continue
+            kept = {i:w for i,w in weights.items() if i not in discard}
+            total = sum(kept.values())
+            if total <= 0:
+                continue
+            for i in discard.intersection(weights):
+                body.vertex_groups[i].remove([v.index])
+            for i,w in kept.items():
+                body.vertex_groups[i].add([v.index], w/total, "REPLACE")
+            changed += 1
+    print("ARM_CROSS_WEIGHT_REPAIR", changed, "vertices", flush=True)
+
+
 def add_hair_rig(body, rig):
     bpy.context.view_layer.objects.active = rig
     rig.select_set(True)
@@ -356,6 +402,7 @@ def main():
         raise RuntimeError("Input FBX missing required source clips: " + ", ".join(missing_clips))
     separate_hand_hip_geometry(body)
     clean_arm_fragments(body)
+    repair_cross_weighted_arm_regions(body, rig)
     add_hair_rig(body, rig)
     scene.render.fps = FPS
     make_clips(scene, rig, originals)
