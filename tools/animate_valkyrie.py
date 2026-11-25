@@ -383,6 +383,56 @@ def make_clips(scene, rig, source):
         track.strips.new(track.name, 1, action)
 
 
+def audit_arm_deformation(scene, body, rig, target_path):
+    """Measure actual skinned edge stretching over walking and running poses."""
+    import json
+    from pathlib import Path
+    data = rig.animation_data
+    tracks = list(data.nla_tracks)
+    old_mutes = [t.mute for t in tracks]
+    rest = [v.co.copy() for v in body.data.vertices]
+    edges = []
+    for edge in body.data.edges:
+        a,b = edge.vertices
+        mid = (rest[a]+rest[b])*.5
+        length = (rest[a]-rest[b]).length
+        if .84 < mid.z < 1.55 and abs(mid.x) > .12 and length > .0005:
+            edges.append((a,b,length))
+    report = []
+    try:
+        for track in tracks:
+            track.mute = True
+        for track in tracks:
+            if track.name not in ("Ocean_Walk","Ocean_Run","Ocean_WalkAttack","Ocean_RunAttack"):
+                continue
+            data.action = track.strips[0].action
+            start,end = data.action.frame_range
+            for i in range(9):
+                scene.frame_set(round(start+(end-start)*i/8))
+                bpy.context.view_layer.update()
+                obj = body.evaluated_get(bpy.context.evaluated_depsgraph_get())
+                mesh = obj.to_mesh()
+                try:
+                    for a,b,length in edges:
+                        posed = (mesh.vertices[a].co-mesh.vertices[b].co).length
+                        if posed > .025 and posed/length > 3:
+                            report.append({"clip":track.name,"frame":scene.frame_current,
+                                "edge":[a,b],"rest_length":length,"posed_length":posed,
+                                "ratio":posed/length,"rest_midpoint":list((rest[a]+rest[b])*.5),
+                                "weights":[[(body.vertex_groups[g.group].name,g.weight)
+                                    for g in body.data.vertices[j].groups] for j in (a,b)]})
+                finally:
+                    obj.to_mesh_clear()
+    finally:
+        data.action = None
+        for track,mute in zip(tracks,old_mutes):
+            track.mute = mute
+    report.sort(key=lambda item:item["posed_length"],reverse=True)
+    Path(target_path).with_name("ArmDeformationAudit.json").write_text(json.dumps(
+        {"flagged_samples":len(report),"worst_edges":report[:1000]},indent=2))
+    print("ARM_DEFORMATION_AUDIT",len(report),"flagged edge samples",flush=True)
+
+
 def main():
     source_path, target_path = sys.argv[sys.argv.index("--") + 1:]
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -406,6 +456,7 @@ def main():
     add_hair_rig(body, rig)
     scene.render.fps = FPS
     make_clips(scene, rig, originals)
+    audit_arm_deformation(scene, body, rig, target_path)
     scene.frame_set(1)
     bpy.ops.object.select_all(action="DESELECT")
     body.select_set(True)
