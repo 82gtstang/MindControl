@@ -42,7 +42,7 @@ if mesh.get_path_name()!=expected:
     if not renamed:
         raise RuntimeError("Unable to rename imported skeletal mesh to "+expected)
 # Keep the imported animation names used by the runtime constructor and cook.
-clips=("Idle","Walk","Run","WalkDiagonal","RunDiagonal","Jump","Attack","Spin","Swim")
+clips=("Idle","Walk","Run","WalkDiagonal","RunDiagonal","Jump","Attack","Spin","Swim","WalkAttack","RunAttack")
 unreal.EditorAssetLibrary.save_directory(destination,only_if_is_dirty=False,recursive=True)
 for clip in clips:
     path=destination+"/OceanSerenityOcean_"+clip
