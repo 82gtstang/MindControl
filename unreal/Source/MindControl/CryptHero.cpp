@@ -387,8 +387,8 @@ void ACryptHero::UpdateSwimming(float DeltaSeconds)
  const bool bAtSea=SeaFloor<CryptWorld::SeaLevel-55.f &&
   FeetZ<CryptWorld::SeaLevel+(bSwimmingPool?48.:8.) &&
   Position.Z>=SeaFloor-220. && GetChartIndex()==INDEX_NONE;
- const bool bAtPool=Radius<(bSwimmingPool?.84:.80) &&
-  Position.Z<CryptWorld::PoolSurface+65.f && Position.Z>CryptWorld::PoolSurface-300.f;
+ const bool bAtPool=Radius<(bSwimmingPool?.98:.94) &&
+  FeetZ<CryptWorld::PoolSurface+(bSwimmingPool?48.f:8.f) && Position.Z>CryptDungeons::GetGroundHeight(Position.X,Position.Y)-100.f;
  const bool bInside=!SailingShip.IsValid() && (bAtSea || bAtPool);
  if(!bInside)
  {
