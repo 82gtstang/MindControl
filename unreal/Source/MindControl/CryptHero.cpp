@@ -173,6 +173,7 @@ void ACryptHero::BeginPlay()
  EffectsVolume=FMath::Clamp(EffectsVolume,0.f,1.f);
  if(FantasyMusic && IsLocallyControlled())
   MusicPlayer=UGameplayStatics::SpawnSound2D(this,FantasyMusic,MusicVolume,1.f,0.f,nullptr,false,false);
+ BattleMusic=LoadObject<USoundBase>(nullptr,TEXT("/Game/Environment/MindControl/Audio/FantasyBattle.FantasyBattle"));
  FantasyMusic=LoadObject<USoundBase>(nullptr,TEXT("/Game/Environment/MindControl/Audio/FantasyExploration.FantasyExploration"));
  FootstepSound=LoadObject<USoundBase>(nullptr,TEXT("/Game/Environment/MindControl/Audio/Footstep.Footstep"));
  SwimSound=LoadObject<USoundBase>(nullptr,TEXT("/Game/Environment/MindControl/Audio/SwimStroke.SwimStroke"));
@@ -230,7 +231,17 @@ void ACryptHero::Tick(float DeltaSeconds)
  UpdateSwimming(DeltaSeconds);
  if(IsLocallyControlled())
  {
-  if(!MusicPlayer && FantasyMusic) MusicPlayer=UGameplayStatics::SpawnSound2D(this,FantasyMusic,MusicVolume,1.f,0.f,nullptr,false,false);
+  USoundBase* DesiredMusic=(GetCombatEnemy() && BattleMusic)?BattleMusic:FantasyMusic;
+  if(MusicPlayer && DesiredMusic && MusicPlayer->Sound!=DesiredMusic)
+  {
+   MusicPlayer->FadeOut(.45f,0.f);
+   MusicPlayer=nullptr;
+  }
+  if(!MusicPlayer && DesiredMusic)
+  {
+   MusicPlayer=UGameplayStatics::SpawnSound2D(this,DesiredMusic,MusicVolume,1.f,0.f,nullptr,false,false);
+   if(MusicPlayer) MusicPlayer->FadeIn(.45f,MusicVolume);
+  }
   if(MusicPlayer && !MusicPlayer->IsPlaying() && MusicVolume>0.f) MusicPlayer->Play();
   StepAudioTime=FMath::Max(0.f,StepAudioTime-DeltaSeconds);
   const bool bSwimming=bSwimmingPool;
