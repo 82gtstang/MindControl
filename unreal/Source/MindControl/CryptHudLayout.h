@@ -4,8 +4,8 @@
 
 struct FCryptHudLayout
 {
- static FVector2D LeftStickAnchor() { return FVector2D(.125f,.855f); }
- static FVector2D RightStickAnchor() { return FVector2D(.875f,.855f); }
+ static FVector2D LeftStickAnchor() { return FVector2D(.125f,.82f); }
+ static FVector2D RightStickAnchor() { return FVector2D(.875f,.82f); }
  FCryptHudLayout(float W,float H)
  {
   Scale=FMath::Max(.7f,FMath::Min(W/1600.f,H/900.f));
