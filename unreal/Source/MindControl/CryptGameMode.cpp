@@ -426,6 +426,8 @@ namespace
  void CreateGravehollowPool(UWorld* World,UMaterialInterface* Water)
  {
   using namespace CryptWorld;
+  if(!Water) Water=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Environment/MindControl/M_River.M_River"));
+  if(!Water) Water=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
   if(!Water) return;
   auto* Surface=CreateSurface(World,TEXT("GravehollowPool"),false);
   if(!Surface) return;
