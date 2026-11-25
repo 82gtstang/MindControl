@@ -51,6 +51,21 @@ def music():
         buf[i] *= min(1,i/(RATE*.35),(len(buf)-i)/(RATE*.5))
     write("FantasyExploration",buf)
 
+def battle_music():
+    beat = .42
+    buf = [0.] * int(64 * beat * RATE)
+    chords = [(38,45,50,53),(34,41,46,50),(36,43,48,51),(33,40,45,49)]
+    for k in range(64):
+        chord = chords[(k//4)%4]
+        note(buf,k*beat,.38,chord[0],.19)
+        note(buf,k*beat+.08,.30,chord[1+k%3]+12,.11)
+        for i in range(int(.19*RATE)):
+            t=i/RATE
+            j=int(k*beat*RATE)+i
+            if j<len(buf):
+                buf[j]+=.24*math.sin(TAU*(65*t-90*t*t))*math.exp(-22*t)*min(1,t/.006)
+    write("FantasyBattle",buf)
+
 def effect(name, duration, freq, noise, decay):
     rng = random.Random(name)
     buf=[]
@@ -89,6 +104,7 @@ def footstep():
 
 if __name__ == "__main__":
     music()
+    battle_music()
     footstep()
     for args in [("Punch",.22,100,.55,16),
                  ("SwordSwing",.4,380,.92,5),("SwordImpact",.45,720,.55,8),
