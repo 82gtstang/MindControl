@@ -494,8 +494,6 @@ def main():
     separate_hand_hip_geometry(body)
     clean_arm_fragments(body)
     repair_cross_weighted_arm_regions(body, rig)
-    separate_arm_torso_bridges(body, rig)
-    clean_arm_fragments(body)
     add_hair_rig(body, rig)
     scene.render.fps = FPS
     make_clips(scene, rig, originals)
