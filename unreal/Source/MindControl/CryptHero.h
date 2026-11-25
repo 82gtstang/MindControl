@@ -103,6 +103,7 @@ protected:
  void JumpOrSwim();
  void UpdateSwimming(float DeltaSeconds);
  UPROPERTY() class USoundBase* FantasyMusic=nullptr;
+ UPROPERTY() class USoundBase* BattleMusic=nullptr;
  UPROPERTY() class USoundBase* FootstepSound=nullptr;
  UPROPERTY() class USoundBase* SwimSound=nullptr;
  UPROPERTY() class USoundBase* PunchSound=nullptr;
