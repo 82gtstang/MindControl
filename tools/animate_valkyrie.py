@@ -137,6 +137,47 @@ def repair_cross_weighted_arm_regions(body, rig):
     print("ARM_CROSS_WEIGHT_REPAIR", changed, "vertices", flush=True)
 
 
+def separate_arm_torso_bridges(body, rig):
+    """Cut fused arm/torso contact faces below the anatomical shoulder."""
+    import bmesh
+    mesh = bmesh.new()
+    mesh.from_mesh(body.data)
+    deform = mesh.verts.layers.deform.active
+    names = {g.index:g.name for g in body.vertex_groups}
+    for side, sign in (("L",-1),("R",1)):
+        arm = {i for i,n in names.items() if n in {p+"_"+side for p in ("upperarm","forearm","hand")}}
+        torso = {i for i,n in names.items() if n in ("chest","spine","pelvis","thigh_"+side)}
+        shoulder = rig.data.bones["upperarm_"+side].head_local.z
+        def region(v):
+            w=v[deform]
+            a=sum(w.get(i,0) for i in arm)
+            t=sum(w.get(i,0) for i in torso)
+            return 1 if a>t and a>.45 else 2 if t>a and t>.45 else 0
+        faces=[]
+        for f in mesh.faces:
+            center=f.calc_center_median()
+            if sign*center.x < .12 or not (.84<center.z<shoulder-.10):
+                continue
+            if {1,2}.issubset({region(v) for v in f.verts}):
+                faces.append(f)
+        edges={e for f in faces for e in f.edges}
+        bmesh.ops.delete(mesh,geom=faces,context="FACES_ONLY")
+        boundary=[e for e in edges if e.is_valid and e.is_boundary]
+        wire=[e for e in edges if e.is_valid and e.is_wire]
+        if wire:
+            bmesh.ops.delete(mesh,geom=wire,context="EDGES")
+        for label in (1,2):
+            rim=[e for e in boundary if e.is_valid and all(region(v)==label for v in e.verts)]
+            if rim:
+                caps=bmesh.ops.holes_fill(mesh,edges=rim,sides=0)["faces"]
+                if caps:
+                    bmesh.ops.triangulate(mesh,faces=caps)
+        print("ARM_TORSO_BRIDGE_CUT",side,len(faces),flush=True)
+    mesh.to_mesh(body.data)
+    mesh.free()
+    body.data.update()
+
+
 def add_hair_rig(body, rig):
     bpy.context.view_layer.objects.active = rig
     rig.select_set(True)
@@ -453,6 +494,8 @@ def main():
     separate_hand_hip_geometry(body)
     clean_arm_fragments(body)
     repair_cross_weighted_arm_regions(body, rig)
+    separate_arm_torso_bridges(body, rig)
+    clean_arm_fragments(body)
     add_hair_rig(body, rig)
     scene.render.fps = FPS
     make_clips(scene, rig, originals)
