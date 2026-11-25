@@ -316,6 +316,17 @@ void ACryptHero::Tick(float DeltaSeconds)
   ActiveOceanAnimation=Desired;
   GetMesh()->SetMorphTarget(TEXT("OceanRunLeftLeg"), Desired==OceanRun || Desired==OceanRunDiagonal ? 1.f : 0.f);
  }
+ if (Desired==OceanJump && GetCharacterMovement()->IsFalling() && OceanActionTime<=0.f)
+ {
+  // Match the pose to the actual ballistic phase rather than clip duration.
+  const float LaunchSpeed=FMath::Max(1.f,GetCharacterMovement()->JumpZVelocity);
+  const float Phase=FMath::Clamp(.5f-.5f*Velocity.Z/LaunchSpeed,0.f,1.f);
+  if (auto* Player=GetMesh()->GetSingleNodeInstance())
+  {
+   Player->SetPlayRate(0.f);
+   Player->SetPosition(Phase*Desired->GetPlayLength(),false);
+  }
+ }
  if (bLoop)
  {
   const bool bRunning=Desired && (Desired==OceanRun || Desired==OceanRunDiagonal);
