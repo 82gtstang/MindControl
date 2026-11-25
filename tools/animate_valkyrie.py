@@ -12,7 +12,7 @@ from mathutils import Quaternion, Vector
 FPS = 60
 X = Vector((1, 0, 0))
 Z = Vector((0, 0, 1))
-CLIPS = ("Idle", "Walk", "Run", "WalkDiagonal", "RunDiagonal", "Jump", "Attack", "Spin", "Swim")
+CLIPS = ("Idle", "Walk", "Run", "WalkDiagonal", "RunDiagonal", "Jump", "Attack", "Spin", "Swim", "WalkAttack", "RunAttack")
 
 
 def smooth(a, b, value):
@@ -319,7 +319,7 @@ def hair_pose(rig, name, phase):
 def make_clips(scene, rig, source):
     rig.animation_data_clear()
     action_data = rig.animation_data_create()
-    gait_lengths = {"Walk": 52, "WalkDiagonal": 54, "Run": 40, "RunDiagonal": 42}
+    gait_lengths = {"Walk": 52, "WalkDiagonal": 54, "Run": 40, "RunDiagonal": 42, "WalkAttack": 52, "RunAttack": 40}
     tracks = []
     for name in CLIPS:
         original = source.get(name)
@@ -349,7 +349,7 @@ def make_clips(scene, rig, source):
                 gait(rig, phase, name.startswith("Run"), name.endswith("Diagonal"))
             if name == "Swim":
                 swim_pose(rig, phase)
-            if name == "Attack":
+            if name.endswith("Attack"):
                 side_punch(rig, phase)
             if name == "Jump":
                 # The movement component supplies the jump arc.
@@ -361,7 +361,7 @@ def make_clips(scene, rig, source):
                 bounce = amplitude * math.sin(2 * math.tau * phase - .45) if walking else .025 * math.sin(math.pi * phase)**2 * math.sin(2 * math.tau * phase)
                 local = chest.bone.matrix_local.to_quaternion().inverted()
                 chest.rotation_quaternion = chest.rotation_quaternion @ Quaternion(local @ X, bounce)
-            hair_pose(rig, name, phase)
+            hair_pose(rig, name.replace("Attack", "") if walking else name, phase)
             for bone in rig.pose.bones:
                 bone.keyframe_insert("rotation_quaternion", frame=sample + 1, group=bone.name)
                 if bone.name in ("root", "pelvis"):
@@ -397,7 +397,7 @@ def main():
     missing = sorted(required - set(rig.data.bones.keys()))
     if missing:
         raise RuntimeError("Incompatible Ocean Serenity skeleton; missing bones: " + ", ".join(missing))
-    missing_clips = sorted((set(CLIPS) - {"Swim"}) - set(originals))
+    missing_clips = sorted((set(CLIPS) - {"Swim", "WalkAttack", "RunAttack"}) - set(originals))
     if missing_clips:
         raise RuntimeError("Input FBX missing required source clips: " + ", ".join(missing_clips))
     separate_hand_hip_geometry(body)
