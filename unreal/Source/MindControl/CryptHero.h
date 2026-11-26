@@ -85,6 +85,9 @@ public:
  void TouchPressed(ETouchIndex::Type FingerIndex, FVector Location);
  void TouchReleased(ETouchIndex::Type FingerIndex,FVector Location);
  void TouchMoved(ETouchIndex::Type FingerIndex,FVector Location);
+ bool bAudioSettings=false;
+ float GetAudioSetting(int32 Index) const;
+ void SetAudioSetting(int32 Index,float Value);
  ECryptThumbAction GetThumbAction() const { return ThumbAction; }
 protected:
  virtual void BeginPlay() override;
@@ -111,6 +114,7 @@ protected:
  UPROPERTY() class UAudioComponent* MusicPlayer=nullptr;
  float MusicVolume=.45f;
  float EffectsVolume=.65f;
+ float MasterVolume=1.f, BattleVolume=.45f, FootstepVolume=.325f, SwimmingVolume=.65f;
  float StepAudioTime=0.f;
  bool bSwimmingPool=false;
  float SwimDepthInput=0.f;
