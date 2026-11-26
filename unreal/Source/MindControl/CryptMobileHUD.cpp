@@ -181,7 +181,7 @@ void ACryptMobileHUD::DrawHUD()
   DrawText(Label,FLinearColor::White,Center.X-Width*.5,Center.Y+R*.43f-Height*.5,nullptr,.90f*S,false);
  };
  const bool bSwimming=Hero && Hero->IsSwimmingInPool();
- Button(Layout.Jump,bSwimming?EIcon::Swim:EIcon::Jump,bSwimming?TEXT("SWIM"):TEXT("JUMP"));
+ Button(Layout.Jump,bSwimming?EIcon::Swim:EIcon::Jump,bSwimming?TEXT("SWIM FAST"):TEXT("JUMP"));
  const bool bBow=Hero->EquippedWeapon==ECryptWeapon::Bow;
  if(!bBow) Button(Layout.Attack,WeaponIcon(Hero->EquippedWeapon),bArmed?TEXT("ATTACK"):TEXT("PUNCH"),Strength>.1f);
  Button(Layout.Spin,EIcon::Spin,TEXT("SPIN"));
