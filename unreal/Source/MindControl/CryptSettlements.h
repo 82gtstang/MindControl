@@ -227,6 +227,22 @@ namespace CryptSettlements
     Part(Timber,Side*W*.30f,D*.16f,47,65,70,12);
     Part(Timber,Side*W*.30f,D*.16f,24,7,7,45);
    }
+   // Timber framing, staggered stone plinth and overlapping roof shingles.
+   for(int32 Row=0;Row<3;++Row)
+    for(float Side : {-1.f,1.f})
+     for(int32 K=0;K<5;++K)
+     {
+      const float X=Side*(75.f+K*(W/2-75.f)/5.f);
+      Part(Sill,X,Front-12,12+Row*22,23,13,19);
+     }
+   for(float Side : {-1.f,1.f})
+    for(int32 Row=0;Row<7;++Row)
+     for(int32 Col=0;Col<8;++Col)
+     {
+      const float Y=Side*(Row+.5f)*D/14.f;
+      const float X=-W/2+(Col+.5f)*W/8.f;
+      Part(Roof,X,Y,H+Rise*(1-FMath::Abs(Y)/(D/2))+12,W/8+3,RoofSlope/7+5,5,FRotator(0,0,Side*Angle));
+     }
    Part(Wall,0,-D/2,H-19,128,18,38);
    if(bSecret || bDungeon)
    {
@@ -253,7 +269,7 @@ namespace CryptSettlements
      Sign->SetHorizontalAlignment(EHTA_Center);
      Sign->SetVerticalAlignment(EVRTA_TextCenter);
      Sign->SetWorldSize(24);
-     Sign->SetText(FText::FromString(bDungeon?TEXT("East Cottage"):TEXT("Cottage")));
+     Sign->SetText(FText::FromString(bDungeon?TEXT("Cottage"):TEXT("Cottage")));
      Sign->RegisterComponent();
     }
     auto* Door=NewObject<UStaticMeshComponent>(District);
@@ -407,7 +423,7 @@ namespace CryptSettlements
   }
 
   // Separate eastern cottage, facing the town square from its north-east edge.
-  Building(FVector(4080,CryptWorld::TownNorth+1150,Ground),390,410,1,false,0.f,false,true);
+  Building(FVector(4080,CryptWorld::TownNorth+1150,Ground),390,410,1,false,0.f);
   // Concealed castle postern: separate outbound-only escape.
   const double ExitX=CryptWorld::CastleOffsetX+4100.;
   const FVector Postern(ExitX,-975,CryptDungeons::GetGroundHeight(ExitX,-975)+115);
@@ -458,22 +474,53 @@ namespace CryptSettlements
     Box(Road, FVector(X, Street, Ground+6), FVector(2560,340,20));
     Box(Road, FVector(X+1100,Y+8,Ground+8), FVector(230,976,24));
     const float WorkDepth = 490 + 35 * (Town % 4);
-    for (int32 Shop = 0; Shop < 2; ++Shop)
+    for (int32 Shop = 0; Shop < 3; ++Shop)
     {
-     const float ShopY = Y + 260 + Shop * 720;
+     const float ShopY = Y - 650 + Shop * 720;
      Building(FVector(X+800, ShopY, Ground), 440 + 42*(Town % 3), WorkDepth, Town+Shop, true);
      Box(Road, FVector(X+940,ShopY-WorkDepth/2-65,Ground+10),FVector(440,138,28));
+     const TCHAR* ShopNames[]={TEXT("Armory"),TEXT("Blacksmith"),TEXT("Sorcerer")};
+     auto* ShopLabel=NewObject<UTextRenderComponent>(District);
+     District->AddInstanceComponent(ShopLabel);
+     ShopLabel->SetupAttachment(Root);
+     ShopLabel->SetRelativeLocation(FVector(X+800,ShopY-WorkDepth/2-24,Ground+245));
+     ShopLabel->SetRelativeRotation(FRotator(0,-90,0));
+     ShopLabel->SetHorizontalAlignment(EHTA_Center);
+     ShopLabel->SetWorldSize(26);
+     ShopLabel->SetText(FText::FromString(ShopNames[Shop]));
+     ShopLabel->RegisterComponent();
+     for(int32 Item=0;Item<4;++Item)
+     {
+      const FVector Display(X+660+Item*85,ShopY+WorkDepth*.34f,Ground);
+      Box(Timber,Display+FVector(0,0,45),FVector(65,65,90));
+      if(Shop==0)
+      {
+       Box(Metal,Display+FVector(0,0,135),FVector(45,25,70));
+       Box(Metal,Display+FVector(0,0,184),FVector(30,30,30));
+       Box(Metal,Display+FVector(0,-24,128),FVector(48,9,65));
+      }
+      else if(Shop==1)
+      {
+       Box(Metal,Display+FVector(0,0,145),FVector(8,5,95));
+       Box(Timber,Display+FVector(0,0,94),FVector(35,10,8));
+      }
+      else
+      {
+       Box(LanternGlass,Display+FVector(0,0,112),FVector(22,22,40));
+       Box(Timber,Display+FVector(0,0,138),FVector(14,14,12));
+      }
+     }
     }
-    for (int32 Home = 0; Home < (Town < 10 ? 3 : 2); ++Home)
+    for (int32 Home = 0; Home < 3; ++Home)
     {
-     const float HomeX = X - 940 + 590*Home;
+     const float HomeX = X - 1020 + 650*Home;
      const float Depth = 355 + 48*((Town+Home)%5);
      const float HomeY = Street+400+Depth/2;
-     Building(FVector(HomeX, HomeY, Ground), 330 + 45*((Town+2*Home)%5), Depth, Town+Home, false);
+     Building(FVector(HomeX, HomeY, Ground), 330 + 45*((Town+2*Home)%5), Depth, Town+Home, false,0.f,false,Town==0 && Home==0);
      Box(Road, FVector(HomeX,Street+276,Ground+7),FVector(120,260,22));
      for (int32 Member = 0; Member < 4; ++Member)
      {
-      const float JobY = Y+260+(Member%2)*720-WorkDepth/2;
+      const float JobY = Y-650+(Member%3)*720-WorkDepth/2;
       const FVector AtHome(HomeX + (Member-1.5f)*24,HomeY-Depth/2+90,Ground+10);
       const FVector Door(HomeX, HomeY-Depth/2-25,Ground);
       const FVector Curb(HomeX,Street+34*Member,Ground);
