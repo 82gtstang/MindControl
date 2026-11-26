@@ -178,6 +178,45 @@ def separate_arm_torso_bridges(body, rig):
     body.data.update()
 
 
+def repair_stretched_boundary_weights(body, rig):
+    """Repair isolated conflicting weights using the connected local surface."""
+    from collections import defaultdict
+    names = {g.index:g.name for g in body.vertex_groups}
+    neighbors = defaultdict(set)
+    for e in body.data.edges:
+        a,b=e.vertices
+        neighbors[a].add(b)
+        neighbors[b].add(a)
+    weights = [{g.group:g.weight for g in v.groups} for v in body.data.vertices]
+    changes = {}
+    for side in ("L","R"):
+        sign = math.copysign(1,rig.data.bones["forearm_"+side].head_local.x)
+        arm = {i for i,n in names.items() if n in {p+"_"+side for p in ("upperarm","forearm","hand")}}
+        torso = {i for i,n in names.items() if n in ("spine","chest","pelvis","thigh_"+side)}
+        def label(w):
+            a=sum(w.get(i,0) for i in arm)
+            t=sum(w.get(i,0) for i in torso)
+            return 1 if a>.7 else 2 if t>.7 else 0
+        for v in body.data.vertices:
+            if sign*v.co.x<.12 or not .84<v.co.z<rig.data.bones["upperarm_"+side].head_local.z-.12:
+                continue
+            own=label(weights[v.index])
+            if not own: continue
+            local=[j for j in neighbors[v.index] if (body.data.vertices[j].co-v.co).length<.04]
+            if len(local)<3: continue
+            opposite=[j for j in local if label(weights[j])==3-own]
+            if len(opposite)/len(local)<.8: continue
+            merged=defaultdict(float)
+            for j in opposite:
+                for i,w in weights[j].items(): merged[i]+=w/len(opposite)
+            changes[v.index]=merged
+    for j,w in changes.items():
+        for i in weights[j]: body.vertex_groups[i].remove([j])
+        total=sum(w.values())
+        for i,value in w.items(): body.vertex_groups[i].add([j],value/total,"REPLACE")
+    print("LOCAL_BOUNDARY_WEIGHT_REPAIR",len(changes),flush=True)
+
+
 def add_hair_rig(body, rig):
     bpy.context.view_layer.objects.active = rig
     rig.select_set(True)
@@ -531,6 +570,7 @@ def main():
     separate_hand_hip_geometry(body)
     clean_arm_fragments(body)
     repair_cross_weighted_arm_regions(body, rig)
+    repair_stretched_boundary_weights(body, rig)
     add_hair_rig(body, rig)
     scene.render.fps = FPS
     make_clips(scene, rig, originals)
