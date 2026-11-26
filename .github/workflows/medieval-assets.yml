@@ -1,0 +1,32 @@
+name: Medieval Blender assets
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/build_medieval_assets.py'
+      - '.github/workflows/medieval-assets.yml'
+jobs:
+  generate:
+    runs-on: [self-hosted, Windows]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate editable meshes
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $blender = Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse | Sort-Object FullName -Descending | Select-Object -First 1
+          if (!$blender) { throw 'Blender not found' }
+          & $blender.FullName -b -t 2 --python-exit-code 1 --python tools/build_medieval_assets.py -- "$env:RUNNER_TEMP\medieval-assets"
+          if ($LASTEXITCODE -ne 0) { throw 'Asset generation failed' }
+          foreach ($name in @('H5_Cottage','A2_ArmorStand','A2_Shelves')) {
+            foreach ($ext in @('blend','fbx')) {
+              $file = Join-Path "$env:RUNNER_TEMP\medieval-assets" "$name.$ext"
+              if (!(Test-Path $file) -or (Get-Item $file).Length -lt 1024) { throw "Missing asset $file" }
+            }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Medieval-Blender-Assets
+          path: ${{ runner.temp }}/medieval-assets/
+          if-no-files-found: error
