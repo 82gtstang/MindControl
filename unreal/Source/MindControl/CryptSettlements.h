@@ -2,6 +2,8 @@
 
 #include "CryptWorldLayout.h"
 #include "CryptHero.h"
+#include "CryptDungeons.h"
+#include "Components/PointLightComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Sound/SoundBase.h"
@@ -154,7 +156,7 @@ namespace CryptSettlements
    Box(Fence, FVector(EntryX - 4, Y, Ground + 180), FVector(20, 5550, 360));
 
   // Buildings face their local street. Door and window bays are actual openings.
-  const auto Building = [&](FVector Base, float W, float D, int32 Style, bool bWork, float Yaw = 0.f, bool bSecret = false)
+  const auto Building = [&](FVector Base, float W, float D, int32 Style, bool bWork, float Yaw = 0.f, bool bSecret = false, bool bDungeon = false)
   {
    const float H = 270.f + 16.f * (Style % 4);
    const FRotator Facing(0,Yaw,0);
@@ -226,7 +228,7 @@ namespace CryptSettlements
     Part(Timber,Side*W*.30f,D*.16f,24,7,7,45);
    }
    Part(Wall,0,-D/2,H-19,128,18,38);
-   if(bSecret)
+   if(bSecret || bDungeon)
    {
     const float CX=W*.32f,CY=D*.19f;
     for(float Side : {-1.f,1.f})
@@ -251,7 +253,7 @@ namespace CryptSettlements
      Sign->SetHorizontalAlignment(EHTA_Center);
      Sign->SetVerticalAlignment(EVRTA_TextCenter);
      Sign->SetWorldSize(24);
-     Sign->SetText(FText::FromString(TEXT("Cottage")));
+     Sign->SetText(FText::FromString(bDungeon?TEXT("East Cottage"):TEXT("Cottage")));
      Sign->RegisterComponent();
     }
     auto* Door=NewObject<UStaticMeshComponent>(District);
@@ -264,13 +266,47 @@ namespace CryptSettlements
     Door->SetCollisionProfileName(TEXT("BlockAll"));
     Door->RegisterComponent();
     const FVector DoorPosition=Base+Facing.RotateVector(FVector(0,Front,106));
-    Part(Timber,-W*.30f,-D*.10f,35,75,55,60);
-    Part(LanternGlass,-W*.30f,-D*.10f,68,76,56,8);
+    if(!bDungeon) { Part(Timber,-W*.30f,-D*.10f,35,75,55,60); Part(LanternGlass,-W*.30f,-D*.10f,68,76,56,8); }
     const FVector Mouth=Base+Facing.RotateVector(FVector(CX,CY,H+145));
-    const FVector Landing=Base+Facing.RotateVector(FVector(0,-D*.12f,115));
+    const FVector Vault(Base.X,Base.Y,-3200);
+    const FVector Escape=Vault+FVector(1050,0,100);
+    if(bDungeon)
+    {
+     Box(Wall,Vault+FVector(0,0,-25),FVector(2600,1400,50));
+     Box(Wall,Vault+FVector(0,0,460),FVector(2600,1400,60));
+     for(float Side : {-1.f,1.f})
+     {
+      Box(Wall,Vault+FVector(0,Side*700,215),FVector(2600,50,430));
+      Box(Wall,Vault+FVector(Side*1300,0,215),FVector(50,1400,430));
+     }
+     // Alternating partitions form a short winding underground passage.
+     for(int32 I=0;I<3;++I)
+     {
+      const float X=-550.f+I*500.f;
+      Box(Wall,Vault+FVector(X,(I%2?1.f:-1.f)*220,210),FVector(65,900,420));
+     }
+     for(int32 I=0;I<5;++I)
+     {
+      const FVector Torch=Vault+FVector(-1050+I*500, (I%2?1.f:-1.f)*610,240);
+      Box(LanternGlass,Torch,FVector(24,24,40));
+      auto* Light=NewObject<UPointLightComponent>(District);
+      District->AddInstanceComponent(Light);
+      Light->SetupAttachment(Root);
+      Light->SetMobility(EComponentMobility::Movable);
+      Light->SetRelativeLocation(Torch);
+      Light->SetLightColor(FLinearColor(1.f,.58f,.24f));
+      Light->SetIntensity(2800);
+      Light->SetAttenuationRadius(850);
+      Light->SetCastShadows(false);
+      Light->RegisterComponent();
+     }
+     Box(Timber,Vault+FVector(1230,0,115),FVector(18,150,230));
+     Box(LanternGlass,Vault+FVector(1215,0,210),FVector(10,24,24));
+    }
+    const FVector Landing=bDungeon?Vault+FVector(-1050,0,115):Base+Facing.RotateVector(FVector(0,-D*.12f,115));
     const FVector Chest=Base+Facing.RotateVector(FVector(-W*.30f,-D*.10f,100));
     FTimerHandle SecretTimer;
-    World->GetTimerManager().SetTimer(SecretTimer,FTimerDelegate::CreateWeakLambda(District,[World,Mouth,Landing,Chest,Door,DoorPosition,Base,Facing,D,bEntered=false,bUnlocked=false]() mutable
+    World->GetTimerManager().SetTimer(SecretTimer,FTimerDelegate::CreateWeakLambda(District,[World,Mouth,Landing,Chest,Door,DoorPosition,Base,Facing,D,bDungeon,Escape,bEntered=false,bUnlocked=false]() mutable
     {
      auto* PC=World->GetFirstPlayerController();
      auto* Hero=PC?Cast<ACryptHero>(PC->GetPawn()):nullptr;
@@ -283,6 +319,16 @@ namespace CryptSettlements
       bEntered=true;
       if(auto* Sound=LoadObject<USoundBase>(nullptr,TEXT("/Game/Environment/MindControl/Audio/ChimneyMagic.ChimneyMagic")))
        UGameplayStatics::PlaySound2D(Hero,Sound,Hero->GetAudioSetting(0)*Hero->GetAudioSetting(4));
+     }
+     if(bDungeon)
+     {
+      if(FVector::DistSquared(P,Escape)<FMath::Square(115.))
+      {
+       const double X=CryptWorld::CastleOffsetX+4100., Y=650.;
+       Hero->SetActorLocation(FVector(X,Y,CryptDungeons::GetGroundHeight(X,Y)+115),false,nullptr,ETeleportType::TeleportPhysics);
+       Hero->GetCharacterMovement()->StopMovementImmediately();
+      }
+      return;
      }
      if(bEntered) bUnlocked=true;
      if(bUnlocked && IsValid(Door))
@@ -360,6 +406,8 @@ namespace CryptSettlements
    Box(Road,FVector(X,(Front+SquareEdge)*.5f,Ground+5),FVector(119,FMath::Abs(SquareEdge-Front)+20,10));
   }
 
+  // Separate eastern cottage, facing the town square from its north-east edge.
+  Building(FVector(4080,CryptWorld::TownNorth+1150,Ground),390,410,1,false,0.f,false,true);
   const TCHAR* TownNames[] = {
    TEXT("Alderbrook"), TEXT("Briar Glen"), TEXT("Copper Hollow"), TEXT("Dunmere"),
    TEXT("Elder Ford"), TEXT("Fernwick"), TEXT("Greybank"), TEXT("Hawthorn"),
