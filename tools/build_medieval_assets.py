@@ -83,25 +83,49 @@ def sphere(n,p,d,m):
 def building(name,w,d,h,rise):
  reset()
  # Full-size timber and masonry structure with open entrance.
- for x in (-w/2,w/2):
-  box("Side masonry",(x,0,h/2),(.32,d,h),stone)
- box("Rear masonry",(0,d/2,h/2),(w,.32,h),stone)
+ # Three full stories with progressively projecting timber upper levels.
+ story=h/3
  door=1.8 if name=="H5_Cottage" else 2.8
- for side in (-1,1):
-  box("Front wall",(side*(w+door)/4,-d/2,h/2),((w-door)/2,.32,h),plaster)
- box("Door header",(0,-d/2,(h+2.4)/2),(door,.32,h-2.4),wood)
- for j in range(int(d/.24)):
-  box("Oak floor plank",(0,-d/2+.12+j*.24,.04),(w,.235,.08),wood)
- for y in (-d/2-.18,d/2+.18):
-  for j in range(1+int(w/1.5)):
-   x=-w/2+j*w/int(w/1.5)
-   if y<0 and abs(x)<door/2: continue
-   beam("Structural oak post",(x,y,.1),(x,y,h),.2,wood)
-  for z in (.35,h*.55,h-.12):
-   for side in (-1,1):
-    beam("Horizontal timber",(side*door/2,y,z),(side*w/2,y,z),.18,wood)
+ for level in range(3):
+  z=level*story; W=w+level*.55; D=d+level*.35
   for side in (-1,1):
-   beam("Diagonal timber",(side*door/2,y,h*.55),(side*w/2,y,h-.12),.16,wood)
+   box("Side wall",(side*W/2,0,z+story/2),(.32,D,story),stone if level==0 else plaster)
+  box("Rear wall",(0,D/2,z+story/2),(W,.32,story),stone if level==0 else plaster)
+  opening=door if level==0 else 0
+  for side in (-1,1):
+   box("Front wall",(side*(W+opening)/4,-D/2,z+story/2),((W-opening)/2,.32,story),stone if level==0 else plaster)
+  if level==0: box("Door header",(0,-D/2,(story+2.5)/2),(door,.32,story-2.5),wood)
+  for j in range(int(D/.28)):
+   yy=-D/2+.14+j*.28
+   # Reserve stairwell in upper decks.
+   if level and -D*.35<yy<D*.35:
+    box("Floor plank left",(-W*.12,yy,z+.08),(W*.76,.275,.16),wood)
+   else: box("Floor plank",(0,yy,z+.08),(W,.275,.16),wood)
+  for side in (-1,1):
+   y=side*(D/2+.19)
+   beam("Story sill",(-W/2,y,z+.18),(W/2,y,z+.18),.24,wood) if level else None
+   beam("Story crown",(-W/2,y,z+story-.12),(W/2,y,z+story-.12),.24,wood)
+   for j in range(7):
+    x=-W/2+j*W/6
+    if level==0 and side==-1 and abs(x)<door/2: continue
+    beam("Oak post",(x,y,z+.15),(x,y,z+story-.15),.22,wood)
+   if level:
+    for j in range(6):
+     x=-W/2+j*W/6
+     beam("Diagonal brace",(x,y,z+.2),(x+W/6,y,z+story-.2),.15,wood)
+    for x in (-W*.32,0,W*.32):
+     box("Upper window frame",(x,y+side*.08,z+story*.56),(1.35,.18,1.65),wood)
+     box("Upper glazing",(x,y+side*.19,z+story*.56),(1.12,.045,1.4),glass)
+     for k in range(5):
+      box("Lead mullion",(x-.56+k*.28,y+side*.22,z+story*.56),(.035,.05,1.4),iron)
+      box("Lead crossbar",(x,y+side*.22,z+story*.56-.7+k*.35),(1.12,.05,.035),iron)
+  if level<2:
+   steps=math.ceil(story/.18); run=D*.65
+   for k in range(steps):
+    yy=-run/2+(k+.5)*run/steps if level==0 else run/2-(k+.5)*run/steps
+    box("Stair tread",(W*.38,yy,z+(k+1)*story/steps),(1.25,run/steps+.04,.14),wood)
+   beam("Stair handrail",(W*.30,-run/2,z+(.9 if level==0 else story+.9)),(W*.30,run/2,z+(story+.9 if level==0 else .9)),.09,wood)
+ w+=1.1;d+=.7
  for side in (-1,1):
   angle=math.atan2(rise,d/2)
   box("Roof deck",(0,side*d/4,h+rise/2),(w+.65,math.hypot(d/2,rise)+.4,.16),wood,(-side*angle,0,0))
@@ -195,7 +219,7 @@ def building(name,w,d,h,rise):
    box("Hollow chimney end",(w*.25,d*.15+side*.6,h+rise),(1,.2,2.6),stone)
  export(name)
 
-building("H5_Cottage",10,12,5.2,3.8)
+building("H5_Cottage",10,12,9.6,4.2)
 reset()
 for x in (-.35,.35): box("Stand foot",(x,0,.05),(.5,.45,.1),wood)
 box("Stand post",(0,0,.85),(.1,.1,1.7),wood)
@@ -211,7 +235,7 @@ for i in range(4): box("Shelf",(0,0,.2+i*.48),(1.8,.48,.055),wood)
 for x in (-.87,.87): box("Shelf upright",(x,0,.95),(.08,.48,1.9),wood)
 export("A2_Shelves")
 
-building("A2_Armory",13,16,6.2,4.5)
+building("A2_Armory",13,16,10.8,5)
 reset()
 sphere("Shield body",(0,0,.55),(.65,.12,.95),wood)
 sphere("Iron boss",(0,-.075,.62),(.23,.12,.23),iron)
@@ -234,8 +258,8 @@ box("Bottle neck",(0,0,.26),(.065,.065,.12),glass)
 box("Cork",(0,0,.33),(.07,.07,.045),wood)
 export("Sorcerer_Potion")
 
-building("Blacksmith_Shop",13,16,6.2,4.5)
-building("Sorcerer_Shop",13,16,6.5,5)
+building("Blacksmith_Shop",13,16,10.8,5)
+building("Sorcerer_Shop",13,16,11.4,5.2)
 leaf=mat("Herb foliage",(.12,.36,.08))
 for i,name in enumerate(("Lavender","Chamomile","Bloodleaf","Mint","Silverleaf","BlueSage","Firebloom","Moonflower","LemonBalm","Yarrow")):
  reset()
