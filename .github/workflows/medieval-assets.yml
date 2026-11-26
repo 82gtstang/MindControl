@@ -8,7 +8,7 @@ on:
 jobs:
   generate:
     runs-on: [self-hosted, Windows]
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Generate editable meshes
@@ -19,13 +19,14 @@ jobs:
           if (!$blender) { throw 'Blender not found' }
           & $blender.FullName -b -t 2 --python-exit-code 1 --python tools/build_medieval_assets.py -- "$env:RUNNER_TEMP\medieval-assets"
           if ($LASTEXITCODE -ne 0) { throw 'Asset generation failed' }
-          foreach ($name in @('H5_Cottage','A2_ArmorStand','A2_Shelves')) {
-            foreach ($ext in @('blend','fbx')) {
+          foreach ($name in @('H5_Cottage','A2_ArmorStand','A2_Shelves','A2_Armory','A2_Shield','Blacksmith_Sword','Blacksmith_Anvil','Sorcerer_Potion','Blacksmith_Shop','Sorcerer_Shop','Herb_Lavender','Herb_Chamomile','Herb_Bloodleaf','Herb_Mint','Herb_Silverleaf','Herb_BlueSage','Herb_Firebloom','Herb_Moonflower','Herb_LemonBalm','Herb_Yarrow')) {
+            foreach ($ext in @('blend','fbx','png')) {
               $file = Join-Path "$env:RUNNER_TEMP\medieval-assets" "$name.$ext"
               if (!(Test-Path $file) -or (Get-Item $file).Length -lt 1024) { throw "Missing asset $file" }
             }
           }
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: Medieval-Blender-Assets
           path: ${{ runner.temp }}/medieval-assets/
