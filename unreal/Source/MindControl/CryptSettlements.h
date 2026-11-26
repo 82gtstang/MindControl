@@ -486,10 +486,10 @@ namespace CryptSettlements
   {
    const float X = StartX - Column * Spacing;
    Box(Road, FVector(X+1100,0,Ground+4), FVector(340,HalfY*2,16));
-   for (int32 Row = 0; Row < 4; ++Row)
+   for (int32 Row = 0; Row < 1; ++Row)
    {
-    const int32 Town = Column * 4 + Row;
-    const float Y = (Row - 1.5f) * 2640;
+    const int32 Town = Column;
+    const float Y = 0.f;
     const float Street = Y - 480;
     SpawnMerchant(World,FVector(X+490,Street+118,Ground+16),Town);
     Box(Timber,FVector(X+870,Street+210,Ground+81),FVector(13,13,162));
@@ -505,7 +505,7 @@ namespace CryptSettlements
     Box(Road, FVector(X, Street, Ground+6), FVector(2560,340,20));
     Box(Road, FVector(X+1100,Y+8,Ground+8), FVector(230,976,24));
     const float WorkDepth = 490 + 35 * (Town % 4);
-    for (int32 Shop = 0; Shop < 3; ++Shop)
+    for (int32 Shop = 0; Shop < (Town==0 ? 3 : 0); ++Shop)
     {
      const float ShopY = Y - 650 + Shop * 720;
      Building(FVector(X+800, ShopY, Ground), 440 + 42*(Town % 3), WorkDepth, Town+Shop, true);
@@ -542,12 +542,12 @@ namespace CryptSettlements
       }
      }
     }
-    for (int32 Home = 0; Home < 3; ++Home)
+    for (int32 Home = 0; Home < 5; ++Home)
     {
-     const float HomeX = X - 1020 + 650*Home;
-     const float Depth = 355 + 48*((Town+Home)%5);
-     const float HomeY = Street+400+Depth/2;
-     Building(FVector(HomeX, HomeY, Ground), 330 + 45*((Town+2*Home)%5), Depth, Town+Home, false,0.f,false,Town==0 && Home==0);
+     constexpr float HouseWidth=420.f, Depth=420.f, Gap=457.2f;
+     const float HomeX=X-650.f;
+     const float HomeY=(Home-2)*(Depth+Gap);
+     Building(FVector(HomeX, HomeY, Ground),HouseWidth,Depth,Town+Home,false,0.f,false,Town==0 && Home==0);
      Box(Road, FVector(HomeX,Street+276,Ground+7),FVector(120,260,22));
      for (int32 Member = 0; Member < 4; ++Member)
      {
@@ -556,9 +556,9 @@ namespace CryptSettlements
       const FVector Door(HomeX, HomeY-Depth/2-25,Ground);
       const FVector Curb(HomeX,Street+34*Member,Ground);
       const FVector Junction(X+1100,Curb.Y,Ground);
-      const FVector ShopCorner(X+1100,JobY-76,Ground);
-      const FVector ShopDoor(X+800,JobY-76,Ground);
-      const FVector Work(X+800,JobY+WorkDepth*.56f,Ground+10);
+      const FVector ShopCorner(StartX+1100,JobY-76,Ground);
+      const FVector ShopDoor(StartX+800,JobY-76,Ground);
+      const FVector Work(StartX+800,JobY+WorkDepth*.56f,Ground+10);
       FResident Resident;
       Resident.bPet = Member == 3;
       Resident.Job = (Town+Member)%4;
