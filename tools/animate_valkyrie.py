@@ -658,8 +658,6 @@ def main():
     scene.render.fps = FPS
     make_clips(scene, rig, originals)
     audit_arm_deformation(scene, body, rig, target_path)
-    repair_audited_bridge_edges(scene, body, rig, target_path)
-    close_local_repair_openings(body, rig)
     audit_arm_deformation(scene, body, rig, target_path)
     export_arm_review(scene, body, rig, target_path)
     scene.frame_set(1)
