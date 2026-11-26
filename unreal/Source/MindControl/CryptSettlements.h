@@ -234,28 +234,24 @@ namespace CryptSettlements
      Part(Wall,CX+Side*61,CY,H+60,14,136,170);
      Part(Wall,CX,CY+Side*61,H+60,108,14,170);
     }
-    // Large hanging sign beside the doorway, with a solid jumpable top.
-    const float SignX=W*.5f;
-    Part(Timber,SignX,Front-83,126,210,155,22);
-    Part(Timber,SignX,Front-151,93,210,16,65);
-    Part(LanternGlass,SignX,Front-161,124,218,5,7);
-    Part(LanternGlass,SignX,Front-161,62,218,5,7);
-    Part(LanternGlass,SignX-105,Front-161,93,7,5,65);
-    Part(LanternGlass,SignX+105,Front-161,93,7,5,65);
-    Part(Trim,SignX-85,Front-28,168,12,12,84);
-    Part(Trim,SignX+85,Front-28,168,12,12,84);
+    // Freestanding street sign matching the town's timber signs.
+    const float SignX=W*.40f;
+    const float SignY=Front-110.f;
+    Part(Timber,SignX,SignY,81,13,13,162);
+    Part(Timber,SignX,SignY,142,145,12,40);
+    // Solid cap provides a landing surface for the roof jump.
+    Part(Timber,SignX,SignY,166,145,90,8);
     for(float Side : {-1.f,1.f})
     {
      auto* Sign=NewObject<UTextRenderComponent>(District);
      District->AddInstanceComponent(Sign);
      Sign->SetupAttachment(Root);
-     Sign->SetRelativeLocation(Base+Facing.RotateVector(FVector(SignX,Front-151+Side*11,93)));
+     Sign->SetRelativeLocation(Base+Facing.RotateVector(FVector(SignX,SignY+Side*8,142)));
      Sign->SetRelativeRotation(FRotator(0,Yaw+Side*90,0));
      Sign->SetHorizontalAlignment(EHTA_Center);
      Sign->SetVerticalAlignment(EVRTA_TextCenter);
-     Sign->SetTextRenderColor(FColor(255,225,125));
-     Sign->SetWorldSize(26);
-     Sign->SetText(FText::FromString(TEXT("LOCKED\nCOTTAGE")));
+     Sign->SetWorldSize(24);
+     Sign->SetText(FText::FromString(TEXT("Cottage")));
      Sign->RegisterComponent();
     }
     auto* Door=NewObject<UStaticMeshComponent>(District);
