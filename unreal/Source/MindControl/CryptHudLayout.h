@@ -67,6 +67,8 @@ struct FCryptHudLayout
    FMath::Abs(Delta.Y)<=SatchelSize.Y*.040;
  }
 
+ FVector2D SettingsTab() const { return InSatchel(.28f,.27f); }
+ FVector2D AudioRow(int32 I) const { return InSatchel(.50f,.38f+.077f*I); }
  FVector2D LogSize,LogOrigin,LogOlder,LogNewer;
  FVector2D RightThumbCenter;
  float RightThumbRadius;
