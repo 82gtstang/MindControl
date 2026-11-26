@@ -106,6 +106,10 @@ if __name__ == "__main__":
     music()
     battle_music()
     footstep()
+    chime = [0.] * int(2.8 * RATE)
+    for i, pitch in enumerate((72,76,79,83,88,91)):
+        note(chime, i*.14, 1.8, pitch, .13)
+    write("ChimneyMagic", chime)
     for args in [("Punch",.22,100,.55,16),
                  ("SwordSwing",.4,380,.92,5),("SwordImpact",.45,720,.55,8),
                  ("Splash",.7,140,.95,4),("SwimStroke",.55,90,.95,5)]:
