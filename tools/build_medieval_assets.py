@@ -61,7 +61,21 @@ def export(n):
  scene.display.shading.show_cavity=True
  scene.render.resolution_x=1600;scene.render.resolution_y=1600;scene.render.resolution_percentage=100
  scene.render.image_settings.file_format="PNG";scene.render.filepath=os.path.join(out,n+".png")
- if os.environ.get("MEDIEVAL_SKIP_PREVIEWS")!="1": bpy.ops.render.render(write_still=True)
+ if os.environ.get("MEDIEVAL_SKIP_PREVIEWS")!="1":
+  bpy.ops.render.render(write_still=True)
+  if n in ("H5_Cottage","A2_Armory","Blacksmith_Shop","Sorcerer_Shop"):
+   for level in range(3):
+    floorheight={"H5_Cottage":3.2,"A2_Armory":3.6,"Blacksmith_Shop":3.6,"Sorcerer_Shop":3.8}[n]
+    z=level*floorheight
+    hidden=[]
+    for obj in scene.objects:
+     if obj.type=="MESH" and min((obj.matrix_world@Vector(v)).z for v in obj.bound_box)>=z+floorheight-.08:
+      obj.hide_render=True;hidden.append(obj)
+    cam.location=Vector((span*.38,-span*.45,z+span*.7))
+    cam.rotation_euler=(Vector((0,0,z+floorheight*.35))-cam.location).to_track_quat("-Z","Y").to_euler()
+    scene.render.filepath=os.path.join(out,n+"_floor"+str(level+1)+".png")
+    bpy.ops.render.render(write_still=True)
+    for obj in hidden: obj.hide_render=False
  bpy.data.objects.remove(cam,do_unlink=True)
  bpy.data.objects.remove(lamp,do_unlink=True)
  bpy.ops.object.select_all(action="DESELECT")
@@ -85,6 +99,10 @@ def building(name,w,d,h,rise):
  # Full-size timber and masonry structure with open entrance.
  # Three full stories with progressively projecting timber upper levels.
  story=h/3
+ amber=mat("Lantern luminous amber",(.9,.48,.12),.4)
+ shader=amber.node_tree.nodes.get("Principled BSDF")
+ shader.inputs["Emission Color"].default_value=(1,.38,.08,1)
+ shader.inputs["Emission Strength"].default_value=2.0
  door=1.8 if name=="H5_Cottage" else 2.8
  for level in range(3):
   z=level*story; W=w+level*.55; D=d+level*.35
@@ -120,6 +138,16 @@ def building(name,w,d,h,rise):
      for k in range(5):
       box("Lead mullion",(x-.56+k*.28,y+side*.22,z+story*.56),(.035,.05,1.4),iron)
       box("Lead crossbar",(x,y+side*.22,z+story*.56-.7+k*.35),(1.12,.05,.035),iron)
+  for side in (-1,1):
+   for yy in (-D*.28,D*.28):
+    xx=side*(W/2-.35);zz=z+story*.72
+    box("Lantern wall bracket",(xx,yy,zz+.22),(.38,.08,.08),iron)
+    box("Lantern glowing glass",(xx-side*.18,yy,zz),(.16,.18,.28),amber)
+    for dx in (-.09,.09):
+     for dy in (-.1,.1):
+      box("Lantern cage",(xx-side*.18+dx,yy+dy,zz),(.025,.025,.32),iron)
+    for dz in (-.17,.17):
+     box("Lantern cap",(xx-side*.18,yy,zz+dz),(.23,.25,.05),iron)
   if level<2:
    steps=math.ceil(story/.18); run=D*.65
    for k in range(steps):
