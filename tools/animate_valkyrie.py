@@ -550,6 +550,36 @@ def export_arm_review(scene, body, rig, target_path):
     print("ARM_REVIEW_EXPORTED", str(folder), flush=True)
 
 
+def repair_audited_bridge_edges(scene, body, rig, target_path):
+    """Remove only faces spanning measured extreme arm/torso deformation edges."""
+    import json
+    import bmesh
+    from pathlib import Path
+    report = json.loads(Path(target_path).with_name("ArmDeformationAudit.json").read_text())
+    candidates = set()
+    for item in report["worst_edges"]:
+        if item["posed_length"] < .12 or item["ratio"] < 6:
+            continue
+        def region(weights):
+            a=sum(w for n,w in weights if n.startswith(("upperarm_","forearm_","hand_")))
+            t=sum(w for n,w in weights if n in ("spine","chest","pelvis","thigh_L","thigh_R"))
+            return 1 if a>.65 else 2 if t>.65 else 0
+        if {region(w) for w in item["weights"]} == {1,2}:
+            candidates.add(tuple(sorted(item["edge"])))
+    mesh=bmesh.new()
+    mesh.from_mesh(body.data)
+    faces={f for e in mesh.edges if tuple(sorted(v.index for v in e.verts)) in candidates for f in e.link_faces}
+    count=len(faces)
+    if faces:
+        bmesh.ops.delete(mesh,geom=list(faces),context="FACES_ONLY")
+        wire=[e for e in mesh.edges if e.is_wire]
+        if wire: bmesh.ops.delete(mesh,geom=wire,context="EDGES")
+        mesh.to_mesh(body.data)
+        body.data.update()
+    mesh.free()
+    print("AUDITED_BRIDGE_FACE_REMOVAL",len(candidates),count,flush=True)
+
+
 def main():
     source_path, target_path = sys.argv[sys.argv.index("--") + 1:]
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -570,10 +600,11 @@ def main():
     separate_hand_hip_geometry(body)
     clean_arm_fragments(body)
     repair_cross_weighted_arm_regions(body, rig)
-    repair_stretched_boundary_weights(body, rig)
     add_hair_rig(body, rig)
     scene.render.fps = FPS
     make_clips(scene, rig, originals)
+    audit_arm_deformation(scene, body, rig, target_path)
+    repair_audited_bridge_edges(scene, body, rig, target_path)
     audit_arm_deformation(scene, body, rig, target_path)
     export_arm_review(scene, body, rig, target_path)
     scene.frame_set(1)
