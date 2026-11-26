@@ -71,3 +71,41 @@ reset()
 for i in range(4): box("Shelf",(0,0,.2+i*.48),(1.8,.48,.055),wood)
 for x in (-.87,.87): box("Shelf upright",(x,0,.95),(.08,.48,1.9),wood)
 export("A2_Shelves")
+
+reset()
+# Rustic armory shell with open doorway and timber roof.
+for x in (-3,3):
+ box("Stone side wall",(x,0,1.6),(.3,5,3.2),stone)
+box("Rear wall",(0,2.5,1.6),(6,.3,3.2),stone)
+for x in (-1.95,1.95):
+ box("Front stone bay",(x,-2.5,1.6),(2.1,.3,3.2),stone)
+box("Lintel",(0,-2.5,2.85),(1.8,.35,.7),wood)
+box("Stone floor",(0,0,-.08),(6,5,.16),stone)
+for side in (-1,1):
+ for row in range(12):
+  y=side*(row+.5)*.23
+  for col in range(20):
+   box("Roof tile",(-3.15+col*.33,y,4.5-abs(y)*.5),(.35,.29,.06),random.choice(clay),(-side*math.atan(.5),0,0))
+ for x in (-3,0,3): beam("Rafter",(x,0,4.5),(x,side*2.7,3.15),.19,wood)
+export("A2_Armory")
+reset()
+sphere("Shield body",(0,0,.55),(.65,.12,.95),wood)
+sphere("Iron boss",(0,-.075,.62),(.23,.12,.23),iron)
+for x in (-.2,.2): box("Iron strap",(x,-.07,.55),(.055,.035,.65),iron)
+export("A2_Shield")
+reset()
+box("Sword blade",(0,0,.64),(.065,.025,.85),iron,bevel=.009)
+box("Crossguard",(0,0,.22),(.24,.05,.055),iron)
+box("Leather grip",(0,0,.12),(.045,.045,.17),leather)
+sphere("Pommel",(0,0,.025),(.075,.075,.075),iron)
+export("Blacksmith_Sword")
+reset()
+box("Anvil base",(0,0,.12),(.55,.4,.24),iron)
+box("Anvil waist",(0,0,.35),(.28,.25,.3),iron)
+box("Anvil face",(0,0,.56),(.85,.32,.15),iron)
+export("Blacksmith_Anvil")
+reset()
+sphere("Potion flask",(0,0,.12),(.19,.19,.23),glass)
+box("Bottle neck",(0,0,.26),(.065,.065,.12),glass)
+box("Cork",(0,0,.33),(.07,.07,.045),wood)
+export("Sorcerer_Potion")
