@@ -168,6 +168,9 @@ void ACryptHero::BeginPlay()
  {
   GConfig->GetFloat(TEXT("MindControl.Audio"),TEXT("MusicVolume"),MusicVolume,GGameUserSettingsIni);
   GConfig->GetFloat(TEXT("MindControl.Audio"),TEXT("EffectsVolume"),EffectsVolume,GGameUserSettingsIni);
+  const TCHAR* Keys[]={TEXT("MasterVolume"),TEXT("BattleVolume"),TEXT("FootstepVolume"),TEXT("SwimmingVolume")};
+  float* Values[]={&MasterVolume,&BattleVolume,&FootstepVolume,&SwimmingVolume};
+  for(int32 I=0;I<4;++I) { GConfig->GetFloat(TEXT("MindControl.Audio"),Keys[I],*Values[I],GGameUserSettingsIni); *Values[I]=FMath::Clamp(*Values[I],0.f,1.f); }
  }
  MusicVolume=FMath::Clamp(MusicVolume,0.f,1.f);
  EffectsVolume=FMath::Clamp(EffectsVolume,0.f,1.f);
@@ -232,6 +235,7 @@ void ACryptHero::Tick(float DeltaSeconds)
  if(IsLocallyControlled())
  {
   USoundBase* DesiredMusic=(GetCombatEnemy() && BattleMusic)?BattleMusic:FantasyMusic;
+  const float CurrentMusicVolume=MasterVolume*(DesiredMusic==BattleMusic?BattleVolume:MusicVolume);
   if(MusicPlayer && DesiredMusic && MusicPlayer->Sound!=DesiredMusic)
   {
    MusicPlayer->FadeOut(.45f,0.f);
@@ -239,17 +243,17 @@ void ACryptHero::Tick(float DeltaSeconds)
   }
   if(!MusicPlayer && DesiredMusic)
   {
-   MusicPlayer=UGameplayStatics::SpawnSound2D(this,DesiredMusic,MusicVolume,1.f,0.f,nullptr,false,false);
-   if(MusicPlayer) MusicPlayer->FadeIn(.45f,MusicVolume);
+   MusicPlayer=UGameplayStatics::SpawnSound2D(this,DesiredMusic,CurrentMusicVolume,1.f,0.f,nullptr,false,false);
+   if(MusicPlayer) MusicPlayer->FadeIn(.45f,CurrentMusicVolume);
   }
-  if(MusicPlayer && !MusicPlayer->IsPlaying() && MusicVolume>0.f) MusicPlayer->Play();
+  if(MusicPlayer) { MusicPlayer->SetVolumeMultiplier(CurrentMusicVolume); if(!MusicPlayer->IsPlaying() && CurrentMusicVolume>0.f) MusicPlayer->Play(); }
   StepAudioTime=FMath::Max(0.f,StepAudioTime-DeltaSeconds);
   const bool bSwimming=bSwimmingPool;
   const float AudioSpeed=GetVelocity().Size();
   if(StepAudioTime<=0.f && AudioSpeed>20.f && (bSwimming || GetCharacterMovement()->IsMovingOnGround()))
   {
    if(USoundBase* StepSound=bSwimming?SwimSound:FootstepSound)
-    UGameplayStatics::PlaySoundAtLocation(this,StepSound,GetActorLocation(),(EffectsVolume)*(bSwimming?1.f:.5f));
+    UGameplayStatics::PlaySoundAtLocation(this,StepSound,GetActorLocation(),MasterVolume*(bSwimming?SwimmingVolume:FootstepVolume));
    StepAudioTime=bSwimming?.60f:FMath::Clamp(85.f/AudioSpeed,.25f,.65f);
   }
  }
@@ -592,7 +596,7 @@ void ACryptHero::StartStrike(bool bSpin)
  AttackCooldown=StrikeDuration+FMath::Max(.04f,.28f-GetDexterity()*.010f);
  PlayOceanAction(bSpin?OceanSpin:OceanAttack,StrikeDuration);
  if(USoundBase* StrikeSound=StrikeWeapon==ECryptWeapon::Sword || StrikeWeapon==ECryptWeapon::Axe ? SwordSound : PunchSound)
-  UGameplayStatics::PlaySoundAtLocation(this,StrikeSound,GetActorLocation(),EffectsVolume);
+  UGameplayStatics::PlaySoundAtLocation(this,StrikeSound,GetActorLocation(),MasterVolume*EffectsVolume);
 }
 
 void ACryptHero::ResolveStrike()
@@ -1083,6 +1087,10 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
  }
  if(bInventoryOpen)
  {
+  if(Layout.HitGear(TouchPoint,Layout.SettingsTab())) { bAudioSettings=!bAudioSettings; bGearPage=false; bSatchelJournal=false; return; }
+  if(bAudioSettings) {
+   for(int32 I=0;I<6;++I) { const FVector2D P=Layout.AudioRow(I); if(FMath::Abs(TouchPoint.Y-P.Y)<Layout.SatchelSize.Y*.035f && TouchPoint.X>=Layout.InSatchel(.46f,0).X && TouchPoint.X<=Layout.InSatchel(.87f,0).X) { SetAudioSetting(I,FMath::Clamp(float((TouchPoint.X-Layout.InSatchel(.46f,0).X)/(Layout.SatchelSize.X*.41f)),0.f,1.f)); return; } } return;
+  }
   if(Layout.HitGear(TouchPoint,Layout.GearTab()))
   {
    bGearPage=!bGearPage;
@@ -1206,6 +1214,19 @@ void ACryptHero::TouchPressed(ETouchIndex::Type FingerIndex,FVector Location)
 
 
 
+float ACryptHero::GetAudioSetting(int32 Index) const
+{
+ const float Values[]={MasterVolume,MusicVolume,BattleVolume,FootstepVolume,EffectsVolume,SwimmingVolume};
+ return Index>=0 && Index<6?Values[Index]:0.f;
+}
+void ACryptHero::SetAudioSetting(int32 Index,float Value)
+{
+ if(Index<0 || Index>=6) return;
+ float* Values[]={&MasterVolume,&MusicVolume,&BattleVolume,&FootstepVolume,&EffectsVolume,&SwimmingVolume};
+ const TCHAR* Keys[]={TEXT("MasterVolume"),TEXT("MusicVolume"),TEXT("BattleVolume"),TEXT("FootstepVolume"),TEXT("EffectsVolume"),TEXT("SwimmingVolume")};
+ *Values[Index]=FMath::Clamp(Value,0.f,1.f);
+ if(GConfig) { GConfig->SetFloat(TEXT("MindControl.Audio"),Keys[Index],*Values[Index],GGameUserSettingsIni); GConfig->Flush(false,GGameUserSettingsIni); }
+}
 void ACryptHero::SetThumbAction(ECryptThumbAction Action)
 {
  ThumbAction=Action;
