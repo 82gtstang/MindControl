@@ -100,6 +100,7 @@ def building(name,w,d,h,rise):
    # Reserve stairwell in upper decks.
    if level and -D*.35<yy<D*.35:
     box("Floor plank left",(-W*.12,yy,z+.08),(W*.76,.275,.16),wood)
+    box("Stairwell outer edge",(W*.47,yy,z+.08),(W*.06,.275,.16),wood)
    else: box("Floor plank",(0,yy,z+.08),(W,.275,.16),wood)
   for side in (-1,1):
    y=side*(D/2+.19)
@@ -125,6 +126,36 @@ def building(name,w,d,h,rise):
     yy=-run/2+(k+.5)*run/steps if level==0 else run/2-(k+.5)*run/steps
     box("Stair tread",(W*.38,yy,z+(k+1)*story/steps),(1.25,run/steps+.04,.14),wood)
    beam("Stair handrail",(W*.30,-run/2,z+(.9 if level==0 else story+.9)),(W*.30,run/2,z+(story+.9 if level==0 else .9)),.09,wood)
+  if level:
+   for x in (-W*.32,-W*.08):
+    if level==2 or name=="H5_Cottage":
+     box("Bed frame",(x,D*.30,z+.35),(1.35,2.15,.38),wood)
+     box("Mattress",(x,D*.30,z+.61),(1.24,2.02,.18),leather)
+     box("Pillow",(x,D*.30+.72,z+.77),(1.05,.48,.15),plaster)
+     box("Headboard",(x,D*.30+1.05,z+.75),(1.4,.12,1.2),wood)
+    else:
+     for k in range(4):
+      box("Storage shelf",(x,D*.32,z+.45+k*.52),(1.7,.65,.09),wood)
+      for j in range(3):
+       box("Storage crate",(x-.55+j*.55,D*.32,z+.68+k*.52),(.45,.48,.36),wood)
+   box("Writing table",(-W*.30,-D*.28,z+.82),(1.5,.75,.12),wood)
+   for dx in (-.62,.62):
+    for dy in (-.29,.29):
+     box("Table leg",(-W*.30+dx,-D*.28+dy,z+.4),(.11,.11,.8),wood)
+   for yy in (-D*.35,D*.35):
+    beam("Stairwell guard",(W*.26,yy,z+.95),(W*.44,yy,z+.95),.09,wood)
+   for j in range(9):
+    yy=-D*.35+j*D*.7/8
+    beam("Baluster",(W*.26,yy,z+.16),(W*.26,yy,z+.95),.055,wood)
+   beam("Landing railing",(W*.26,-D*.35,z+.95),(W*.26,D*.35,z+.95),.09,wood)
+  elif name=="H5_Cottage":
+   box("Dining tabletop",(-W*.18,0,.82),(2.2,1.1,.13),wood)
+   for x in (-W*.18-.9,-W*.18+.9):
+    for yy in (-.4,.4): box("Dining leg",(x,yy,.4),(.14,.14,.8),wood)
+   for yy in (-.95,.95):
+    box("Dining bench",(-W*.18,yy,.47),(2.1,.4,.12),wood)
+    for x in (-W*.18-.8,-W*.18+.8): box("Bench leg",(x,yy,.23),(.15,.32,.46),wood)
+   box("Hearth",(-W*.32,D*.35,.3),(2.1,1.3,.6),stone)
  w+=1.1;d+=.7
  for side in (-1,1):
   angle=math.atan2(rise,d/2)
