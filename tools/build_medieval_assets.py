@@ -86,7 +86,7 @@ def building(name,w,d,h,rise):
  for x in (-w/2,w/2):
   box("Side masonry",(x,0,h/2),(.32,d,h),stone)
  box("Rear masonry",(0,d/2,h/2),(w,.32,h),stone)
- door=1.5 if name=="H5_Cottage" else 2.4
+ door=1.8 if name=="H5_Cottage" else 2.8
  for side in (-1,1):
   box("Front wall",(side*(w+door)/4,-d/2,h/2),((w-door)/2,.32,h),plaster)
  box("Door header",(0,-d/2,(h+2.4)/2),(door,.32,h-2.4),wood)
@@ -195,7 +195,7 @@ def building(name,w,d,h,rise):
    box("Hollow chimney end",(w*.25,d*.15+side*.6,h+rise),(1,.2,2.6),stone)
  export(name)
 
-building("H5_Cottage",7.5,9,3.6,2.8)
+building("H5_Cottage",10,12,5.2,3.8)
 reset()
 for x in (-.35,.35): box("Stand foot",(x,0,.05),(.5,.45,.1),wood)
 box("Stand post",(0,0,.85),(.1,.1,1.7),wood)
@@ -211,7 +211,7 @@ for i in range(4): box("Shelf",(0,0,.2+i*.48),(1.8,.48,.055),wood)
 for x in (-.87,.87): box("Shelf upright",(x,0,.95),(.08,.48,1.9),wood)
 export("A2_Shelves")
 
-building("A2_Armory",9.144,12.192,4.2,3.1)
+building("A2_Armory",13,16,6.2,4.5)
 reset()
 sphere("Shield body",(0,0,.55),(.65,.12,.95),wood)
 sphere("Iron boss",(0,-.075,.62),(.23,.12,.23),iron)
@@ -234,8 +234,8 @@ box("Bottle neck",(0,0,.26),(.065,.065,.12),glass)
 box("Cork",(0,0,.33),(.07,.07,.045),wood)
 export("Sorcerer_Potion")
 
-building("Blacksmith_Shop",9.144,12.192,4.2,3.1)
-building("Sorcerer_Shop",9.144,12.192,4.2,3.5)
+building("Blacksmith_Shop",13,16,6.2,4.5)
+building("Sorcerer_Shop",13,16,6.5,5)
 leaf=mat("Herb foliage",(.12,.36,.08))
 for i,name in enumerate(("Lavender","Chamomile","Bloodleaf","Mint","Silverleaf","BlueSage","Firebloom","Moonflower","LemonBalm","Yarrow")):
  reset()
