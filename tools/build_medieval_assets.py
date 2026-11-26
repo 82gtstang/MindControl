@@ -19,6 +19,26 @@ def beam(n,a,b,w,m):
  a,b=Vector(a),Vector(b);o=box(n,(a+b)/2,(w,w,(b-a).length),m);o.rotation_euler=(b-a).to_track_quat("Z","Y").to_euler()
 def reset(): bpy.ops.object.select_all(action="SELECT");bpy.ops.object.delete(use_global=False)
 def export(n):
+ scene=bpy.context.scene
+ bpy.context.view_layer.update()
+ points=[o.matrix_world @ Vector(v) for o in scene.objects if o.type=="MESH" for v in o.bound_box]
+ lo=Vector(tuple(min(p[i] for p in points) for i in range(3)))
+ hi=Vector(tuple(max(p[i] for p in points) for i in range(3)))
+ center=(lo+hi)/2;span=max((hi-lo).length,.1)
+ bpy.ops.object.camera_add(location=center+Vector((1,-1.5,.85))*span)
+ cam=bpy.context.object
+ cam.rotation_euler=(center-cam.location).to_track_quat("-Z","Y").to_euler()
+ cam.data.type="ORTHO";cam.data.ortho_scale=span*1.12;scene.camera=cam
+ scene.render.engine="BLENDER_WORKBENCH"
+ scene.display.shading.light="STUDIO"
+ scene.display.shading.color_type="MATERIAL"
+ scene.display.shading.show_shadows=True
+ scene.display.shading.show_cavity=True
+ scene.render.resolution_x=900;scene.render.resolution_y=900;scene.render.resolution_percentage=100
+ scene.render.image_settings.file_format="PNG";scene.render.filepath=os.path.join(out,n+".png")
+ bpy.ops.render.render(write_still=True)
+ bpy.data.objects.remove(cam,do_unlink=True)
+
  bpy.ops.wm.save_as_mainfile(filepath=os.path.join(out,n+".blend"))
  bpy.ops.export_scene.fbx(filepath=os.path.join(out,n+".fbx"),apply_unit_scale=True,axis_forward="-Y",axis_up="Z",bake_anim=False)
 reset()
