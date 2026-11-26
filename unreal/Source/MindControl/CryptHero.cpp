@@ -285,10 +285,10 @@ void ACryptHero::Tick(float DeltaSeconds)
  const FVector Velocity=GetVelocity();
  const float Speed=Velocity.Size2D();
  bool bLoop=true;
- if (bSwimmingPool && OceanSwim && OceanTreadWater)
+ if (bSwimmingPool && (OceanSwim || OceanTreadWater))
  {
   Desired=(FMath::Abs(SwimDepthInput)>.12f || Speed>(ActiveOceanAnimation==OceanSwim?22.f:42.f))
-   ?OceanSwim:OceanTreadWater;
+   ?(OceanSwim?OceanSwim:OceanTreadWater):(OceanTreadWater?OceanTreadWater:OceanSwim);
  }
  else if (OceanActionTime > 0.f && ActiveOceanAnimation)
  {
@@ -395,15 +395,14 @@ void ACryptHero::UpdateSwimming(float DeltaSeconds)
  auto* Movement=GetCharacterMovement();
  const FVector Position=GetActorLocation();
  const double Radius=CryptWorld::PoolRadius(Position.X,Position.Y);
- const double SeaFloor=CryptWorld::MainlandEdge(Position.X,Position.Y)>.86
-  ? CryptDungeons::GetGroundHeight(Position.X,Position.Y) : CryptWorld::SeaLevel;
+ const double SeaFloor=CryptDungeons::GetGroundHeight(Position.X,Position.Y);
  const double CapsuleHalfHeight=GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
  const double FeetZ=Position.Z-CapsuleHalfHeight;
  const bool bAtSea=SeaFloor<CryptWorld::SeaLevel-55.f &&
-  FeetZ<CryptWorld::SeaLevel+(bSwimmingPool?48.:8.) &&
+  FeetZ<CryptWorld::SeaLevel+(bSwimmingPool?55.:35.) &&
   Position.Z>=SeaFloor-220. && GetChartIndex()==INDEX_NONE;
- const bool bAtPool=Radius<(bSwimmingPool?.98:.94) &&
-  FeetZ<CryptWorld::PoolSurface+(bSwimmingPool?48.f:8.f) && Position.Z>CryptDungeons::GetGroundHeight(Position.X,Position.Y)-100.f;
+ const bool bAtPool=Radius<(bSwimmingPool?1.02:.99) && SeaFloor<CryptWorld::PoolSurface-35.f &&
+  FeetZ<CryptWorld::PoolSurface+(bSwimmingPool?55.f:35.f) && Position.Z>SeaFloor-100.f;
  const bool bInside=!SailingShip.IsValid() && (bAtSea || bAtPool);
  if(!bInside)
  {
@@ -420,6 +419,7 @@ void ACryptHero::UpdateSwimming(float DeltaSeconds)
   bSwimmingPool=true;
   SwimTargetZ=Position.Z;
   StopJumping();
+  OceanActionTime=0.f;
   Movement->MaxFlySpeed=290.f;
   Movement->SetMovementMode(MOVE_Flying);
  }
@@ -456,8 +456,8 @@ void ACryptHero::JumpOrSwim()
  SwimBurstDirection=GetVelocity().GetSafeNormal2D();
  if(SwimBurstDirection.IsNearlyZero())
   SwimBurstDirection=GetActorForwardVector().GetSafeNormal2D();
- SwimBurstTime=.24f;
- SwimBurstCooldown=.55f;
+ SwimBurstTime=1.5f;
+ SwimBurstCooldown=1.65f;
 }
 
 void ACryptHero::MoveForward(float V)
@@ -465,6 +465,7 @@ void ACryptHero::MoveForward(float V)
  if(bSwimmingPool)
  {
   SwimDepthInput=FMath::Abs(V)>.12f?FMath::Clamp(V,-1.f,1.f):0.f;
+  if(FMath::Abs(V)>.12f) AddMovementInput(FRotationMatrix(FRotator(0,GetControlRotation().Yaw,0)).GetUnitAxis(EAxis::X),FMath::Abs(V));
   return;
  }
  if(SailingShip.IsValid())
