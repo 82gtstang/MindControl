@@ -154,7 +154,7 @@ namespace CryptSettlements
    Box(Fence, FVector(EntryX - 4, Y, Ground + 180), FVector(20, 5550, 360));
 
   // Buildings face their local street. Door and window bays are actual openings.
-  const auto Building = [&](FVector Base, float W, float D, int32 Style, bool bWork, float Yaw = 0.f)
+  const auto Building = [&](FVector Base, float W, float D, int32 Style, bool bWork, float Yaw = 0.f, bool bSecret = false)
   {
    const float H = 270.f + 16.f * (Style % 4);
    const FRotator Facing(0,Yaw,0);
@@ -226,7 +226,6 @@ namespace CryptSettlements
     Part(Timber,Side*W*.30f,D*.16f,24,7,7,45);
    }
    Part(Wall,0,-D/2,H-19,128,18,38);
-   const bool bSecret=Yaw==180.f && Style==0;
    if(bSecret)
    {
     const float CX=W*.32f,CY=D*.19f;
@@ -235,17 +234,36 @@ namespace CryptSettlements
      Part(Wall,CX+Side*61,CY,H+60,14,136,170);
      Part(Wall,CX,CY+Side*61,H+60,108,14,170);
     }
-    // Exterior stone steps lead from ground to the chimney rim.
-    for(int32 I=0;I<9;++I)
-     Part(Wall,-W*.42f+I*24,D/2+55,25+I*45,85,85,24);
-    Part(Wall,CX,D/2+20,H+95,95,100,20);
+    // A broad wooden hanging sign is the only intended roof approach.
+    Part(Timber,0,Front-64,126,150,115,22);
+    Part(Trim,-65,Front-28,168,12,12,84);
+    Part(Trim,65,Front-28,168,12,12,84);
+    auto* Sign=NewObject<UTextRenderComponent>(District);
+    District->AddInstanceComponent(Sign);
+    Sign->SetupAttachment(Root);
+    Sign->SetRelativeLocation(Base+Facing.RotateVector(FVector(0,Front-123,126)));
+    Sign->SetRelativeRotation(FRotator(0,Yaw-90,0));
+    Sign->SetHorizontalAlignment(EHTA_Center);
+    Sign->SetWorldSize(22);
+    Sign->SetText(FText::FromString(TEXT("LOCKED COTTAGE")));
+    Sign->RegisterComponent();
+    auto* Door=NewObject<UStaticMeshComponent>(District);
+    District->AddInstanceComponent(Door);
+    Door->SetupAttachment(Root);
+    Door->SetMobility(EComponentMobility::Movable);
+    Door->SetStaticMesh(Cube);
+    Door->SetMaterial(0,Oak);
+    Door->SetRelativeTransform(FTransform(Facing,Base+Facing.RotateVector(FVector(0,Front,106)),FVector(1.26,.20,2.12)));
+    Door->SetCollisionProfileName(TEXT("BlockAll"));
+    Door->RegisterComponent();
+    const FVector DoorPosition=Base+Facing.RotateVector(FVector(0,Front,106));
     Part(Timber,-W*.30f,-D*.10f,35,75,55,60);
     Part(LanternGlass,-W*.30f,-D*.10f,68,76,56,8);
     const FVector Mouth=Base+Facing.RotateVector(FVector(CX,CY,H+145));
     const FVector Landing=Base+Facing.RotateVector(FVector(0,-D*.12f,115));
     const FVector Chest=Base+Facing.RotateVector(FVector(-W*.30f,-D*.10f,100));
     FTimerHandle SecretTimer;
-    World->GetTimerManager().SetTimer(SecretTimer,FTimerDelegate::CreateWeakLambda(District,[World,Mouth,Landing,Chest,bEntered=false]() mutable
+    World->GetTimerManager().SetTimer(SecretTimer,FTimerDelegate::CreateWeakLambda(District,[World,Mouth,Landing,Chest,Door,DoorPosition,Base,Facing,D,bEntered=false,bUnlocked=false]() mutable
     {
      auto* PC=World->GetFirstPlayerController();
      auto* Hero=PC?Cast<ACryptHero>(PC->GetPawn()):nullptr;
@@ -258,6 +276,14 @@ namespace CryptSettlements
       bEntered=true;
       if(auto* Sound=LoadObject<USoundBase>(nullptr,TEXT("/Game/Environment/MindControl/Audio/ChimneyMagic.ChimneyMagic")))
        UGameplayStatics::PlaySound2D(Hero,Sound,Hero->GetAudioSetting(0)*Hero->GetAudioSetting(4));
+     }
+     if(bEntered) bUnlocked=true;
+     if(bUnlocked && IsValid(Door))
+     {
+      const FVector Local=Facing.UnrotateVector(P-Base);
+      const bool bExit=Local.Y>-D/2-100 && Local.Y<-D/2+120 && FMath::Abs(Local.X)<100 && Local.Z<240;
+      Door->SetRelativeLocation(DoorPosition+(bExit?FVector(0,0,230):FVector::ZeroVector));
+      Door->SetCollisionEnabled(bExit?ECollisionEnabled::NoCollision:ECollisionEnabled::QueryAndPhysics);
      }
      if(bEntered && FVector::DistSquared(P,Chest)<FMath::Square(125.))
      {
@@ -322,7 +348,7 @@ namespace CryptSettlements
    const float Depth=390.f+34.f*(Cottage%3);
    const float Y=CryptWorld::TownNorth-1080.f;
    const float Front=Y+Depth/2;
-   Building(FVector(X,Y,Ground),375.f+43.f*Cottage,Depth,Cottage,false,180.f);
+   Building(FVector(X,Y,Ground),375.f+43.f*Cottage,Depth,Cottage,false,180.f,Cottage==0);
    const float SquareEdge=CryptWorld::TownNorth-885.f;
    Box(Road,FVector(X,(Front+SquareEdge)*.5f,Ground+5),FVector(119,FMath::Abs(SquareEdge-Front)+20,10));
   }
