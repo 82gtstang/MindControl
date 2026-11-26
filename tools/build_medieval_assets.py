@@ -42,39 +42,70 @@ def export(n):
 
  bpy.ops.wm.save_as_mainfile(filepath=os.path.join(out,n+".blend"))
  bpy.ops.export_scene.fbx(filepath=os.path.join(out,n+".fbx"),apply_unit_scale=True,axis_forward="-Y",axis_up="Z",bake_anim=False)
-reset()
-# Four metre cottage, open doorway, solid roof tiles and hollow chimney.
-for x in (-2.1,2.1): box("Side wall",(x,0,1.35),(.18,4.2,2.7),plaster)
-box("Rear wall",(0,2.1,1.35),(4.2,.18,2.7),plaster)
-for x in (-1.38,1.38): box("Front bay",(x,-2.1,1.35),(1.44,.18,2.7),plaster)
-box("Door lintel",(0,-2.1,2.48),(1.32,.18,.44),plaster)
-box("Floor",(0,0,.05),(4.2,4.2,.1),wood)
-for y in (-2.21,2.21):
- for x in (-2.05,-.68,.68,2.05): beam("Oak upright",(x,y,.1),(x,y,2.7),.13,wood)
- for z in (.3,1.4,2.65): beam("Oak rail",(-2.1,y,z),(2.1,y,z),.14,wood)
- for side in (-1,1): beam("Diagonal brace",(side*.7,y,1.4),(side*2,y,2.65),.12,wood)
- for row in range(3):
-  for col in range(12):
-   x=-1.95+col*.35
-   if y<0 and abs(x)<.75: continue
-   box("Foundation stone",(x,y,.12+row*.18),(.33,.16,.16),stone)
-for side in (-1,1):
- angle=math.atan2(1.05,2.1)
- for row in range(11):
-  y=side*(row+.5)*.205;z=3.75-abs(y)*.5
-  for col in range(15):
-   x=-2.24+col*.32+(row%2)*.08
-   box("Clay shingle",(x,y,z),(.34,.26,.055),random.choice(clay),(side*-angle,0,0),.008)
- for x in (-2.2,2.2): beam("Gable rafter",(x,0,3.78),(x,side*2.3,2.6),.17,wood)
-for side in (-1,1):
- box("Chimney wall",(1.25+side*.61,.65,3.85),(.16,1.38,1.6),stone)
- box("Chimney wall",(1.25,.65+side*.61,3.85),(1.06,.16,1.6),stone)
-for x in (-1.4,1.4):
- box("Window glass",(x,-2.22,1.65),(.65,.04,.8),glass)
- for dx in (-.34,0,.34): box("Window mullion",(x+dx,-2.26,1.65),(.045,.07,.85),wood)
- for z in (1.23,1.65,2.07): box("Window rail",(x,-2.26,z),(.72,.07,.045),wood)
- box("Flower box",(x,-2.35,1.13),(.8,.28,.22),wood)
-export("H5_Cottage")
+
+def building(name,w,d,h,rise):
+ reset()
+ # Full-size timber and masonry structure with open entrance.
+ for x in (-w/2,w/2):
+  box("Side masonry",(x,0,h/2),(.32,d,h),stone)
+ box("Rear masonry",(0,d/2,h/2),(w,.32,h),stone)
+ door=1.5 if name=="H5_Cottage" else 2.4
+ for side in (-1,1):
+  box("Front wall",(side*(w+door)/4,-d/2,h/2),((w-door)/2,.32,h),plaster)
+ box("Door header",(0,-d/2,(h+2.4)/2),(door,.32,h-2.4),wood)
+ for j in range(int(d/.24)):
+  box("Oak floor plank",(0,-d/2+.12+j*.24,.04),(w,.235,.08),wood)
+ for y in (-d/2-.18,d/2+.18):
+  for j in range(1+int(w/1.5)):
+   x=-w/2+j*w/int(w/1.5)
+   if y<0 and abs(x)<door/2: continue
+   beam("Structural oak post",(x,y,.1),(x,y,h),.2,wood)
+  for z in (.35,h*.55,h-.12):
+   for side in (-1,1):
+    beam("Horizontal timber",(side*door/2,y,z),(side*w/2,y,z),.18,wood)
+  for side in (-1,1):
+   beam("Diagonal timber",(side*door/2,y,h*.55),(side*w/2,y,h-.12),.16,wood)
+ for side in (-1,1):
+  angle=math.atan2(rise,d/2)
+  box("Roof deck",(0,side*d/4,h+rise/2),(w+.65,math.hypot(d/2,rise)+.4,.16),wood,(-side*angle,0,0))
+  for row in range(int((d/2+.3)/.32)+1):
+   y=side*(row+.5)*.32
+   for col in range(int((w+.65)/.42)+1):
+    x=-w/2-.3+col*.42+(row%2)*.12
+    box("Overlapping fired clay tile",(x,y,h+rise-abs(y)*rise/(d/2)+.12),(.43,.46,.065),random.choice(clay),(-side*angle,0,0),.008)
+ for x in (-w/2,w/2):
+  verts=[(x,-d/2,h),(x,d/2,h),(x,0,h+rise)]
+  mesh=bpy.data.meshes.new("Gable");mesh.from_pydata(verts,[],[(0,1,2)]);mesh.update()
+  ob=bpy.data.objects.new("Closed gable",mesh);bpy.context.collection.objects.link(ob);ob.data.materials.append(plaster)
+  for side in (-1,1): beam("Gable rafter",(x,0,h+rise),(x,side*d/2,h),.2,wood)
+ for x in (-w*.32,w*.32):
+  box("Recessed window frame",(x,-d/2-.22,1.8),(1.3,.18,1.5),wood)
+  box("Window glazing",(x,-d/2-.33,1.8),(1.12,.04,1.32),glass)
+  for j in range(5): box("Lead mullion",(x-.56+j*.28,-d/2-.36,1.8),(.035,.06,1.32),iron)
+  for j in range(5): box("Lead crossbar",(x,-d/2-.36,1.14+j*.33),(1.12,.06,.035),iron)
+  box("Window sill",(x,-d/2-.4,1.06),(1.45,.4,.13),stone)
+ for side in (-1,1):
+  for row in range(4):
+   for col in range(int(w/.48)):
+    x=-w/2+.24+col*.48+(row%2)*.12
+    if side<0 and abs(x)<door/2+.2: continue
+    box("Individual foundation block",(x,side*(d/2+.18),.12+row*.22),(.46,.22,.205),stone)
+ if name!="H5_Cottage":
+  for x in (-w*.32,w*.32):
+   for z in (.45,1.05,1.65,2.25): box("Display shelf",(x,d/2-.6,z),(w*.28,.65,.09),wood)
+   for dx in (-w*.13,w*.13): box("Shelf upright",(x+dx,d/2-.6,1.35),(.1,.65,2.7),wood)
+  box("Merchant counter",(w*.22,-.6,.55),(w*.35,.85,1.1),wood)
+ if name=="Blacksmith_Shop":
+  box("Stone forge",(w*.3,d*.3,.65),(2,1.8,1.3),stone)
+  box("Anvil stand",(-1,0,.5),(.8,.8,1),wood)
+  box("Anvil",(-1,0,1.1),(1.1,.45,.25),iron)
+ if name=="H5_Cottage" or name=="Blacksmith_Shop":
+  for side in (-1,1):
+   box("Hollow chimney side",(w*.25+side*.6,d*.15,h+rise),(.2,1.4,2.6),stone)
+   box("Hollow chimney end",(w*.25,d*.15+side*.6,h+rise),(1,.2,2.6),stone)
+ export(name)
+
+building("H5_Cottage",7.5,9,3.6,2.8)
 reset()
 for x in (-.35,.35): box("Stand foot",(x,0,.05),(.5,.45,.1),wood)
 box("Stand post",(0,0,.85),(.1,.1,1.7),wood)
@@ -93,22 +124,7 @@ for i in range(4): box("Shelf",(0,0,.2+i*.48),(1.8,.48,.055),wood)
 for x in (-.87,.87): box("Shelf upright",(x,0,.95),(.08,.48,1.9),wood)
 export("A2_Shelves")
 
-reset()
-# Rustic armory shell with open doorway and timber roof.
-for x in (-3,3):
- box("Stone side wall",(x,0,1.6),(.3,5,3.2),stone)
-box("Rear wall",(0,2.5,1.6),(6,.3,3.2),stone)
-for x in (-1.95,1.95):
- box("Front stone bay",(x,-2.5,1.6),(2.1,.3,3.2),stone)
-box("Lintel",(0,-2.5,2.85),(1.8,.35,.7),wood)
-box("Stone floor",(0,0,-.08),(6,5,.16),stone)
-for side in (-1,1):
- for row in range(12):
-  y=side*(row+.5)*.23
-  for col in range(20):
-   box("Roof tile",(-3.15+col*.33,y,4.5-abs(y)*.5),(.35,.29,.06),random.choice(clay),(-side*math.atan(.5),0,0))
- for x in (-3,0,3): beam("Rafter",(x,0,4.5),(x,side*2.7,3.15),.19,wood)
-export("A2_Armory")
+building("A2_Armory",9.144,12.192,4.2,3.1)
 reset()
 sphere("Shield body",(0,0,.55),(.65,.12,.95),wood)
 sphere("Iron boss",(0,-.075,.62),(.23,.12,.23),iron)
@@ -131,28 +147,8 @@ box("Bottle neck",(0,0,.26),(.065,.065,.12),glass)
 box("Cork",(0,0,.33),(.07,.07,.045),wood)
 export("Sorcerer_Potion")
 
-# Separate shop shells, open front forge and enclosed apothecary.
-for name in ("Blacksmith","Sorcerer"):
- reset()
- for x in (-2.8,2.8): box("Side masonry",(x,0,1.5),(.25,5,3),stone)
- box("Back masonry",(0,2.5,1.5),(5.6,.25,3),stone)
- for x in (-2.65,2.65): box("Front oak post",(x,-2.5,1.5),(.22,.22,3),wood)
- if name=="Sorcerer":
-  for x in (-1.9,1.9): box("Front plaster",(x,-2.5,1.5),(1.8,.2,3),plaster)
- box("Floor",(0,0,-.06),(5.6,5,.12),stone)
- for side in (-1,1):
-  for row in range(12):
-   y=side*(row+.5)*.23
-   for col in range(19): box("Clay tile",(-2.95+col*.33,y,4.25-abs(y)*.46),(.35,.28,.06),random.choice(clay),(-side*math.atan(.46),0,0))
-  for x in (-2.8,0,2.8): beam("Rafter",(x,0,4.25),(x,side*2.7,3),.16,wood)
- if name=="Blacksmith":
-  box("Forge hearth",(1.7,1.65,.65),(1.5,1.3,1.3),stone)
-  box("Forge chimney",(1.7,2,2.65),(.9,.9,3.4),stone)
-  ember=mat("Hot coals",(.95,.16,.025))
-  for i in range(16): sphere("Coal",(1.15+random.random()*1.1,1.2+random.random()*.7,1.34),(.14,.13,.08),ember)
- else:
-  for i in range(4): box("Potion shelf",(0,2.25,.35+i*.5),(4.8,.4,.07),wood)
- export(name+"_Shop")
+building("Blacksmith_Shop",9.144,12.192,4.2,3.1)
+building("Sorcerer_Shop",9.144,12.192,4.2,3.5)
 leaf=mat("Herb foliage",(.12,.36,.08))
 for i,name in enumerate(("Lavender","Chamomile","Bloodleaf","Mint","Silverleaf","BlueSage","Firebloom","Moonflower","LemonBalm","Yarrow")):
  reset()
