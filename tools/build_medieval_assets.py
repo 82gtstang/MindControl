@@ -109,3 +109,40 @@ sphere("Potion flask",(0,0,.12),(.19,.19,.23),glass)
 box("Bottle neck",(0,0,.26),(.065,.065,.12),glass)
 box("Cork",(0,0,.33),(.07,.07,.045),wood)
 export("Sorcerer_Potion")
+
+# Separate shop shells, open front forge and enclosed apothecary.
+for name in ("Blacksmith","Sorcerer"):
+ reset()
+ for x in (-2.8,2.8): box("Side masonry",(x,0,1.5),(.25,5,3),stone)
+ box("Back masonry",(0,2.5,1.5),(5.6,.25,3),stone)
+ for x in (-2.65,2.65): box("Front oak post",(x,-2.5,1.5),(.22,.22,3),wood)
+ if name=="Sorcerer":
+  for x in (-1.9,1.9): box("Front plaster",(x,-2.5,1.5),(1.8,.2,3),plaster)
+ box("Floor",(0,0,-.06),(5.6,5,.12),stone)
+ for side in (-1,1):
+  for row in range(12):
+   y=side*(row+.5)*.23
+   for col in range(19): box("Clay tile",(-2.95+col*.33,y,4.25-abs(y)*.46),(.35,.28,.06),random.choice(clay),(-side*math.atan(.46),0,0))
+  for x in (-2.8,0,2.8): beam("Rafter",(x,0,4.25),(x,side*2.7,3),.16,wood)
+ if name=="Blacksmith":
+  box("Forge hearth",(1.7,1.65,.65),(1.5,1.3,1.3),stone)
+  box("Forge chimney",(1.7,2,2.65),(.9,.9,3.4),stone)
+  ember=mat("Hot coals",(.95,.16,.025))
+  for i in range(16): sphere("Coal",(1.15+random.random()*1.1,1.2+random.random()*.7,1.34),(.14,.13,.08),ember)
+ else:
+  for i in range(4): box("Potion shelf",(0,2.25,.35+i*.5),(4.8,.4,.07),wood)
+ export(name+"_Shop")
+leaf=mat("Herb foliage",(.12,.36,.08))
+for i,name in enumerate(("Lavender","Chamomile","Bloodleaf","Mint","Silverleaf","BlueSage","Firebloom","Moonflower","LemonBalm","Yarrow")):
+ reset()
+ colors=[(.45,.15,.65),(.85,.72,.12),(.75,.12,.16),(.22,.55,.25),(.65,.72,.85),(.28,.35,.85),(.95,.45,.12),(.72,.28,.55),(.55,.72,.32),(.85,.85,.72)]
+ flower=mat(name,colors[i])
+ for stem in range(3+i%3):
+  a=stem*2.4; x=.035*math.cos(a);y=.035*math.sin(a);h=.19+.035*(i%4)+random.random()*.06
+  beam("Stem",(0,0,0),(x,y,h),.006,leaf)
+  for j in range(3):
+   o=sphere("Leaf",(x+.025*math.cos(a+j*2),y+.025*math.sin(a+j*2),h*(.3+j*.19)),(.075,.025,.008),leaf)
+  for petal in range(5+i%3):
+   t=petal*2*math.pi/(5+i%3)
+   sphere("Petal",(x+.016*math.cos(t),y+.016*math.sin(t),h),(.024,.018,.012),flower)
+ export("Herb_"+name)
