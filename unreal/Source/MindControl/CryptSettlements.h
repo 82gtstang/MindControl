@@ -1,6 +1,11 @@
 #pragma once
 
 #include "CryptWorldLayout.h"
+#include "CryptHero.h"
+#include "Kismet/GameplayStatics.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Sound/SoundBase.h"
+#include "Misc/ConfigCacheIni.h"
 
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -221,9 +226,58 @@ namespace CryptSettlements
     Part(Timber,Side*W*.30f,D*.16f,24,7,7,45);
    }
    Part(Wall,0,-D/2,H-19,128,18,38);
-   Part(Wall,W*.32f,D*.19f,H+60,62,60,170);
-   Part(Sill,W*.32f,D*.19f,H+145,76,73,12);
-   Part(Metal,W*.32f,D*.19f,H+152,46,42,5);
+   const bool bSecret=Yaw==180.f && Style==0;
+   if(bSecret)
+   {
+    const float CX=W*.32f,CY=D*.19f;
+    for(float Side : {-1.f,1.f})
+    {
+     Part(Wall,CX+Side*61,CY,H+60,14,136,170);
+     Part(Wall,CX,CY+Side*61,H+60,108,14,170);
+    }
+    // Exterior stone steps lead from ground to the chimney rim.
+    for(int32 I=0;I<9;++I)
+     Part(Wall,-W*.42f+I*24,D/2+55,25+I*45,85,85,24);
+    Part(Wall,CX,D/2+20,H+95,95,100,20);
+    Part(Timber,-W*.30f,-D*.10f,35,75,55,60);
+    Part(LanternGlass,-W*.30f,-D*.10f,68,76,56,8);
+    const FVector Mouth=Base+Facing.RotateVector(FVector(CX,CY,H+145));
+    const FVector Landing=Base+Facing.RotateVector(FVector(0,-D*.12f,115));
+    const FVector Chest=Base+Facing.RotateVector(FVector(-W*.30f,-D*.10f,100));
+    FTimerHandle SecretTimer;
+    World->GetTimerManager().SetTimer(SecretTimer,FTimerDelegate::CreateWeakLambda(District,[World,Mouth,Landing,Chest,bEntered=false]() mutable
+    {
+     auto* PC=World->GetFirstPlayerController();
+     auto* Hero=PC?Cast<ACryptHero>(PC->GetPawn()):nullptr;
+     if(!Hero) return;
+     const FVector P=Hero->GetActorLocation();
+     if(FVector::DistSquared2D(P,Mouth)<FMath::Square(48.) && P.Z>Mouth.Z+35 && P.Z<Mouth.Z+160 && Hero->GetVelocity().Z<0)
+     {
+      Hero->SetActorLocation(Landing,false,nullptr,ETeleportType::TeleportPhysics);
+      Hero->GetCharacterMovement()->StopMovementImmediately();
+      bEntered=true;
+      if(auto* Sound=LoadObject<USoundBase>(nullptr,TEXT("/Game/Environment/MindControl/Audio/ChimneyMagic.ChimneyMagic")))
+       UGameplayStatics::PlaySound2D(Hero,Sound,Hero->GetAudioSetting(0)*Hero->GetAudioSetting(4));
+     }
+     if(bEntered && FVector::DistSquared(P,Chest)<FMath::Square(125.))
+     {
+      bool bClaimed=false;
+      if(GConfig) GConfig->GetBool(TEXT("MindControl.Secrets"),TEXT("FirstCottageChest"),bClaimed,GGameUserSettingsIni);
+      if(!bClaimed)
+      {
+       Hero->AddTreasure(250);
+       if(GConfig) { GConfig->SetBool(TEXT("MindControl.Secrets"),TEXT("FirstCottageChest"),true,GGameUserSettingsIni); GConfig->Flush(false,GGameUserSettingsIni); }
+      }
+      bEntered=false;
+     }
+    }),.05f,true);
+   }
+   else
+   {
+    Part(Wall,W*.32f,D*.19f,H+60,62,60,170);
+    Part(Sill,W*.32f,D*.19f,H+145,76,73,12);
+    Part(Metal,W*.32f,D*.19f,H+152,46,42,5);
+   }
    Part(Trim,0,Front-10,211,139,16,17);
    Part(Metal,82,Front-19,181,12,19,42);
    Part(LanternGlass,82,Front-23,179,9,21,24);
