@@ -443,6 +443,37 @@ namespace CryptSettlements
     Hero->GetCharacterMovement()->StopMovementImmediately();
    }
   }),.05f,true);
+  // Deterministic mainland herb populations, batched by species for mobile rendering.
+  const FLinearColor HerbColors[]={
+   {.45f,.15f,.65f},{.85f,.72f,.12f},{.75f,.12f,.16f},{.22f,.55f,.25f},
+   {.65f,.72f,.85f},{.28f,.35f,.85f},{.95f,.45f,.12f},{.72f,.28f,.55f},
+   {.55f,.72f,.32f},{.85f,.85f,.72f}};
+  auto* HerbStem=Batch(Cube,Color(FLinearColor(.16f,.38f,.12f)),false);
+  HerbStem->SetCullDistances(4500,6500);
+  FRandomStream HerbRandom(72319);
+  for(int32 Species=0;Species<10;++Species)
+  {
+   auto* Blooms=Batch(Sphere,Color(HerbColors[Species]),false);
+   Blooms->SetCullDistances(4500,6500);
+   int32 Planted=0;
+   for(int32 Attempt=0;Attempt<5000 && Planted<600;++Attempt)
+   {
+    const float X=HerbRandom.FRandRange(-59000,59000),Y=HerbRandom.FRandRange(-53000,53000);
+    if(FMath::Abs(Y)<650 || (X>-25000 && X<13500 && FMath::Abs(Y)<6500)) continue;
+    const double Z=CryptDungeons::GetGroundHeight(X,Y);
+    if(Z<CryptWorld::SeaLevel+100) continue;
+    const FVector P(X,Y,Z);
+    const float H=HerbRandom.FRandRange(18,35);
+    Box(HerbStem,P+FVector(0,0,H*.5f),FVector(2,2,H));
+    for(int32 Leaf=0;Leaf<3;++Leaf)
+    {
+     const float A=Leaf*120.f+Species*19.f;
+     Box(HerbStem,P+FVector(0,0,H*.55f),FVector(18,4,3),FRotator(0,A,0));
+     Box(Blooms,P+FVector(5*FMath::Cos(FMath::DegreesToRadians(A)),5*FMath::Sin(FMath::DegreesToRadians(A)),H),FVector(9,9,7));
+    }
+    ++Planted;
+   }
+  }
   const TCHAR* TownNames[] = {
    TEXT("Alderbrook"), TEXT("Briar Glen"), TEXT("Copper Hollow"), TEXT("Dunmere"),
    TEXT("Elder Ford"), TEXT("Fernwick"), TEXT("Greybank"), TEXT("Hawthorn"),
