@@ -236,6 +236,34 @@ jobs:
             if (Test-Path $log) { Get-Content $log -Tail 100 }
             throw "Environment material import failed with exit code $($process.ExitCode)"
           }
+      - name: Generate and import medieval meshes
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $blender = Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse | Sort-Object FullName -Descending | Select-Object -First 1
+          if (!$blender) { throw 'Blender not found' }
+          $env:MEDIEVAL_ASSET_DIR = Join-Path $env:RUNNER_TEMP 'MedievalAndroid'
+          & $blender.FullName -b -t 2 --python-exit-code 1 --python tools/build_medieval_assets.py -- "$env:MEDIEVAL_ASSET_DIR"
+          if ($LASTEXITCODE -ne 0) { throw 'Medieval mesh generation failed' }
+          $editor = Join-Path $env:UE_ROOT 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
+          $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\MindControl.uproject'
+          $script = Join-Path $env:GITHUB_WORKSPACE 'tools\import_medieval_assets.py'
+          $log = Join-Path $env:RUNNER_TEMP 'MedievalImport.log'
+          $arguments = @(
+            ('"{0}"' -f $project)
+            '-run=pythonscript'
+            ('-script="{0}"' -f $script)
+            '-Interchange.FeatureFlags.Import.FBX=False'
+            '-unattended'
+            '-nop4'
+            '-nullrhi'
+            ('-abslog="{0}"' -f $log)
+          )
+          $process = Start-Process -FilePath $editor -ArgumentList $arguments -Wait -PassThru
+          if ($process.ExitCode -ne 0 -or !(Test-Path $log) -or !(Select-String -Path $log -Pattern 'MEDIEVAL_IMPORT_COMPLETE 20' -Quiet)) {
+            if (Test-Path $log) { Get-Content $log -Tail 120 }
+            throw "Medieval import failed: $($process.ExitCode)"
+          }
       - name: Generate MindControl Android launch artwork
         shell: powershell
         run: |
