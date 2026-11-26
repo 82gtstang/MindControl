@@ -234,19 +234,29 @@ namespace CryptSettlements
      Part(Wall,CX+Side*61,CY,H+60,14,136,170);
      Part(Wall,CX,CY+Side*61,H+60,108,14,170);
     }
-    // A broad wooden hanging sign is the only intended roof approach.
-    Part(Timber,0,Front-64,126,150,115,22);
-    Part(Trim,-65,Front-28,168,12,12,84);
-    Part(Trim,65,Front-28,168,12,12,84);
-    auto* Sign=NewObject<UTextRenderComponent>(District);
-    District->AddInstanceComponent(Sign);
-    Sign->SetupAttachment(Root);
-    Sign->SetRelativeLocation(Base+Facing.RotateVector(FVector(0,Front-123,126)));
-    Sign->SetRelativeRotation(FRotator(0,Yaw-90,0));
-    Sign->SetHorizontalAlignment(EHTA_Center);
-    Sign->SetWorldSize(22);
-    Sign->SetText(FText::FromString(TEXT("LOCKED COTTAGE")));
-    Sign->RegisterComponent();
+    // Large, clearly visible hanging sign with a solid jumpable top.
+    Part(Timber,0,Front-83,126,210,155,22);
+    Part(Timber,0,Front-151,93,210,16,65);
+    Part(LanternGlass,0,Front-161,124,218,5,7);
+    Part(LanternGlass,0,Front-161,62,218,5,7);
+    Part(LanternGlass,-105,Front-161,93,7,5,65);
+    Part(LanternGlass,105,Front-161,93,7,5,65);
+    Part(Trim,-85,Front-28,168,12,12,84);
+    Part(Trim,85,Front-28,168,12,12,84);
+    for(float Side : {-1.f,1.f})
+    {
+     auto* Sign=NewObject<UTextRenderComponent>(District);
+     District->AddInstanceComponent(Sign);
+     Sign->SetupAttachment(Root);
+     Sign->SetRelativeLocation(Base+Facing.RotateVector(FVector(0,Front-151+Side*11,93)));
+     Sign->SetRelativeRotation(FRotator(0,Yaw+Side*90,0));
+     Sign->SetHorizontalAlignment(EHTA_Center);
+     Sign->SetVerticalAlignment(EVRTA_TextCenter);
+     Sign->SetTextRenderColor(FColor(255,225,125));
+     Sign->SetWorldSize(26);
+     Sign->SetText(FText::FromString(TEXT("LOCKED\nCOTTAGE")));
+     Sign->RegisterComponent();
+    }
     auto* Door=NewObject<UStaticMeshComponent>(District);
     District->AddInstanceComponent(Door);
     Door->SetupAttachment(Root);
