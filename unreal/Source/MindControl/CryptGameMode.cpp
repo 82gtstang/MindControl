@@ -123,9 +123,9 @@ namespace
    *FMath::SmoothStep(-380.f,0.f,Y);
   const float RuinGround=(1.f-FMath::SmoothStep(1900.f,2400.f,FMath::Abs(X-(1000.f+CryptWorld::RuinOffsetX))))
    *(1.f-FMath::SmoothStep(1580.f,2170.f,FMath::Abs(Y-3200.f)));
-  Height=FMath::Lerp(Height,-340.f,static_cast<float>(1.-FMath::SmoothStep(.54,1.08,CryptWorld::PoolRadius(X,Y))));
-  return FMath::Lerp(Height,-20.f,FMath::Max3(FMath::Max3(FMath::Max(WestRoad,DistrictRoad),EastRoad,CastleGround),
+  Height=FMath::Lerp(Height,-20.f,FMath::Max3(FMath::Max3(FMath::Max(WestRoad,DistrictRoad),EastRoad,CastleGround),
    FMath::Max(TownGround,TownRoad),RuinGround));
+  return FMath::Lerp(Height,-420.f,static_cast<float>(1.-FMath::SmoothStep(.72,1.12,CryptWorld::PoolRadius(X,Y))));
  }
 
  UProceduralMeshComponent* CreateSurface(UWorld* World,const TCHAR* Name,bool bCollision)
