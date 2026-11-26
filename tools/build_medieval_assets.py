@@ -69,6 +69,9 @@ def export(n):
  bpy.ops.wm.save_as_mainfile(filepath=os.path.join(out,n+".blend"))
  bpy.ops.export_scene.fbx(filepath=os.path.join(out,n+".fbx"),apply_unit_scale=True,axis_forward="-Y",axis_up="Z",bake_anim=False)
 
+def sphere(n,p,d,m):
+ bpy.ops.mesh.primitive_uv_sphere_add(segments=24,ring_count=12,location=p);o=bpy.context.object;o.name=n;o.dimensions=d;bpy.ops.object.transform_apply(location=False,rotation=False,scale=True);o.data.materials.append(m)
+ for f in o.data.polygons:f.use_smooth=True
 def building(name,w,d,h,rise):
  reset()
  # Full-size timber and masonry structure with open entrance.
@@ -130,6 +133,40 @@ def building(name,w,d,h,rise):
    for z in (.45,1.05,1.65,2.25): box("Display shelf",(x,d/2-.6,z),(w*.28,.65,.09),wood)
    for dx in (-w*.13,w*.13): box("Shelf upright",(x+dx,d/2-.6,1.35),(.1,.65,2.7),wood)
   box("Merchant counter",(w*.22,-.6,.55),(w*.35,.85,1.1),wood)
+ if name=="H5_Cottage":
+  foliage=mat("Ivy green",(.08,.24,.035))
+  blossom=mat("Rose blossom",(.65,.12,.18))
+  for x in (-w*.32,w*.32):
+   box("Oak flower planter",(x,-d/2-.48,.88),(1.5,.48,.32),wood)
+   for j in range(12):
+    xx=x-.62+j*.11
+    beam("Flower stem",(xx,-d/2-.48,1.02),(xx,-d/2-.48,1.28),.018,foliage)
+    sphere("Flower",(xx,-d/2-.48,1.28),(.13,.13,.09),blossom)
+   for j in range(32):
+    z=.3+j*.095
+    sphere("Ivy leaf",(x+math.sin(j*.7)*.23,-d/2-.24,z),(.16,.06,.12),foliage)
+ if name=="A2_Armory":
+  for x in (-w*.34,0,w*.34):
+   yy=d*.22
+   box("Armor display pedestal",(x,yy,.14),(.85,.75,.28),wood)
+   box("Armor support",(x,yy,.95),(.12,.12,1.5),wood)
+   sphere("Steel breastplate",(x,yy,1.43),(.68,.39,.65),iron)
+   sphere("Helmet",(x,yy,1.98),(.34,.35,.39),iron)
+   box("Visor slit",(x,yy-.18,1.99),(.24,.025,.045),wood)
+   for side in (-1,1):
+    sphere("Shoulder plate",(x+side*.39,yy,1.65),(.29,.33,.25),iron)
+    for j in range(5):
+     box("Overlapping arm plate",(x+side*.39,yy,1.47-j*.09),(.19,.25,.105),iron)
+   sphere("Display shield",(x,d/2-.95,2.7),(.68,.13,.9),wood)
+   sphere("Shield boss",(x,d/2-1.04,2.7),(.23,.12,.23),iron)
+ if name=="Sorcerer_Shop":
+  for side in (-1,1):
+   for row in range(4):
+    for j in range(9):
+     x=side*w*.32-w*.12+j*w*.03
+     z=.57+row*.6
+     sphere("Potion bottle",(x,d/2-.6,z),(.15,.15,.22),glass)
+     box("Potion cork",(x,d/2-.6,z+.14),(.055,.055,.07),wood)
  if name=="Blacksmith_Shop":
   box("Stone forge",(w*.3,d*.3,.65),(2,1.8,1.3),stone)
   box("Anvil stand",(-1,0,.5),(.8,.8,1),wood)
@@ -144,9 +181,6 @@ building("H5_Cottage",7.5,9,3.6,2.8)
 reset()
 for x in (-.35,.35): box("Stand foot",(x,0,.05),(.5,.45,.1),wood)
 box("Stand post",(0,0,.85),(.1,.1,1.7),wood)
-def sphere(n,p,d,m):
- bpy.ops.mesh.primitive_uv_sphere_add(segments=24,ring_count=12,location=p);o=bpy.context.object;o.name=n;o.dimensions=d;bpy.ops.object.transform_apply(location=False,rotation=False,scale=True);o.data.materials.append(m)
- for f in o.data.polygons:f.use_smooth=True
 sphere("Breastplate",(0,0,1.27),(.65,.37,.68),iron)
 sphere("Helmet",(0,0,1.86),(.34,.36,.42),iron)
 box("Visor slit",(0,-.18,1.87),(.25,.025,.045),wood)
