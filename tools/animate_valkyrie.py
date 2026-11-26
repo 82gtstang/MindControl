@@ -580,6 +580,60 @@ def repair_audited_bridge_edges(scene, body, rig, target_path):
     print("AUDITED_BRIDGE_FACE_REMOVAL",len(candidates),count,flush=True)
 
 
+def close_local_repair_openings(body, rig):
+    """Cap small closed boundary loops without reconnecting arm and torso."""
+    import bmesh
+    mesh = bmesh.new()
+    mesh.from_mesh(body.data)
+    deform = mesh.verts.layers.deform.active
+    names = {g.index:g.name for g in body.vertex_groups}
+    pending = {e for e in mesh.edges if e.is_boundary}
+    repaired = 0
+    while pending:
+        seed = pending.pop()
+        component = {seed}
+        stack = [seed]
+        while stack:
+            edge = stack.pop()
+            for v in edge.verts:
+                for other in v.link_edges:
+                    if other in pending:
+                        pending.remove(other)
+                        component.add(other)
+                        stack.append(other)
+        verts = {v for e in component for v in e.verts}
+        if not 3 <= len(verts) <= 100:
+            continue
+        if any(sum(e in component for e in v.link_edges) != 2 for v in verts):
+            continue
+        center = sum((v.co for v in verts), Vector((0,0,0))) / len(verts)
+        if not (.84 < center.z < 1.55 and abs(center.x) > .12):
+            continue
+        if max((v.co-center).length for v in verts) > .065:
+            continue
+        def region(v):
+            arm = sum(w for i,w in v[deform].items() if names.get(i,"").startswith(("upperarm_","forearm_","hand_")))
+            torso = sum(w for i,w in v[deform].items() if names.get(i,"") in ("spine","chest","pelvis","thigh_L","thigh_R"))
+            return 1 if arm > .65 else 2 if torso > .65 else 0
+        labels = {region(v) for v in verts}
+        if labels != {1} and labels != {2}:
+            continue
+        adjacent = [f for e in component for f in e.link_faces]
+        material = adjacent[0].material_index if adjacent else 0
+        faces = bmesh.ops.holes_fill(mesh, edges=list(component), sides=0)["faces"]
+        for f in faces:
+            f.material_index = material
+            f.smooth = True
+        if faces:
+            bmesh.ops.triangulate(mesh, faces=faces)
+            repaired += 1
+    bmesh.ops.recalc_face_normals(mesh, faces=list(mesh.faces))
+    mesh.to_mesh(body.data)
+    mesh.free()
+    body.data.update()
+    print("LOCAL_REPAIR_OPENINGS_CLOSED", repaired, flush=True)
+
+
 def main():
     source_path, target_path = sys.argv[sys.argv.index("--") + 1:]
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -605,6 +659,7 @@ def main():
     make_clips(scene, rig, originals)
     audit_arm_deformation(scene, body, rig, target_path)
     repair_audited_bridge_edges(scene, body, rig, target_path)
+    close_local_repair_openings(body, rig)
     audit_arm_deformation(scene, body, rig, target_path)
     export_arm_review(scene, body, rig, target_path)
     scene.frame_set(1)
