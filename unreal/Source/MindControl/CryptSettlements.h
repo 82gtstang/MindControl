@@ -408,6 +408,25 @@ namespace CryptSettlements
 
   // Separate eastern cottage, facing the town square from its north-east edge.
   Building(FVector(4080,CryptWorld::TownNorth+1150,Ground),390,410,1,false,0.f,false,true);
+  // Concealed castle postern: separate outbound-only escape.
+  const double ExitX=CryptWorld::CastleOffsetX+4100.;
+  const FVector Postern(ExitX,-975,CryptDungeons::GetGroundHeight(ExitX,-975)+115);
+  Box(Timber,Postern+FVector(0,12,0),FVector(120,18,220));
+  Box(Metal,Postern+FVector(42,25,0),FVector(12,12,12));
+  FTimerHandle PosternTimer;
+  World->GetTimerManager().SetTimer(PosternTimer,FTimerDelegate::CreateWeakLambda(District,[World,Postern,ExitX]()
+  {
+   auto* PC=World->GetFirstPlayerController();
+   auto* Hero=PC?Cast<ACryptHero>(PC->GetPawn()):nullptr;
+   if(!Hero) return;
+   const FVector P=Hero->GetActorLocation();
+   if(P.Y>Postern.Y && FVector::DistSquared(P,Postern)<FMath::Square(105.))
+   {
+    const double Y=-1450.;
+    Hero->SetActorLocation(FVector(ExitX,Y,CryptDungeons::GetGroundHeight(ExitX,Y)+115),false,nullptr,ETeleportType::TeleportPhysics);
+    Hero->GetCharacterMovement()->StopMovementImmediately();
+   }
+  }),.05f,true);
   const TCHAR* TownNames[] = {
    TEXT("Alderbrook"), TEXT("Briar Glen"), TEXT("Copper Hollow"), TEXT("Dunmere"),
    TEXT("Elder Ford"), TEXT("Fernwick"), TEXT("Greybank"), TEXT("Hawthorn"),
