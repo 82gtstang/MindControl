@@ -34,10 +34,11 @@ def export(n):
  scene.display.shading.color_type="MATERIAL"
  scene.display.shading.show_shadows=True
  scene.display.shading.show_cavity=True
- scene.render.resolution_x=900;scene.render.resolution_y=900;scene.render.resolution_percentage=100
+ scene.render.resolution_x=1600;scene.render.resolution_y=1600;scene.render.resolution_percentage=100
  scene.render.image_settings.file_format="PNG";scene.render.filepath=os.path.join(out,n+".png")
  bpy.ops.render.render(write_still=True)
  bpy.data.objects.remove(cam,do_unlink=True)
+ bpy.ops.export_scene.gltf(filepath=os.path.join(out,n+".glb"),export_format="GLB",export_materials="EXPORT")
 
  bpy.ops.wm.save_as_mainfile(filepath=os.path.join(out,n+".blend"))
  bpy.ops.export_scene.fbx(filepath=os.path.join(out,n+".fbx"),apply_unit_scale=True,axis_forward="-Y",axis_up="Z",bake_anim=False)
