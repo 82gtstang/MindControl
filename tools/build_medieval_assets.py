@@ -1,11 +1,29 @@
 import bpy, math, os, sys, random
 from mathutils import Vector
+import numpy as np
 out=os.path.abspath(sys.argv[sys.argv.index("--")+1])
 os.makedirs(out,exist_ok=True)
 random.seed(42)
 def mat(name,color,rough=.8,metal=0):
  m=bpy.data.materials.new(name); m.diffuse_color=(*color,1); m.use_nodes=True
  p=m.node_tree.nodes.get("Principled BSDF"); p.inputs["Base Color"].default_value=(*color,1); p.inputs["Roughness"].default_value=rough; p.inputs["Metallic"].default_value=metal
+ if any(k in name.lower() for k in ("oak","plaster","limestone","terracotta","iron","leather")):
+  n=1024; rng=np.random.default_rng(sum(map(ord,name)))
+  y,x=np.mgrid[0:n,0:n].astype(np.float32)/n
+  noise=rng.random((n,n),dtype=np.float32)-.5
+  grain=np.sin(2*np.pi*(x*48+.6*np.sin(y*15)+.18*np.sin(y*73)))
+  broad=np.sin(x*31+y*17)*np.cos(y*23-x*9)
+  height=(.5+.16*grain+.09*broad+.13*noise) if "oak" in name.lower() else (.5+.12*broad+.23*noise+.06*np.sin(x*190)*np.cos(y*173))
+  rgb=np.clip(np.asarray(color)[None,None,:]*(.65+.7*height[:,:,None]),0,1)
+  gy,gx=np.gradient(height); normal=np.stack((-gx*2,-gy*2,np.ones_like(height)),axis=-1);normal/=np.linalg.norm(normal,axis=-1,keepdims=True);normal=normal*.5+.5
+  for label,arr in (("Color",rgb),("Normal",normal)):
+   im=bpy.data.images.new(name+" "+label,width=n,height=n,alpha=True)
+   if label=="Normal": im.colorspace_settings.name="Non-Color"
+   im.pixels.foreach_set(np.concatenate((arr,np.ones((n,n,1))),axis=-1).astype(np.float32).ravel());im.pack()
+   tex=m.node_tree.nodes.new("ShaderNodeTexImage");tex.image=im
+   if label=="Color": m.node_tree.links.new(tex.outputs["Color"],p.inputs["Base Color"])
+   else:
+    nm=m.node_tree.nodes.new("ShaderNodeNormalMap");nm.inputs["Strength"].default_value=.65;m.node_tree.links.new(tex.outputs["Color"],nm.inputs["Color"]);m.node_tree.links.new(nm.outputs["Normal"],p.inputs["Normal"])
  return m
 wood=mat("Weathered oak",(.16,.075,.035)); plaster=mat("Lime plaster",(.68,.56,.39)); stone=mat("Limestone",(.32,.31,.28)); clay=[mat("Terracotta %d"%i,(.30+i*.035,.105+i*.012,.045)) for i in range(5)]
 iron=mat("Forged iron",(.24,.26,.28),.38,.8); glass=mat("Amber glass",(.55,.33,.08),.3); leather=mat("Leather",(.22,.09,.04))
@@ -29,7 +47,14 @@ def export(n):
  cam=bpy.context.object
  cam.rotation_euler=(center-cam.location).to_track_quat("-Z","Y").to_euler()
  cam.data.type="ORTHO";cam.data.ortho_scale=span*1.12;scene.camera=cam
- scene.render.engine="BLENDER_WORKBENCH"
+ scene.render.engine="CYCLES"
+ scene.cycles.samples=16
+ scene.cycles.use_denoising=True
+ scene.world.use_nodes=True
+ scene.world.node_tree.nodes.get("Background").inputs[0].default_value=(.55,.55,.55,1)
+ scene.world.node_tree.nodes.get("Background").inputs[1].default_value=.65
+ bpy.ops.object.light_add(type="AREA",location=center+Vector((-.7,-1,1.5))*span)
+ lamp=bpy.context.object;lamp.data.energy=180*span*span;lamp.data.shape="DISK";lamp.data.size=span;lamp.rotation_euler=(center-lamp.location).to_track_quat("-Z","Y").to_euler()
  scene.display.shading.light="STUDIO"
  scene.display.shading.color_type="MATERIAL"
  scene.display.shading.show_shadows=True
@@ -38,6 +63,7 @@ def export(n):
  scene.render.image_settings.file_format="PNG";scene.render.filepath=os.path.join(out,n+".png")
  bpy.ops.render.render(write_still=True)
  bpy.data.objects.remove(cam,do_unlink=True)
+ bpy.data.objects.remove(lamp,do_unlink=True)
  bpy.ops.export_scene.gltf(filepath=os.path.join(out,n+".glb"),export_format="GLB",export_materials="EXPORT")
 
  bpy.ops.wm.save_as_mainfile(filepath=os.path.join(out,n+".blend"))
@@ -90,6 +116,15 @@ def building(name,w,d,h,rise):
     x=-w/2+.24+col*.48+(row%2)*.12
     if side<0 and abs(x)<door/2+.2: continue
     box("Individual foundation block",(x,side*(d/2+.18),.12+row*.22),(.46,.22,.205),stone)
+ for side in (-1,1):
+  for row in range(int(h/.28)):
+   for j in range(int(d/.65)):
+    yy=-d/2+.33+j*.65+(row%2)*.16
+    box("Interior stone course",(side*(w/2-.19),yy,.14+row*.28),(.10,.63,.265),stone,bevel=.014)
+  for yy in (-d*.32,0,d*.32):
+   box("Interior oak pillar",(side*(w/2-.38),yy,h/2),(.35,.35,h),wood)
+   box("Lantern frame",(side*(w/2-.65),yy,2.4),(.23,.23,.35),iron)
+   box("Lantern amber pane",(side*(w/2-.78),yy,2.4),(.035,.17,.25),glass)
  if name!="H5_Cottage":
   for x in (-w*.32,w*.32):
    for z in (.45,1.05,1.65,2.25): box("Display shelf",(x,d/2-.6,z),(w*.28,.65,.09),wood)
