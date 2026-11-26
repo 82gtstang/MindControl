@@ -474,6 +474,43 @@ def audit_arm_deformation(scene, body, rig, target_path):
     print("ARM_DEFORMATION_AUDIT",len(report),"flagged edge samples",flush=True)
 
 
+def export_arm_review(scene, body, rig, target_path):
+    """Export evaluated mesh snapshots for direct inspection, without changing geometry."""
+    from pathlib import Path
+    import json
+    data = rig.animation_data
+    tracks = list(data.nla_tracks)
+    mutes = [t.mute for t in tracks]
+    folder = Path(target_path).parent / "ArmReview"
+    folder.mkdir(exist_ok=True)
+    try:
+        for t in tracks:
+            t.mute = True
+        for t in tracks:
+            if t.name not in ("Ocean_Idle", "Ocean_Walk", "Ocean_Run", "Ocean_Attack"):
+                continue
+            data.action = t.strips[0].action
+            start, end = data.action.frame_range
+            for index, phase in enumerate((0., .25, .5, .75)):
+                scene.frame_set(round(start + (end-start)*phase))
+                bpy.context.view_layer.update()
+                obj = body.evaluated_get(bpy.context.evaluated_depsgraph_get())
+                mesh = obj.to_mesh()
+                try:
+                    with (folder / (t.name + "_" + str(index) + ".obj")).open("w") as out:
+                        for v in mesh.vertices:
+                            out.write("v %.7f %.7f %.7f\n" % tuple(v.co))
+                        for f in mesh.polygons:
+                            out.write("f " + " ".join(str(i+1) for i in f.vertices) + "\n")
+                finally:
+                    obj.to_mesh_clear()
+    finally:
+        data.action = None
+        for t, mute in zip(tracks, mutes):
+            t.mute = mute
+    print("ARM_REVIEW_EXPORTED", str(folder), flush=True)
+
+
 def main():
     source_path, target_path = sys.argv[sys.argv.index("--") + 1:]
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -498,6 +535,7 @@ def main():
     scene.render.fps = FPS
     make_clips(scene, rig, originals)
     audit_arm_deformation(scene, body, rig, target_path)
+    export_arm_review(scene, body, rig, target_path)
     scene.frame_set(1)
     bpy.ops.object.select_all(action="DESELECT")
     body.select_set(True)
