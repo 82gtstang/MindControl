@@ -251,13 +251,15 @@ jobs:
           $log = Join-Path $env:RUNNER_TEMP 'MedievalImport.log'
           $arguments = @(
             ('"{0}"' -f $project)
-            ('-ExecutePythonScript="{0}"' -f $script)
+            '-run=pythonscript'
+            ('-script="{0}"' -f $script)
             '-Interchange.FeatureFlags.Import.FBX=False'
             '-unattended'
             '-nop4'
             '-nullrhi'
             ('-abslog="{0}"' -f $log)
           )
+          Remove-Item $log -Force -ErrorAction SilentlyContinue
           $process = Start-Process -FilePath $editor -ArgumentList $arguments -Wait -PassThru
           if ($process.ExitCode -ne 0 -or !(Test-Path $log) -or !(Select-String -Path $log -Pattern 'MEDIEVAL_IMPORT_COMPLETE 20' -Quiet)) {
             if (Test-Path $log) { Get-Content $log -Tail 120 }
