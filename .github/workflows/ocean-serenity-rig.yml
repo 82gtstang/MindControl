@@ -72,3 +72,10 @@ jobs:
           name: OceanSerenity-Arm-Deformation-Audit
           path: rig-output/ArmDeformationAudit.json
           if-no-files-found: warn
+
+      - name: Upload evaluated arm review meshes
+        uses: actions/upload-artifact@v4
+        with:
+          name: OceanSerenity-ArmReview
+          path: rig-output/ArmReview/*.obj
+          if-no-files-found: error
