@@ -61,9 +61,17 @@ def export(n):
  scene.display.shading.show_cavity=True
  scene.render.resolution_x=1600;scene.render.resolution_y=1600;scene.render.resolution_percentage=100
  scene.render.image_settings.file_format="PNG";scene.render.filepath=os.path.join(out,n+".png")
- bpy.ops.render.render(write_still=True)
+ if os.environ.get("MEDIEVAL_SKIP_PREVIEWS")!="1": bpy.ops.render.render(write_still=True)
  bpy.data.objects.remove(cam,do_unlink=True)
  bpy.data.objects.remove(lamp,do_unlink=True)
+ bpy.ops.object.select_all(action="DESELECT")
+ meshes=[o for o in scene.objects if o.type=="MESH"]
+ for o in meshes: o.select_set(True)
+ bpy.context.view_layer.objects.active=meshes[0]
+ bpy.ops.object.convert(target="MESH")
+ bpy.ops.object.join()
+ joined=bpy.context.object;joined.name=n;joined.data.name=n
+ bpy.ops.object.transform_apply(location=True,rotation=True,scale=True)
  bpy.ops.export_scene.gltf(filepath=os.path.join(out,n+".glb"),export_format="GLB",export_materials="EXPORT")
 
  bpy.ops.wm.save_as_mainfile(filepath=os.path.join(out,n+".blend"))
@@ -101,12 +109,22 @@ def building(name,w,d,h,rise):
    y=side*(row+.5)*.32
    for col in range(int((w+.65)/.42)+1):
     x=-w/2-.3+col*.42+(row%2)*.12
-    box("Overlapping fired clay tile",(x,y,h+rise-abs(y)*rise/(d/2)+.12),(.43,.46,.065),random.choice(clay),(-side*angle,0,0),.008)
+    box("Overlapping fired clay tile",(x,y,h+rise-abs(y)*rise/(d/2)+.12),(.43,.46,.065+random.uniform(-.008,.008)),random.choice(clay),(-side*angle,0,random.uniform(-.015,.015)),.008)
  for x in (-w/2,w/2):
   verts=[(x,-d/2,h),(x,d/2,h),(x,0,h+rise)]
   mesh=bpy.data.meshes.new("Gable");mesh.from_pydata(verts,[],[(0,1,2)]);mesh.update()
+  uv=mesh.uv_layers.new(name="UVMap")
+  for loop in mesh.loops:
+   v=mesh.vertices[loop.vertex_index].co;uv.data[loop.index].uv=(v.y/d+.5,(v.z-h)/rise)
   ob=bpy.data.objects.new("Closed gable",mesh);bpy.context.collection.objects.link(ob);ob.data.materials.append(plaster)
   for side in (-1,1): beam("Gable rafter",(x,0,h+rise),(x,side*d/2,h),.2,wood)
+ for j in range(13):
+  a=j*math.pi/12
+  x=door*.5*math.cos(a);z=1.75+door*.5*math.sin(a)
+  box("Arched doorway voussoir",(x,-d/2-.25,z),(.24,.35,.28),stone,(0,-a,0),.025)
+ for side in (-1,1):
+  for j in range(7):
+   box("Door jamb stone",(side*(door*.5+.12),-d/2-.23,.13+j*.25),(.25,.35,.24),stone,bevel=.022)
  for x in (-w*.32,w*.32):
   box("Recessed window frame",(x,-d/2-.22,1.8),(1.3,.18,1.5),wood)
   box("Window glazing",(x,-d/2-.33,1.8),(1.12,.04,1.32),glass)
