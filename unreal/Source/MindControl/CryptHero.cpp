@@ -249,7 +249,7 @@ void ACryptHero::Tick(float DeltaSeconds)
   if(StepAudioTime<=0.f && AudioSpeed>20.f && (bSwimming || GetCharacterMovement()->IsMovingOnGround()))
   {
    if(USoundBase* StepSound=bSwimming?SwimSound:FootstepSound)
-    UGameplayStatics::PlaySoundAtLocation(this,StepSound,GetActorLocation(),EffectsVolume);
+    UGameplayStatics::PlaySoundAtLocation(this,StepSound,GetActorLocation(),(EffectsVolume)*(bSwimming?1.f:.5f));
    StepAudioTime=bSwimming?.60f:FMath::Clamp(85.f/AudioSpeed,.25f,.65f);
   }
  }
