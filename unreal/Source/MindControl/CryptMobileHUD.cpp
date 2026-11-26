@@ -351,6 +351,7 @@ void ACryptMobileHUD::DrawHUD()
   Icon(EIcon::Storm,Point,4.4f*S,FLinearColor(.78f,.54f,1.f));
  }
  Landmark(CryptWorld::Town,TEXT("Town"),7.f,EIcon::Town);
+ Landmark(FVector2D(1120.f,CryptWorld::TownNorth-1080.f),TEXT("Chimney treasure"),23.f,EIcon::Bag);
  Landmark(CryptWorld::Castle,TEXT("Castle"),-23.f,EIcon::Castle);
  DrawText(TEXT("N"),FLinearColor::White,Origin.X+9*S,Origin.Y+4*S,nullptr,.9f*S,false);
 
