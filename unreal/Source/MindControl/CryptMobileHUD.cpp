@@ -445,7 +445,17 @@ void ACryptMobileHUD::DrawHUD()
     GetTextSize(Label,LabelWidth,LabelHeight,nullptr,TextScale);
     DrawText(Label,FLinearColor::White,Position.X-LabelWidth*.5f,Position.Y-LabelHeight*.5f,nullptr,TextScale,false);
    };
-   if(Hero->bGearPage)
+   if(Hero->bAudioSettings)
+   {
+    const TCHAR* Labels[]={TEXT("Master"),TEXT("Music"),TEXT("Battle music"),TEXT("Footsteps"),TEXT("Combat effects"),TEXT("Swimming")};
+    for(int32 I=0;I<6;++I) {
+     const FVector2D P=Layout.AudioRow(I); const float V=Hero->GetAudioSetting(I); const float X=Layout.InSatchel(.46f,0).X; const float Width=Layout.SatchelSize.X*.41f;
+     DrawText(Labels[I],Gold,Layout.InSatchel(.10f,0).X,P.Y-8*S,nullptr,.90f*S,false);
+     Frame(X,P.Y-7*S,Width,14*S,Ink,Bronze); DrawRect(Gold,X,P.Y-5*S,Width*V,10*S);
+     DrawText(FString::Printf(TEXT("%d%%"),FMath::RoundToInt(V*100)),FLinearColor::White,X+Width*.5f-12*S,P.Y-9*S,nullptr,.85f*S,false);
+    }
+   }
+   else if(Hero->bGearPage)
    {
     const FVector2D Top=Layout.InSatchel(.09f,.32f);
     const FVector2D Bottom=Layout.InSatchel(.91f,.84f);
@@ -511,7 +521,7 @@ void ACryptMobileHUD::DrawHUD()
     }
    }
 
-   if(!Hero->bSatchelJournal && !Hero->bGearPage)
+   if(!Hero->bAudioSettings && !Hero->bSatchelJournal && !Hero->bGearPage)
    {
     const FVector2D Heading=Layout.InSatchel(.12f,.722f);
     DrawText(TEXT("Right thumb tap"),Gold,Heading.X,Heading.Y,nullptr,1.08f*S,false);
@@ -531,7 +541,7 @@ void ACryptMobileHUD::DrawHUD()
     }
    }
 
-   if(!Hero->bSatchelJournal && !Hero->bGearPage)
+   if(!Hero->bAudioSettings && !Hero->bSatchelJournal && !Hero->bGearPage)
    {
     const FVector2D Relic=Layout.InSatchel(.17f,.30f);
     DrawText(Hero->GetRelicSummary(),Gold,Relic.X,Relic.Y,nullptr,.87f*S,false);
@@ -542,6 +552,7 @@ void ACryptMobileHUD::DrawHUD()
     Frame(Point.X-R,Point.Y-R,2*R,2*R,Ink,Bronze);
     Icon(Shape,Point,.52f*R,Gold);
    };
+   GearControl(Layout.SettingsTab(),Hero->bAudioSettings?TEXT("Back"):TEXT("Settings"),Hero->bAudioSettings);
    GearControl(Layout.GearTab(),Hero->bGearPage?TEXT("Bag"):TEXT("Loot & gear"),Hero->bGearPage);
    Utility(Layout.Save,EIcon::Save);
    Utility(Layout.Restore,EIcon::Restore);
