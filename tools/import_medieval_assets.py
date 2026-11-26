@@ -23,8 +23,17 @@ for name in names:
             meshes.append(asset)
     if not meshes:
         raise RuntimeError("No static meshes imported: "+name)
+    if len(meshes)!=1:
+        raise RuntimeError("Expected one combined static mesh for "+name+", got "+str(len(meshes)))
     for asset in meshes:
+        if name in ("H5_Cottage","A2_Armory","Blacksmith_Shop","Sorcerer_Shop"):
+            body=asset.get_editor_property("body_setup")
+            if body is None:
+                raise RuntimeError("Missing collision body for "+name)
+            body.set_editor_property("collision_trace_flag",unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
+            unreal.log("MEDIEVAL_COLLISION "+name)
         unreal.EditorAssetLibrary.save_loaded_asset(asset)
+    unreal.EditorAssetLibrary.save_directory(target,only_if_is_dirty=False,recursive=True)
     mesh=meshes[0]
     unreal.EditorAssetLibrary.save_loaded_asset(mesh)
     unreal.log("MEDIEVAL_IMPORTED "+name)
