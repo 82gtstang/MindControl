@@ -116,17 +116,19 @@ def export(n):
 def sphere(n,p,d,m):
  bpy.ops.mesh.primitive_uv_sphere_add(segments=24,ring_count=12,location=p);o=bpy.context.object;o.name=n;o.dimensions=d;bpy.ops.object.transform_apply(location=False,rotation=False,scale=True);o.data.materials.append(m)
  for f in o.data.polygons:f.use_smooth=True
-def building(name,w,d,h,rise):
+def building(name,w,d,h,rise,stories=3,dormers=0):
  reset()
  # Full-size timber and masonry structure with open entrance.
  # Three full stories with progressively projecting timber upper levels.
- story=h/3
+ story=h/stories
+ cottage=name.startswith("H5_Cottage")
+ basew,based=w,d
  amber=mat("Lantern luminous amber",(.9,.48,.12),.4)
  shader=amber.node_tree.nodes.get("Principled BSDF")
  shader.inputs["Emission Color"].default_value=(1,.38,.08,1)
  shader.inputs["Emission Strength"].default_value=2.0
- door=1.8 if name=="H5_Cottage" else 2.8
- for level in range(3):
+ door=1.8 if cottage else 2.8
+ for level in range(stories):
   z=level*story; W=w+level*.55; D=d+level*.35
   for side in (-1,1):
    box("Side wall",(side*W/2,0,z+story/2),(.32,D,story),stone if level==0 else plaster)
@@ -170,7 +172,7 @@ def building(name,w,d,h,rise):
       box("Lantern cage",(xx-side*.18+dx,yy+dy,zz),(.025,.025,.32),iron)
     for dz in (-.17,.17):
      box("Lantern cap",(xx-side*.18,yy,zz+dz),(.23,.25,.05),iron)
-  if level<2:
+  if level<stories-1:
    steps=math.ceil(story/.18); run=D*.65
    for k in range(steps):
     yy=-run/2+(k+.5)*run/steps if level==0 else run/2-(k+.5)*run/steps
@@ -178,7 +180,7 @@ def building(name,w,d,h,rise):
    beam("Stair handrail",(W*.30,-run/2,z+(.9 if level==0 else story+.9)),(W*.30,run/2,z+(story+.9 if level==0 else .9)),.09,wood)
   if level:
    for x in (-W*.32,-W*.08):
-    if level==2 or name=="H5_Cottage":
+    if level==2 or cottage:
      box("Bed frame",(x,D*.30,z+.35),(1.35,2.15,.38),wood)
      box("Mattress",(x,D*.30,z+.61),(1.24,2.02,.18),leather)
      box("Pillow",(x,D*.30+.72,z+.77),(1.05,.48,.15),plaster)
@@ -192,13 +194,11 @@ def building(name,w,d,h,rise):
    for dx in (-.62,.62):
     for dy in (-.29,.29):
      box("Table leg",(-W*.30+dx,-D*.28+dy,z+.4),(.11,.11,.8),wood)
-   for yy in (-D*.35,D*.35):
-    beam("Stairwell guard",(W*.26,yy,z+.95),(W*.44,yy,z+.95),.09,wood)
    for j in range(9):
     yy=-D*.35+j*D*.7/8
     beam("Baluster",(W*.26,yy,z+.16),(W*.26,yy,z+.95),.055,wood)
    beam("Landing railing",(W*.26,-D*.35,z+.95),(W*.26,D*.35,z+.95),.09,wood)
-  elif name=="H5_Cottage":
+  elif cottage:
    box("Dining tabletop",(-W*.18,0,.82),(2.2,1.1,.13),wood)
    for x in (-W*.18-.9,-W*.18+.9):
     for yy in (-.4,.4): box("Dining leg",(x,yy,.4),(.14,.14,.8),wood)
@@ -206,7 +206,7 @@ def building(name,w,d,h,rise):
     box("Dining bench",(-W*.18,yy,.47),(2.1,.4,.12),wood)
     for x in (-W*.18-.8,-W*.18+.8): box("Bench leg",(x,yy,.23),(.15,.32,.46),wood)
    box("Hearth",(-W*.32,D*.35,.3),(2.1,1.3,.6),stone)
- w+=1.1;d+=.7
+ w+=(stories-1)*.55;d+=(stories-1)*.35
  for side in (-1,1):
   angle=math.atan2(rise,d/2)
   box("Roof deck",(0,side*d/4,h+rise/2),(w+.65,math.hypot(d/2,rise)+.4,.16),wood,(-side*angle,0,0))
@@ -215,7 +215,20 @@ def building(name,w,d,h,rise):
    for col in range(int((w+.65)/.42)+1):
     x=-w/2-.3+col*.42+(row%2)*.12
     box("Overlapping fired clay tile",(x,y,h+rise-abs(y)*rise/(d/2)+.12),(.43,.46,.065+random.uniform(-.008,.008)),random.choice(clay),(-side*angle,0,random.uniform(-.015,.015)),.008)
- for x in (-w/2,w/2):
+ for j in range(dormers):
+  x=(j-(dormers-1)/2)*2.6
+  y=-d*.30
+  z=h+rise*(1-abs(y)/(d/2))
+  box("Dormer front",(x,y-.35,z+.65),(1.65,.16,1.55),plaster)
+  box("Dormer oak frame",(x,y-.45,z+.72),(1.18,.12,1.24),wood)
+  box("Dormer glazing",(x,y-.53,z+.72),(.94,.04,1.02),glass)
+  box("Dormer mullion",(x,y-.56,z+.72),(.055,.05,1.02),iron)
+  box("Dormer crossbar",(x,y-.56,z+.72),(.94,.05,.055),iron)
+  for side in (-1,1):
+   box("Dormer cheek",(x+side*.79,y+.28,z+.55),(.14,1.25,1.3),wood)
+   box("Dormer pitched roof",(x+side*.46,y+.22,z+1.55),(1.12,1.65,.15),clay[2],(0,side*.48,0))
+ w,d=basew,based
+ for x in (-(w+(stories-1)*.55)/2,(w+(stories-1)*.55)/2):
   verts=[(x,-d/2,h),(x,d/2,h),(x,0,h+rise)]
   mesh=bpy.data.meshes.new("Gable");mesh.from_pydata(verts,[],[(0,1,2)]);mesh.update()
   uv=mesh.uv_layers.new(name="UVMap")
@@ -251,12 +264,12 @@ def building(name,w,d,h,rise):
    box("Interior oak pillar",(side*(w/2-.38),yy,h/2),(.35,.35,h),wood)
    box("Lantern frame",(side*(w/2-.65),yy,2.4),(.23,.23,.35),iron)
    box("Lantern amber pane",(side*(w/2-.78),yy,2.4),(.035,.17,.25),glass)
- if name!="H5_Cottage":
+ if not cottage:
   for x in (-w*.32,w*.32):
    for z in (.45,1.05,1.65,2.25): box("Display shelf",(x,d/2-.6,z),(w*.28,.65,.09),wood)
    for dx in (-w*.13,w*.13): box("Shelf upright",(x+dx,d/2-.6,1.35),(.1,.65,2.7),wood)
   box("Merchant counter",(w*.22,-.6,.55),(w*.35,.85,1.1),wood)
- if name=="H5_Cottage":
+ if cottage:
   foliage=mat("Ivy green",(.08,.24,.035))
   blossom=mat("Rose blossom",(.65,.12,.18))
   for x in (-w*.32,w*.32):
@@ -294,13 +307,15 @@ def building(name,w,d,h,rise):
   box("Stone forge",(w*.3,d*.3,.65),(2,1.8,1.3),stone)
   box("Anvil stand",(-1,0,.5),(.8,.8,1),wood)
   box("Anvil",(-1,0,1.1),(1.1,.45,.25),iron)
- if name=="H5_Cottage" or name=="Blacksmith_Shop":
+ if cottage or name=="Blacksmith_Shop":
   for side in (-1,1):
    box("Hollow chimney side",(w*.25+side*.6,d*.15,h+rise),(.2,1.4,2.6),stone)
    box("Hollow chimney end",(w*.25,d*.15+side*.6,h+rise),(1,.2,2.6),stone)
  export(name)
 
-building("H5_Cottage",10,12,9.6,4.2)
+building("H5_Cottage",10,12,9.6,4.2,dormers=2)
+building("H5_Cottage_OneStory",9,11,3.2,3.8,stories=1,dormers=1)
+building("H5_Cottage_TwoStory",10,11.5,6.4,4.0,stories=2,dormers=2)
 reset()
 for x in (-.35,.35): box("Stand foot",(x,0,.05),(.5,.45,.1),wood)
 box("Stand post",(0,0,.85),(.1,.1,1.7),wood)
