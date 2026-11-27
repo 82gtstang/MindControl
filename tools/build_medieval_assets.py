@@ -160,8 +160,8 @@ def building(name,w,d,h,rise,stories=3,dormers=0):
      box("Upper window frame",(x,y+side*.08,z+story*.56),(1.35,.18,1.65),wood)
      box("Upper glazing",(x,y+side*.19,z+story*.56),(1.12,.045,1.4),glass)
      for k in range(5):
-      box("Lead mullion",(x-.56+k*.28,y+side*.22,z+story*.56),(.035,.05,1.4),iron)
-      box("Lead crossbar",(x,y+side*.22,z+story*.56-.7+k*.35),(1.12,.05,.035),iron)
+      box("Lead mullion",(x-.56+k*.28,y+side*.27,z+story*.56),(.065,.09,1.48),iron)
+      box("Lead crossbar",(x,y+side*.27,z+story*.56-.7+k*.35),(1.20,.09,.065),iron)
   for side in (-1,1):
    for yy in (-D*.28,D*.28):
     xx=side*(W/2-.35);zz=z+story*.72
@@ -227,15 +227,23 @@ def building(name,w,d,h,rise,stories=3,dormers=0):
   for side in (-1,1):
    box("Dormer cheek",(x+side*.79,y+.28,z+.55),(.14,1.25,1.3),wood)
    box("Dormer pitched roof",(x+side*.46,y+.22,z+1.55),(1.12,1.65,.15),clay[2],(0,side*.48,0))
- w,d=basew,based
- for x in (-(w+(stories-1)*.55)/2,(w+(stories-1)*.55)/2):
-  verts=[(x,-d/2,h),(x,d/2,h),(x,0,h+rise)]
-  mesh=bpy.data.meshes.new("Gable");mesh.from_pydata(verts,[],[(0,1,2)]);mesh.update()
+ # Closed solid gable prisms, matching the uppermost wall and roof footprint.
+ for side in (-1,1):
+  x=side*w/2
+  verts=[(x+dx,-d/2,h-.03) for dx in (-.16,.16)]
+  verts += [(x+dx,d/2,h-.03) for dx in (-.16,.16)]
+  verts += [(x+dx,0,h+rise) for dx in (-.16,.16)]
+  mesh=bpy.data.meshes.new("Solid gable")
+  mesh.from_pydata(verts,[],[(0,4,2),(1,3,5),(0,2,3,1),(0,1,5,4),(2,4,5,3)])
+  mesh.update()
   uv=mesh.uv_layers.new(name="UVMap")
   for loop in mesh.loops:
    v=mesh.vertices[loop.vertex_index].co;uv.data[loop.index].uv=(v.y/d+.5,(v.z-h)/rise)
-  ob=bpy.data.objects.new("Closed gable",mesh);bpy.context.collection.objects.link(ob);ob.data.materials.append(plaster)
-  for side in (-1,1): beam("Gable rafter",(x,0,h+rise),(x,side*d/2,h),.2,wood)
+  ob=bpy.data.objects.new("Closed solid gable",mesh);bpy.context.collection.objects.link(ob);ob.data.materials.append(plaster)
+  for edge in (-1,1): beam("Gable rafter",(x,0,h+rise),(x,edge*d/2,h),.2,wood)
+  beam("Gable sill",(x,-d/2,h),(x,d/2,h),.2,wood)
+  beam("Gable king post",(x,0,h),(x,0,h+rise),.2,wood)
+ w,d=basew,based
  for j in range(13):
   a=j*math.pi/12
   x=door*.5*math.cos(a);z=1.75+door*.5*math.sin(a)
@@ -246,8 +254,8 @@ def building(name,w,d,h,rise,stories=3,dormers=0):
  for x in (-w*.32,w*.32):
   box("Recessed window frame",(x,-d/2-.22,1.8),(1.3,.18,1.5),wood)
   box("Window glazing",(x,-d/2-.33,1.8),(1.12,.04,1.32),glass)
-  for j in range(5): box("Lead mullion",(x-.56+j*.28,-d/2-.36,1.8),(.035,.06,1.32),iron)
-  for j in range(5): box("Lead crossbar",(x,-d/2-.36,1.14+j*.33),(1.12,.06,.035),iron)
+  for j in range(5): box("Lead mullion",(x-.56+j*.28,-d/2-.41,1.8),(.065,.10,1.40),iron)
+  for j in range(5): box("Lead crossbar",(x,-d/2-.41,1.14+j*.33),(1.20,.10,.065),iron)
   box("Window sill",(x,-d/2-.4,1.06),(1.45,.4,.13),stone)
  for side in (-1,1):
   for row in range(4):
