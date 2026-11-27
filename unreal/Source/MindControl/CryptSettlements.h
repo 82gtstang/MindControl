@@ -474,6 +474,17 @@ namespace CryptSettlements
     ++Planted;
    }
   }
+  // Imported Interchange GLB meshes retain their authored dimensions.
+  const auto MedievalMesh = [&](const TCHAR* Name, FVector Base) -> bool
+  {
+   const FString Path=FString::Printf(TEXT("/Game/Environment/MindControl/Medieval/%s/%s/StaticMeshes/%s.%s"),Name,Name,Name,Name);
+   auto* Mesh=LoadObject<UStaticMesh>(nullptr,*Path);
+   if(!Mesh) return false;
+   auto* Component=Batch(Mesh,nullptr,true);
+   const auto Bounds=Mesh->GetBounds();
+   Component->AddInstance(FTransform(FRotator::ZeroRotator,Base-FVector(Bounds.Origin.X,Bounds.Origin.Y,Bounds.Origin.Z-Bounds.BoxExtent.Z)));
+   return true;
+  };
   const TCHAR* TownNames[] = {
    TEXT("Alderbrook"), TEXT("Briar Glen"), TEXT("Copper Hollow"), TEXT("Dunmere"),
    TEXT("Elder Ford"), TEXT("Fernwick"), TEXT("Greybank"), TEXT("Hawthorn"),
@@ -547,7 +558,11 @@ namespace CryptSettlements
      constexpr float HouseWidth=420.f, Depth=420.f, Gap=457.2f;
      const float HomeX=X-650.f;
      const float HomeY=(Home-2)*(1400.f+Gap);
-     Building(FVector(HomeX, HomeY, Ground),HouseWidth,Depth,Town+Home,false,0.f,false,Town==0 && Home==0);
+     const int32 Plot=Town*5+Home;
+     const TCHAR* HouseAsset=Plot<8?TEXT("H5_Cottage_OneStory"):Plot<18?TEXT("H5_Cottage_TwoStory"):TEXT("H5_Cottage");
+     const bool bDungeonHouse=Plot==0;
+     if(bDungeonHouse || !MedievalMesh(HouseAsset,FVector(HomeX,HomeY,Ground)))
+      Building(FVector(HomeX, HomeY, Ground),HouseWidth,Depth,Town+Home,false,0.f,false,bDungeonHouse);
      Box(Road, FVector(HomeX,Street+276,Ground+7),FVector(120,260,22));
      for (int32 Member = 0; Member < 4; ++Member)
      {
