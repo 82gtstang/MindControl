@@ -4,7 +4,7 @@ root=os.environ.get("MEDIEVAL_ASSET_DIR")
 if not root or not os.path.isdir(root):
     raise RuntimeError("MEDIEVAL_ASSET_DIR must point to generated GLB assets")
 dest="/Game/Environment/MindControl/Medieval"
-names=["H5_Cottage","A2_ArmorStand","A2_Shelves","A2_Armory","A2_Shield","Blacksmith_Sword","Blacksmith_Anvil","Sorcerer_Potion","Blacksmith_Shop","Sorcerer_Shop"]+["Herb_"+n for n in ("Lavender","Chamomile","Bloodleaf","Mint","Silverleaf","BlueSage","Firebloom","Moonflower","LemonBalm","Yarrow")]
+names=["H5_Cottage","H5_Cottage_OneStory","H5_Cottage_TwoStory","A2_ArmorStand","A2_Shelves","A2_Armory","A2_Shield","Blacksmith_Sword","Blacksmith_Anvil","Sorcerer_Potion","Blacksmith_Shop","Sorcerer_Shop"]+["Herb_"+n for n in ("Lavender","Chamomile","Bloodleaf","Mint","Silverleaf","BlueSage","Firebloom","Moonflower","LemonBalm","Yarrow")]
 for name in names:
     source=os.path.join(root,name+".glb")
     if not os.path.isfile(source):
@@ -26,7 +26,7 @@ for name in names:
     if len(meshes)!=1:
         raise RuntimeError("Expected one combined static mesh for "+name+", got "+str(len(meshes)))
     for asset in meshes:
-        if name in ("H5_Cottage","A2_Armory","Blacksmith_Shop","Sorcerer_Shop"):
+        if name in ("H5_Cottage","H5_Cottage_OneStory","H5_Cottage_TwoStory","A2_Armory","Blacksmith_Shop","Sorcerer_Shop"):
             body=asset.get_editor_property("body_setup")
             if body is None:
                 raise RuntimeError("Missing collision body for "+name)
