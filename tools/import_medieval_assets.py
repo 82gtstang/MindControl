@@ -26,6 +26,25 @@ for name in names:
     if len(meshes)!=1:
         raise RuntimeError("Expected one combined static mesh for "+name+", got "+str(len(meshes)))
     for asset in meshes:
+        # Android ES3.1 uses conventional static meshes, not Nanite.
+        nanite=asset.get_editor_property("nanite_settings")
+        nanite.set_editor_property("enabled",False)
+        asset.set_editor_property("nanite_settings",nanite)
+        slots=asset.get_editor_property("static_materials")
+        if not slots:
+            raise RuntimeError("No material slots on "+name)
+        for slot in slots:
+            material=slot.get_editor_property("material_interface")
+            if material is None:
+                raise RuntimeError("Unassigned material slot on "+name)
+            unreal.log("MEDIEVAL_MATERIAL "+name+" "+material.get_path_name())
+            parent=material
+            while isinstance(parent,unreal.MaterialInstance):
+                parent=parent.get_editor_property("parent")
+            if isinstance(parent,unreal.Material):
+                unreal.MaterialEditingLibrary.set_material_usage(parent,unreal.MaterialUsage.MATUSAGE_INSTANCED_STATIC_MESHES)
+                if parent.get_path_name().startswith("/Game/"):
+                    unreal.EditorAssetLibrary.save_loaded_asset(parent)
         if name in ("H5_Cottage","H5_Cottage_OneStory","H5_Cottage_TwoStory","A2_Armory","Blacksmith_Shop","Sorcerer_Shop"):
             body=asset.get_editor_property("body_setup")
             if body is None:
