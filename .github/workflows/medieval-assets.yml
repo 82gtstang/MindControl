@@ -5,10 +5,13 @@ on:
     paths:
       - 'tools/build_medieval_assets.py'
       - '.github/workflows/medieval-assets.yml'
+concurrency:
+  group: medieval-assets-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   generate:
     runs-on: [self-hosted, Windows]
-    timeout-minutes: 60
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
       - name: Generate editable meshes
@@ -17,11 +20,13 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $blender = Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse | Sort-Object FullName -Descending | Select-Object -First 1
           if (!$blender) { throw 'Blender not found' }
-          & $blender.FullName -b -t 2 --python-exit-code 1 --python tools/build_medieval_assets.py -- "$env:RUNNER_TEMP\medieval-assets"
+          $env:MEDIEVAL_RESUME = "1"
+          "MEDIEVAL_OUTPUT=$env:LOCALAPPDATA\MindControl\medieval-assets" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & $blender.FullName -b -t 2 --python-exit-code 1 --python tools/build_medieval_assets.py -- "$env:LOCALAPPDATA\MindControl\medieval-assets"
           if ($LASTEXITCODE -ne 0) { throw 'Asset generation failed' }
           foreach ($name in @('H5_Cottage','A2_ArmorStand','A2_Shelves','A2_Armory','A2_Shield','Blacksmith_Sword','Blacksmith_Anvil','Sorcerer_Potion','Blacksmith_Shop','Sorcerer_Shop','Herb_Lavender','Herb_Chamomile','Herb_Bloodleaf','Herb_Mint','Herb_Silverleaf','Herb_BlueSage','Herb_Firebloom','Herb_Moonflower','Herb_LemonBalm','Herb_Yarrow')) {
             foreach ($ext in @('blend','glb','png')) {
-              $file = Join-Path "$env:RUNNER_TEMP\medieval-assets" "$name.$ext"
+              $file = Join-Path "$env:LOCALAPPDATA\MindControl\medieval-assets" "$name.$ext"
               if (!(Test-Path $file) -or (Get-Item $file).Length -lt 1024) { throw "Missing asset $file" }
             }
           }
@@ -29,5 +34,5 @@ jobs:
         if: always()
         with:
           name: Medieval-Blender-Assets
-          path: ${{ runner.temp }}/medieval-assets/
+          path: ${{ env.MEDIEVAL_OUTPUT }}/
           if-no-files-found: error
