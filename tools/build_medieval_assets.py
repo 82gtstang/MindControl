@@ -1,4 +1,4 @@
-import bpy, math, os, sys, random
+import bpy, math, os, sys, random, hashlib, json
 from mathutils import Vector
 import numpy as np
 out=os.path.abspath(sys.argv[sys.argv.index("--")+1])
@@ -37,6 +37,22 @@ def beam(n,a,b,w,m):
  a,b=Vector(a),Vector(b);o=box(n,(a+b)/2,(w,w,(b-a).length),m);o.rotation_euler=(b-a).to_track_quat("Z","Y").to_euler()
 def reset(): bpy.ops.object.select_all(action="SELECT");bpy.ops.object.delete(use_global=False)
 def export(n):
+ resume=os.environ.get("MEDIEVAL_RESUME")=="1"
+ signature=hashlib.sha256(open(__file__,"rb").read()).hexdigest()
+ extensions=[".blend",".glb",".fbx"]
+ if os.environ.get("MEDIEVAL_SKIP_PREVIEWS")!="1":
+  extensions.append(".png")
+  if n in ("H5_Cottage","A2_Armory","Blacksmith_Shop","Sorcerer_Shop"):
+   extensions.extend("_floor%d.png"%i for i in range(1,4))
+ marker=os.path.join(out,n+".complete.json")
+ if resume and os.path.isfile(marker):
+  try:
+   with open(marker) as f: checkpoint=json.load(f)
+   if checkpoint["signature"]==signature and all(os.path.getsize(os.path.join(out,n+ext))==checkpoint["sizes"][ext] and checkpoint["sizes"][ext]>1024 for ext in extensions):
+    print("MEDIEVAL_RESUMED "+n,flush=True)
+    return
+  except (OSError,ValueError,KeyError): pass
+ if os.path.exists(marker): os.remove(marker)
  scene=bpy.context.scene
  bpy.context.view_layer.update()
  points=[o.matrix_world @ Vector(v) for o in scene.objects if o.type=="MESH" for v in o.bound_box]
@@ -90,6 +106,12 @@ def export(n):
 
  bpy.ops.wm.save_as_mainfile(filepath=os.path.join(out,n+".blend"))
  bpy.ops.export_scene.fbx(filepath=os.path.join(out,n+".fbx"),apply_unit_scale=True,axis_forward="-Y",axis_up="Z",bake_anim=False)
+ if resume:
+  sizes={ext:os.path.getsize(os.path.join(out,n+ext)) for ext in extensions}
+  if min(sizes.values())<=1024: raise RuntimeError("Incomplete export "+n)
+  with open(marker+".tmp","w") as f: json.dump({"signature":signature,"sizes":sizes},f)
+  os.replace(marker+".tmp",marker)
+  print("MEDIEVAL_CHECKPOINT "+n,flush=True)
 
 def sphere(n,p,d,m):
  bpy.ops.mesh.primitive_uv_sphere_add(segments=24,ring_count=12,location=p);o=bpy.context.object;o.name=n;o.dimensions=d;bpy.ops.object.transform_apply(location=False,rotation=False,scale=True);o.data.materials.append(m)
