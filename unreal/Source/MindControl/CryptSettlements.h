@@ -142,18 +142,18 @@ namespace CryptSettlements
    Batch->AddInstance(FTransform(Rotation, At, Size / 100.));
   };
 
-  constexpr float Spacing = 3500;
+  constexpr float Spacing = 6500;
   constexpr float EntryX = -6600;
   constexpr float StartX = -8850;
-  constexpr float MinX = -24900;
-  constexpr float HalfY = 5850;
+  constexpr float MinX = -39000;
+  constexpr float HalfY = 9200;
   Box(GroundBatch, FVector((EntryX + MinX) / 2, 0, Ground - 42), FVector(EntryX - MinX, HalfY * 2, 84));
-  Box(Road, FVector((EntryX + MinX) / 2, 0, Ground + 2), FVector(EntryX - MinX, 410, 12));
+  Box(Road, FVector((EntryX + MinX) / 2, 0, Ground + 2), FVector(EntryX - MinX, 600, 12));
   for (const float Y : {-HalfY, HalfY})
    Box(Fence, FVector((EntryX + MinX) / 2, Y, Ground + 180), FVector(EntryX - MinX, 24, 360));
   Box(Fence, FVector(MinX, 0, Ground + 180), FVector(24, HalfY * 2, 360));
-  for (const float Y : {-3070.f,3070.f})
-   Box(Fence, FVector(EntryX - 4, Y, Ground + 180), FVector(20, 5550, 360));
+  for (const float Y : {-4770.f,4770.f})
+   Box(Fence, FVector(EntryX - 4, Y, Ground + 180), FVector(20, 8860, 360));
 
   // Buildings face their local street. Door and window bays are actual openings.
   const auto Building = [&](FVector Base, float W, float D, int32 Style, bool bWork, float Yaw = 0.f, bool bSecret = false, bool bDungeon = false)
@@ -485,7 +485,7 @@ namespace CryptSettlements
   for (int32 Column = 0; Column < 5; ++Column)
   {
    const float X = StartX - Column * Spacing;
-   Box(Road, FVector(X+1100,0,Ground+4), FVector(340,HalfY*2,16));
+   Box(Road, FVector(X+1100,0,Ground+4), FVector(520,HalfY*2,16));
    for (int32 Row = 0; Row < 1; ++Row)
    {
     const int32 Town = Column;
@@ -546,7 +546,7 @@ namespace CryptSettlements
     {
      constexpr float HouseWidth=420.f, Depth=420.f, Gap=457.2f;
      const float HomeX=X-650.f;
-     const float HomeY=(Home-2)*(Depth+Gap);
+     const float HomeY=(Home-2)*(1400.f+Gap);
      Building(FVector(HomeX, HomeY, Ground),HouseWidth,Depth,Town+Home,false,0.f,false,Town==0 && Home==0);
      Box(Road, FVector(HomeX,Street+276,Ground+7),FVector(120,260,22));
      for (int32 Member = 0; Member < 4; ++Member)
