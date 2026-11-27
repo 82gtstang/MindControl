@@ -243,6 +243,7 @@ jobs:
           $blender = Get-ChildItem 'C:\Program Files\Blender Foundation' -Filter blender.exe -Recurse | Sort-Object FullName -Descending | Select-Object -First 1
           if (!$blender) { throw 'Blender not found' }
           $env:MEDIEVAL_ASSET_DIR = Join-Path $env:RUNNER_TEMP 'MedievalAndroid'
+          $env:MEDIEVAL_SKIP_PREVIEWS = '1'
           & $blender.FullName -b -t 2 --python-exit-code 1 --python tools/build_medieval_assets.py -- "$env:MEDIEVAL_ASSET_DIR"
           if ($LASTEXITCODE -ne 0) { throw 'Medieval mesh generation failed' }
           $editor = Join-Path $env:UE_ROOT 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
@@ -261,7 +262,7 @@ jobs:
           )
           Remove-Item $log -Force -ErrorAction SilentlyContinue
           $process = Start-Process -FilePath $editor -ArgumentList $arguments -Wait -PassThru
-          if ($process.ExitCode -ne 0 -or !(Test-Path $log) -or !(Select-String -Path $log -Pattern 'MEDIEVAL_IMPORT_COMPLETE 20' -Quiet)) {
+          if ($process.ExitCode -ne 0 -or !(Test-Path $log) -or !(Select-String -Path $log -Pattern 'MEDIEVAL_IMPORT_COMPLETE 22' -Quiet)) {
             if (Test-Path $log) { Get-Content $log -Tail 120 }
             throw "Medieval import failed: $($process.ExitCode)"
           }
