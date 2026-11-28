@@ -381,7 +381,7 @@ def swim_pose(rig, phase):
 
 def hair_pose(rig, name, phase):
     strength = {
-        "Idle": .017, "Walk": .095, "Run": .165, "WalkDiagonal": .084,
+        "Idle": .065, "Walk": .095, "Run": .165, "WalkDiagonal": .084,
         "RunDiagonal": .143, "Swim": .10, "Jump": .15, "Attack": .16, "Spin": .22,
     }[name]
     loop = name in ("Idle", "Swim") or name.startswith(("Walk", "Run"))
@@ -393,6 +393,10 @@ def hair_pose(rig, name, phase):
         delay = .48 * (index + 1)
         pitch = strength * envelope * math.sin(2 * wave - delay) * (.54 + .46 * index)
         sway = strength * envelope * math.sin(wave - delay) * (.34 + .40 * index)
+        if name == "Idle":
+            # Gentle continuous breeze, with the tips following the roots.
+            pitch = strength * (.25 + .35 * math.sin(wave - delay) + .12 * math.sin(2 * wave - delay)) * (.45 + .55 * index)
+            sway = strength * (.40 + .55 * math.sin(wave - delay)) * (.45 + .55 * index)
         bone.rotation_quaternion = Quaternion(local @ X, pitch) @ Quaternion(local @ Vector((0, 1, 0)), sway)
 
 
