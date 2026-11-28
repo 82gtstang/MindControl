@@ -409,13 +409,16 @@ def make_clips(scene, rig, source):
         original = source.get(name)
         walking = name.startswith(("Walk", "Run"))
         length = 90 if name == "Swim" else gait_lengths[name] if walking else round(2 * (original.frame_range[1] - original.frame_range[0]))
+        idle_source_length = length
+        if name == "Idle":
+            length = max(length, 480)
         poses = []
         if not walking and name not in ("Swim", "Jump", "Attack"):
             # Preserve the established action choreography, now evaluated at 60 Hz.
             action_data.action = original
             start = float(original.frame_range[0])
             for sample in range(length + 1):
-                time = start + sample / 2
+                time = start + (sample % max(1, idle_source_length) if name == "Idle" else sample) / 2
                 scene.frame_set(int(time), subframe=time % 1)
                 poses.append({b.name: b.matrix_basis.copy() for b in rig.pose.bones})
         action_data.action = bpy.data.actions.new("Ocean_" + name)
@@ -445,6 +448,18 @@ def make_clips(scene, rig, source):
                 bounce = amplitude * math.sin(2 * math.tau * phase - .45) if walking else .025 * math.sin(math.pi * phase)**2 * math.sin(2 * math.tau * phase)
                 local = chest.bone.matrix_local.to_quaternion().inverted()
                 chest.rotation_quaternion = chest.rotation_quaternion @ Quaternion(local @ X, bounce)
+            if name == "Idle":
+                seconds = sample / FPS
+                gesture = smooth(3.0, 3.65, seconds) * (1 - smooth(4.35, 5.15, seconds))
+                tug = smooth(3.65, 3.95, seconds) * (1 - smooth(4.05, 4.35, seconds))
+                upper = rig.pose.bones["upperarm_R"]
+                fore = rig.pose.bones["forearm_R"]
+                for bone, pitch in ((upper, -.52 - .12 * tug), (fore, -1.65 - .15 * tug)):
+                    local = bone.bone.matrix_local.to_quaternion().inverted()
+                    target = Quaternion(local @ X, pitch)
+                    if bone == upper:
+                        target = Quaternion(local @ Vector((0, 1, 0)), math.copysign(.24, upper.bone.head_local.x)) @ target
+                    bone.rotation_quaternion = bone.rotation_quaternion.slerp(target, gesture)
             hair_pose(rig, name.replace("Attack", "") if walking else name, phase)
             for bone in rig.pose.bones:
                 bone.keyframe_insert("rotation_quaternion", frame=sample + 1, group=bone.name)
